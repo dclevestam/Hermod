@@ -684,6 +684,79 @@ def _thread_message_summary(text, limit=92):
     return text[: max(0, limit - 1)].rstrip() + '…'
 
 
+def _demo_thread_fixture(identity='lark-demo@local'):
+    base = datetime.now(timezone.utc).replace(hour=9, minute=10, second=0, microsecond=0)
+    senders = [
+        ('David Clevestam', identity),
+        ('Mina Park', 'mina@example.com'),
+        ('Alex Stone', 'alex@example.com'),
+    ]
+    texts = [
+        'Morning team, here is the first pass on the thread UI.',
+        'Looks good. Can we keep the latest reply at the bottom like a chat?',
+        'Yes, and we should make the day separators more visible.',
+        'Agreed. Also, can we keep attachments collected in the header?',
+        'I added the attachment chips and the quick jump panel for that.',
+        'Nice. Let us make the sender color consistent with the receiving account.',
+        'Done. I also softened the background outside the mail body.',
+        'One more thing: the thread overview should not overcrowd the top bar.',
+        'I moved the summary into the compact info strip.',
+        'Perfect. Send the final version and we can call this ready.',
+    ]
+    subjects = [
+        'Lark thread UI test',
+        'Lark thread UI test',
+        'Lark thread UI test',
+        'Re: Lark thread UI test',
+        'Re: Lark thread UI test',
+        'Re: Lark thread UI test',
+        'Re: Lark thread UI test',
+        'Updated: Lark thread UI test',
+        'Updated: Lark thread UI test',
+        'Updated: Lark thread UI test',
+    ]
+    thread_id = 'lark-demo-thread-10'
+    members = []
+    for index in range(10):
+        sender_name, sender_email = senders[index % len(senders)]
+        date = base.replace(hour=9 + (index // 3), minute=10 + (index * 7) % 50)
+        attachments = []
+        has_attachments = False
+        if index in {4, 8}:
+            attachments = [{
+                'name': f'lark-design-{index + 1}.png',
+                'size': 182344 + index * 2048,
+                'content_type': 'image/png',
+                'disposition': 'attachment',
+            }]
+            has_attachments = True
+        msg = {
+            'uid': f'lark-demo-{index + 1}',
+            'subject': subjects[index],
+            'sender_name': sender_name,
+            'sender_email': sender_email,
+            'to_addrs': [{'name': 'Lark Demo', 'email': identity}],
+            'cc_addrs': [],
+            'date': date,
+            'is_read': True,
+            'has_attachments': has_attachments,
+            'snippet': texts[index][:120],
+            'folder': 'INBOX',
+            'backend': 'demo',
+            'account': identity,
+            'backend_obj': None,
+            'thread_id': thread_id,
+            'thread_source': 'demo',
+            'message_id': f'<lark-demo-{index + 1}@local>',
+            'thread_count': 10,
+            'thread_key': (identity, 'demo', thread_id),
+            'attachments': attachments,
+            'body_text': texts[index],
+        }
+        members.append(msg)
+    return members
+
+
 def _snapshot_scope(backend, folder):
     if folder == _UNIFIED:
         return 'unified-inbox'
@@ -1384,7 +1457,6 @@ class LarkWindow(Adw.ApplicationWindow):
     def _set_thread_sidebar_visible(self, visible):
         if getattr(self, '_thread_sidebar_revealer', None) is None:
             return
-        self._thread_sidebar_overlay.set_visible(bool(visible))
         self._thread_sidebar_revealer.set_reveal_child(bool(visible))
         if visible:
             self._thread_messages_btn.add_css_class('active')
@@ -1955,21 +2027,16 @@ class LarkWindow(Adw.ApplicationWindow):
         self._thread_sidebar_revealer.set_child(self._thread_sidebar)
         self._thread_sidebar_revealer.set_reveal_child(False)
 
-        self._thread_sidebar_overlay = Gtk.Box(
+        self._thread_body_row = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
-            halign=Gtk.Align.FILL,
-            valign=Gtk.Align.FILL,
+            spacing=0,
+            hexpand=True,
+            vexpand=True,
         )
-        self._thread_sidebar_overlay.set_hexpand(True)
-        self._thread_sidebar_overlay.set_vexpand(True)
-        self._thread_sidebar_overlay.set_visible(False)
-        self._thread_sidebar_overlay.append(self._thread_sidebar_revealer)
-
+        self._thread_body_row.append(self.webview)
+        self._thread_body_row.append(self._thread_sidebar_revealer)
         viewer_box.remove(self.webview)
-        self._reading_overlay = Gtk.Overlay(vexpand=True, hexpand=True)
-        self._reading_overlay.set_child(self.webview)
-        self._reading_overlay.add_overlay(self._thread_sidebar_overlay)
-        viewer_box.insert_child_after(self._reading_overlay, self._message_info_bar)
+        viewer_box.insert_child_after(self._thread_body_row, self._message_info_bar)
 
         viewer_shell = Gtk.Frame(vexpand=True, hexpand=True, margin_top=5)
         viewer_shell.add_css_class('reading-pane-shell')
@@ -2680,6 +2747,12 @@ class LarkWindow(Adw.ApplicationWindow):
     def _set_messages(self, msgs, generation=None, preserve_selected_key=None):
         if generation is not None and generation != self._message_load_generation:
             return False
+        msgs = list(msgs or [])
+        if get_settings().get('debug_logging') and self.current_folder in (_UNIFIED, 'INBOX', 'inbox'):
+            demo_thread = _demo_thread_fixture(self.current_backend.identity if self.current_backend else 'lark-demo@local')
+            demo_keys = {self._message_key(m) for m in demo_thread}
+            msgs = [m for m in msgs if self._message_key(m) not in demo_keys]
+            msgs = demo_thread + msgs
         while (r := self.email_list.get_row_at_index(0)):
             self.email_list.remove(r)
         if not msgs:
@@ -3115,6 +3188,30 @@ class LarkWindow(Adw.ApplicationWindow):
     def _load_thread_view(self, msg, generation=None):
         backend = msg.get('backend_obj') or self.current_backend
         thread_id = (msg.get('thread_id') or '').strip()
+        if msg.get('thread_source') == 'demo' and msg.get('thread_members'):
+            thread_msgs = list(msg.get('thread_members') or [])
+            records = []
+            attachments = []
+            selected_uid = msg.get('uid')
+            total = len(thread_msgs)
+            for thread_msg in thread_msgs:
+                thread_msg = dict(thread_msg)
+                thread_msg['thread_count'] = total
+                thread_msg['thread_key'] = self._thread_key_for_msg(thread_msg)
+                records.append({
+                    'msg': thread_msg,
+                    'html': None,
+                    'text': thread_msg.get('body_text') or thread_msg.get('snippet') or '',
+                    'attachments': thread_msg.get('attachments') or [],
+                    'body_text': self._extract_thread_body(None, thread_msg.get('body_text') or thread_msg.get('snippet') or ''),
+                    'selected': thread_msg.get('uid') == selected_uid,
+                })
+                for att in thread_msg.get('attachments') or []:
+                    att_copy = dict(att)
+                    att_copy['source_msg'] = thread_msg
+                    attachments.append(att_copy)
+            GLib.idle_add(self._render_thread_view, msg, records, attachments, generation)
+            return
         if not backend or not thread_id:
             self._load_body(msg, generation)
             return
@@ -3210,6 +3307,11 @@ class LarkWindow(Adw.ApplicationWindow):
             or selected_msg.get('sender_name')
             or ''
         )
+        accent_r, accent_g, accent_b = self._sender_accent_rgb(thread_account_seed)
+        if Adw.StyleManager.get_default().get_dark():
+            self._webview_bg_color = f'rgba({accent_r}, {accent_g}, {accent_b}, 0.16)'
+        else:
+            self._webview_bg_color = f'rgba({accent_r}, {accent_g}, {accent_b}, 0.10)'
         accent_r, accent_g, accent_b = self._sender_accent_rgb(thread_account_seed)
         accent_name = f'message-info-accent-{selected_msg.get("uid") or id(selected_msg)}'
         try:
@@ -3632,6 +3734,12 @@ class LarkWindow(Adw.ApplicationWindow):
         self._thread_reply_bar.set_visible(False)
         self._thread_messages_btn.set_visible(False)
         self._set_thread_sidebar_visible(False)
+        sender_seed = (msg.get('account') or (msg.get('backend_obj').identity if msg.get('backend_obj') else '') or msg.get('sender_email') or msg.get('sender_name') or '')
+        accent_r, accent_g, accent_b = self._sender_accent_rgb(sender_seed)
+        if Adw.StyleManager.get_default().get_dark():
+            self._webview_bg_color = f'rgba({accent_r}, {accent_g}, {accent_b}, 0.16)'
+        else:
+            self._webview_bg_color = f'rgba({accent_r}, {accent_g}, {accent_b}, 0.10)'
         backend = msg.get('backend_obj') or self.current_backend
         cache_key = (backend.identity, msg.get('folder'), msg['uid'])
         inline_attachments = [att for att in (attachments or []) if _attachment_is_inline_image(att)]
@@ -3678,6 +3786,7 @@ class LarkWindow(Adw.ApplicationWindow):
         self._thread_reply_bar.set_visible(False)
         self._thread_messages_btn.set_visible(False)
         self._set_thread_sidebar_visible(False)
+        self._webview_bg_color = None
         if self._message_info_bar is not None:
             self._message_info_bar.set_visible(False)
         self.webview.load_html(
@@ -3692,6 +3801,7 @@ class LarkWindow(Adw.ApplicationWindow):
         self._thread_reply_bar.set_visible(False)
         self._thread_messages_btn.set_visible(False)
         self._set_thread_sidebar_visible(False)
+        self._webview_bg_color = None
         self._current_body = None
         self._thread_view_active = False
         self._current_thread_messages = None
@@ -3708,7 +3818,11 @@ class LarkWindow(Adw.ApplicationWindow):
     def _update_webview_bg(self):
         is_dark = Adw.StyleManager.get_default().get_dark()
         rgba = Gdk.RGBA()
-        rgba.parse('#1e1e1e' if is_dark else '#f2f1ef')
+        color = getattr(self, '_webview_bg_color', None)
+        if color:
+            rgba.parse(color)
+        else:
+            rgba.parse('#1e1e1e' if is_dark else '#f2f1ef')
         self.webview.set_background_color(rgba)
 
     def _get_email_css(self):
@@ -3717,13 +3831,13 @@ class LarkWindow(Adw.ApplicationWindow):
         # DO NOT add forced color overrides here — they break emails with explicit light backgrounds.
         link = '#3584e4'
         return """<style>
-html { background-color: #ffffff; }
+html { background-color: transparent; }
 body {
     font-family: -apple-system, sans-serif;
     font-size: 14px;
     line-height: 1.6;
     color: #222222;
-    background-color: #ffffff;
+    background-color: transparent;
     max-width: 860px;
     margin: 24px auto;
     padding: 0 16px;
@@ -3731,7 +3845,7 @@ body {
 img { max-width: 100%; height: auto; }
 a { color: """ + link + """; }
 blockquote { border-left: 3px solid #aaa; margin-left: 0; padding-left: 12px; color: #666; }
-pre { background: #f0f0f0; padding: 12px; border-radius: 4px; overflow-x: auto; }
+pre { background: rgba(255,255,255,0.82); padding: 12px; border-radius: 4px; overflow-x: auto; }
 </style>"""
 
     # ── Attachment bar ────────────────────────────────────────────────────────
