@@ -2,6 +2,7 @@ import base64, imaplib, ssl, json, re, smtplib, threading
 import time as _time
 import urllib.error
 import urllib.request
+import urllib.parse
 import email as email_parser
 from email.header import decode_header as _decode_header_raw
 from email.mime.multipart import MIMEMultipart
@@ -654,9 +655,10 @@ class MicrosoftBackend:
     def fetch_thread_messages(self, thread_id):
         if not thread_id:
             return []
+        thread_filter = urllib.parse.quote(f"conversationId eq '{thread_id}'", safe="='")
         data = self._get(
             '/me/messages'
-            f"?$filter=conversationId eq '{thread_id}'"
+            f'?$filter={thread_filter}'
             '&$orderby=receivedDateTime+asc'
             '&$select=id,subject,from,toRecipients,ccRecipients,'
             'receivedDateTime,isRead,bodyPreview,hasAttachments,conversationId,internetMessageId'
