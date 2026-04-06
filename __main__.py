@@ -1,7 +1,9 @@
+import argparse
 import sys
 import threading
 import time
 import traceback
+from pathlib import Path
 
 import gi
 gi.require_version('Gtk', '4.0')
@@ -27,7 +29,7 @@ def _log_exception(prefix, exc):
 
 
 class LarkApp(Adw.Application):
-    def __init__(self):
+    def __init__(self, dump_ui_path=None, dump_ui_delay_ms=1200):
         super().__init__(application_id='io.github.lark.Lark')
         self.window = None
         self.backends = []
@@ -39,6 +41,9 @@ class LarkApp(Adw.Application):
         self._next_poll_at = 0.0
         self._network_monitor = Gio.NetworkMonitor.get_default()
         self._transient_poll_failures = 0
+        self._dump_ui_path = Path(dump_ui_path) if dump_ui_path else None
+        self._dump_ui_delay_ms = int(dump_ui_delay_ms)
+        self._dump_ui_done = False
         self.connect('activate', self._on_activate)
         self.connect('shutdown', self._on_shutdown)
 
@@ -64,6 +69,9 @@ class LarkApp(Adw.Application):
         self._network_monitor.connect('network-changed', self._on_network_changed)
         self.window.set_network_offline(not network_ready())
         self.window.present()
+
+        if self._dump_ui_path is not None:
+            GLib.timeout_add(self._dump_ui_delay_ms, self._dump_ui_once)
 
         if self.backends:
             self._notif_thread = threading.Thread(target=self._poll_loop, daemon=True)
@@ -179,10 +187,66 @@ class LarkApp(Adw.Application):
         except Exception as e:
             _log_exception('Notification error', e)
 
+    def _dump_ui_once(self):
+        try:
+            if self._dump_ui_done:
+                print('dump-ui: already done', file=sys.stderr)
+                return False
+            if self.window is None:
+                print('dump-ui: no window yet', file=sys.stderr)
+                return True
+
+            print('dump-ui: trying capture', file=sys.stderr)
+            native = self.window.get_native()
+            if native is None:
+                print('dump-ui: no native yet', file=sys.stderr)
+                return True
+
+            renderer = native.get_renderer()
+            if renderer is None:
+                print('dump-ui: no renderer yet', file=sys.stderr)
+                return True
+            if not renderer.is_realized():
+                print('dump-ui: renderer not realized yet', file=sys.stderr)
+                return True
+
+            width = max(1, self.window.get_width())
+            height = max(1, self.window.get_height())
+            print(f'dump-ui: size {width}x{height}', file=sys.stderr)
+            paintable = Gtk.WidgetPaintable.new(self.window)
+            current = paintable.get_current_image()
+            print(f'dump-ui: current image {type(current).__name__}', file=sys.stderr)
+            snapshot = Gtk.Snapshot.new()
+            current.snapshot(snapshot, width, height)
+            node = snapshot.to_node()
+            if node is None:
+                print('dump-ui: no node yet', file=sys.stderr)
+                return True
+
+            texture = renderer.render_texture(node, None)
+            if texture is None:
+                print('dump-ui: no texture yet', file=sys.stderr)
+                return True
+
+            self._dump_ui_path.parent.mkdir(parents=True, exist_ok=True)
+            texture.save_to_png(str(self._dump_ui_path))
+            print(f'Wrote UI snapshot to {self._dump_ui_path}', file=sys.stderr)
+            self._dump_ui_done = True
+            self.quit()
+            return False
+        except Exception as e:
+            print(f'dump-ui: error {e}', file=sys.stderr)
+            traceback.print_exc()
+            return False
+
 
 def main():
-    app = LarkApp()
-    sys.exit(app.run(sys.argv))
+    parser = argparse.ArgumentParser(add_help=True)
+    parser.add_argument('--dump-ui', metavar='PATH')
+    parser.add_argument('--dump-ui-delay-ms', type=int, default=1200)
+    args, remaining = parser.parse_known_args(sys.argv[1:])
+    app = LarkApp(dump_ui_path=args.dump_ui, dump_ui_delay_ms=args.dump_ui_delay_ms)
+    sys.exit(app.run([sys.argv[0], *remaining]))
 
 
 main()
