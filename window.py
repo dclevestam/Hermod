@@ -288,6 +288,11 @@ CSS = """
     font-size: 0.82em;
     font-weight: 700;
 }
+.thread-info-button.active {
+    background-color: alpha(@accent_color, 0.14);
+    color: @accent_fg_color;
+    box-shadow: inset 0 0 0 1px alpha(@accent_color, 0.24);
+}
 .thread-info-senders {
     margin-top: 5px;
 }
@@ -929,8 +934,14 @@ class ThreadNavRow(Gtk.ListBoxRow):
     def _set_accent_color(self, r, g, b):
         avatar_name = f'thread-sidebar-avatar-{self.uid or id(self)}'
         strip_name = f'thread-sidebar-strip-{self.uid or id(self)}'
-        self._avatar.set_widget_name(avatar_name)
-        self._strip.set_widget_name(strip_name)
+        try:
+            self._avatar.set_name(avatar_name)
+        except Exception:
+            pass
+        try:
+            self._strip.set_name(strip_name)
+        except Exception:
+            pass
         avatar_provider = Gtk.CssProvider()
         avatar_provider.load_from_string(f'#{avatar_name} {{ background-color: rgb({r}, {g}, {b}); }}')
         strip_provider = Gtk.CssProvider()
@@ -1375,7 +1386,10 @@ class LarkWindow(Adw.ApplicationWindow):
             return
         self._thread_sidebar_overlay.set_visible(bool(visible))
         self._thread_sidebar_revealer.set_reveal_child(bool(visible))
-        self._thread_sidebar_dismiss.set_visible(bool(visible))
+        if visible:
+            self._thread_messages_btn.add_css_class('active')
+        else:
+            self._thread_messages_btn.remove_css_class('active')
 
     def _populate_thread_sidebar(self, records):
         if getattr(self, '_thread_sidebar_list', None) is None:
@@ -1781,6 +1795,10 @@ class LarkWindow(Adw.ApplicationWindow):
             valign=Gtk.Align.CENTER,
         )
         self._message_info_top.add_css_class('message-info-top')
+        self._message_info_accent = Gtk.Box()
+        self._message_info_accent.set_size_request(4, 18)
+        self._message_info_accent.add_css_class('account-accent-strip')
+        self._message_info_top.append(self._message_info_accent)
         self._message_info_subject = Gtk.Label(halign=Gtk.Align.START, xalign=0)
         self._message_info_subject.add_css_class('message-info-subject')
         self._message_info_subject.set_wrap(False)
@@ -1791,7 +1809,14 @@ class LarkWindow(Adw.ApplicationWindow):
         self._thread_messages_btn = Gtk.Button(label='All Messages')
         self._thread_messages_btn.add_css_class('thread-info-button')
         self._thread_messages_btn.set_visible(False)
-        self._thread_messages_btn.connect('clicked', lambda *_: self._set_thread_sidebar_visible(True))
+        self._thread_messages_btn.connect(
+            'clicked',
+            lambda *_: self._set_thread_sidebar_visible(
+                not getattr(self, '_thread_sidebar_revealer', None).get_reveal_child()
+                if getattr(self, '_thread_sidebar_revealer', None) is not None
+                else True
+            ),
+        )
         self._message_info_actions = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=6,
@@ -1930,14 +1955,6 @@ class LarkWindow(Adw.ApplicationWindow):
         self._thread_sidebar_revealer.set_child(self._thread_sidebar)
         self._thread_sidebar_revealer.set_reveal_child(False)
 
-        self._thread_sidebar_dismiss = Gtk.Button()
-        self._thread_sidebar_dismiss.add_css_class('thread-sidebar-dim')
-        self._thread_sidebar_dismiss.set_hexpand(True)
-        self._thread_sidebar_dismiss.set_vexpand(True)
-        self._thread_sidebar_dismiss.set_has_frame(False)
-        self._thread_sidebar_dismiss.set_visible(False)
-        self._thread_sidebar_dismiss.connect('clicked', lambda *_: self._set_thread_sidebar_visible(False))
-
         self._thread_sidebar_overlay = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             halign=Gtk.Align.FILL,
@@ -1946,16 +1963,18 @@ class LarkWindow(Adw.ApplicationWindow):
         self._thread_sidebar_overlay.set_hexpand(True)
         self._thread_sidebar_overlay.set_vexpand(True)
         self._thread_sidebar_overlay.set_visible(False)
-        self._thread_sidebar_overlay.append(self._thread_sidebar_dismiss)
         self._thread_sidebar_overlay.append(self._thread_sidebar_revealer)
 
-        viewer_overlay = Gtk.Overlay(vexpand=True, hexpand=True)
+        viewer_box.remove(self.webview)
+        self._reading_overlay = Gtk.Overlay(vexpand=True, hexpand=True)
+        self._reading_overlay.set_child(self.webview)
+        self._reading_overlay.add_overlay(self._thread_sidebar_overlay)
+        viewer_box.insert_child_after(self._reading_overlay, self._message_info_bar)
+
         viewer_shell = Gtk.Frame(vexpand=True, hexpand=True, margin_top=5)
         viewer_shell.add_css_class('reading-pane-shell')
         viewer_shell.set_child(self._viewer_stack)
-        viewer_overlay.set_child(viewer_shell)
-        viewer_overlay.add_overlay(self._thread_sidebar_overlay)
-        right.set_end_child(viewer_overlay)
+        right.set_end_child(viewer_shell)
         body.append(right)
 
         self._toast_overlay = Adw.ToastOverlay()
@@ -3184,6 +3203,28 @@ class LarkWindow(Adw.ApplicationWindow):
         self._thread_view_active = True
         self._current_body = None
         self._current_thread_messages = ordered_records
+        thread_account_seed = (
+            selected_msg.get('account')
+            or (selected_msg.get('backend_obj').identity if selected_msg.get('backend_obj') else '')
+            or selected_msg.get('sender_email')
+            or selected_msg.get('sender_name')
+            or ''
+        )
+        accent_r, accent_g, accent_b = self._sender_accent_rgb(thread_account_seed)
+        accent_name = f'message-info-accent-{selected_msg.get("uid") or id(selected_msg)}'
+        try:
+            self._message_info_accent.set_name(accent_name)
+        except Exception:
+            pass
+        accent_provider = Gtk.CssProvider()
+        accent_provider.load_from_string(
+            f'#{accent_name} {{ background-color: rgb({accent_r}, {accent_g}, {accent_b}); }}'
+        )
+        self._message_info_accent.get_style_context().add_provider(
+            accent_provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+        )
+        self._message_info_accent_provider = accent_provider
         self._update_message_info_bar(
             {
                 'subject': subject,
