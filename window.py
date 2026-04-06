@@ -2027,6 +2027,7 @@ class LarkWindow(Adw.ApplicationWindow):
         self._thread_sidebar_revealer.set_child(self._thread_sidebar)
         self._thread_sidebar_revealer.set_reveal_child(False)
 
+        viewer_box.remove(self.webview)
         self._thread_body_row = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=0,
@@ -2035,7 +2036,6 @@ class LarkWindow(Adw.ApplicationWindow):
         )
         self._thread_body_row.append(self.webview)
         self._thread_body_row.append(self._thread_sidebar_revealer)
-        viewer_box.remove(self.webview)
         viewer_box.insert_child_after(self._thread_body_row, self._message_info_bar)
 
         viewer_shell = Gtk.Frame(vexpand=True, hexpand=True, margin_top=5)
