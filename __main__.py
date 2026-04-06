@@ -10,9 +10,14 @@ gi.require_version('Notify', '0.7')
 gi.require_version('Gio', '2.0')
 from gi.repository import Gtk, Adw, Notify, GLib, Gio
 
-from .backends import get_backends, is_transient_network_error, network_ready
-from .window import LarkWindow
-from .settings import get_settings
+try:
+    from .backends import get_backends, is_transient_network_error, network_ready
+    from .window import LarkWindow
+    from .settings import get_settings
+except ImportError:
+    from backends import get_backends, is_transient_network_error, network_ready
+    from window import LarkWindow
+    from settings import get_settings
 
 
 def _log_exception(prefix, exc):

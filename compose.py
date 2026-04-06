@@ -8,7 +8,10 @@ gi.require_version('Adw', '1')
 gi.require_version('Pango', '1.0')
 gi.require_version('Gdk', '4.0')
 from gi.repository import Gtk, Adw, GLib, Pango, Gdk
-from .styles import build_compose_account_css, account_class_for_index
+try:
+    from .styles import build_compose_account_css, account_class_for_index
+except ImportError:
+    from styles import build_compose_account_css, account_class_for_index
 
 
 _CONFIG_DIR = Path.home() / '.config' / 'lark'

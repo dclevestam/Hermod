@@ -16,9 +16,14 @@ gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 gi.require_version('WebKit', '6.0')
 from gi.repository import Gtk, Adw, GLib, WebKit, Pango, Gdk
-from .backends import network_ready, is_transient_network_error
-from .styles import build_window_account_css, account_class_for_index
-from .settings import get_settings, get_disk_cache_budget_limit_mb
+try:
+    from .backends import network_ready, is_transient_network_error
+    from .styles import build_window_account_css, account_class_for_index
+    from .settings import get_settings, get_disk_cache_budget_limit_mb
+except ImportError:
+    from backends import network_ready, is_transient_network_error
+    from styles import build_window_account_css, account_class_for_index
+    from settings import get_settings, get_disk_cache_budget_limit_mb
 
 
 CSS = """
@@ -1334,7 +1339,10 @@ class LarkWindow(Adw.ApplicationWindow):
         self._attachment_bar = att_bar
         viewer_box.append(self._attachment_bar)
 
-        from .settings import build_settings_content
+        try:
+            from .settings import build_settings_content
+        except ImportError:
+            from settings import build_settings_content
         self._viewer_stack = Gtk.Stack(
             transition_type=Gtk.StackTransitionType.CROSSFADE,
             vexpand=True,
@@ -1428,7 +1436,10 @@ class LarkWindow(Adw.ApplicationWindow):
         return GLib.SOURCE_CONTINUE
 
     def _reset_countdown(self):
-        from .settings import get_settings
+        try:
+            from .settings import get_settings
+        except ImportError:
+            from settings import get_settings
         self._countdown_seconds = get_settings().get('poll_interval') * 60
 
     def set_network_offline(self, offline):
@@ -1645,7 +1656,10 @@ class LarkWindow(Adw.ApplicationWindow):
         self._flash_action_feedback(self._compose_btn)
         if self._compose_active():
             return
-        from .compose import ComposeView
+        try:
+            from .compose import ComposeView
+        except ImportError:
+            from compose import ComposeView
         backend = self.current_backend or (self.backends[0] if self.backends else None)
         if backend:
             self._present_compose(ComposeView(self, backend, self.backends, on_close=self._close_inline_compose))
@@ -1659,7 +1673,10 @@ class LarkWindow(Adw.ApplicationWindow):
             self._show_settings_view()
 
     def _on_reply(self, msg):
-        from .compose import ComposeView
+        try:
+            from .compose import ComposeView
+        except ImportError:
+            from compose import ComposeView
         if self._compose_active():
             return
         backend = msg.get('backend_obj') or self.current_backend
@@ -1669,7 +1686,10 @@ class LarkWindow(Adw.ApplicationWindow):
             )
 
     def _on_reply_all(self, msg):
-        from .compose import ComposeView
+        try:
+            from .compose import ComposeView
+        except ImportError:
+            from compose import ComposeView
         if self._compose_active():
             return
         backend = msg.get('backend_obj') or self.current_backend
@@ -2350,7 +2370,10 @@ class LarkWindow(Adw.ApplicationWindow):
         return False
 
     def _load_body(self, msg, generation=None):
-        from .settings import get_settings
+        try:
+            from .settings import get_settings
+        except ImportError:
+            from settings import get_settings
         backend = msg.get('backend_obj') or self.current_backend
         uid = msg['uid']
         folder = msg.get('folder')
