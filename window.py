@@ -250,6 +250,23 @@ CSS = """
     background-color: alpha(@window_fg_color, 0.03);
     padding: 6px 10px 8px;
 }
+.thread-reply-bar {
+    border-top: 1px solid alpha(@borders, 0.24);
+    background-color: alpha(@window_bg_color, 0.92);
+    padding: 8px 10px 10px;
+}
+.thread-reply-editor {
+    min-height: 62px;
+    background-color: alpha(@window_fg_color, 0.03);
+    border: 1px solid alpha(@borders, 0.18);
+    border-radius: 12px;
+    padding: 8px 10px;
+}
+.thread-reply-send {
+    min-width: 84px;
+    min-height: 30px;
+    font-weight: 700;
+}
 .message-info-bar {
     border-bottom: 1px solid alpha(@borders, 0.22);
     background-color: alpha(@window_bg_color, 0.58);
@@ -932,6 +949,7 @@ class LarkWindow(Adw.ApplicationWindow):
         self._thread_groups = {}
         self._current_thread_messages = None
         self._thread_view_active = False
+        self._thread_reply_target = None
         self._compose_view = None
         self._active_folder_row = None
         self._active_email_row = None
@@ -1517,6 +1535,7 @@ class LarkWindow(Adw.ApplicationWindow):
 
         self.webview = WebKit.WebView(vexpand=True, hexpand=True)
         self.webview.set_settings(wk_settings)
+        self.webview.connect('load-changed', self._on_webview_load_changed)
         viewer_box.append(self._message_info_bar)
         viewer_box.append(self.webview)
 
@@ -1537,6 +1556,35 @@ class LarkWindow(Adw.ApplicationWindow):
         att_bar.append(att_scroll)
         self._attachment_bar = att_bar
         viewer_box.append(self._attachment_bar)
+
+        self._thread_reply_bar = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=10,
+            valign=Gtk.Align.FILL,
+        )
+        self._thread_reply_bar.add_css_class('thread-reply-bar')
+        reply_scroller = Gtk.ScrolledWindow(
+            hscrollbar_policy=Gtk.PolicyType.NEVER,
+            vscrollbar_policy=Gtk.PolicyType.AUTOMATIC,
+            min_content_height=54,
+            hexpand=True,
+            vexpand=False,
+        )
+        self._thread_reply_view = Gtk.TextView(
+            wrap_mode=Gtk.WrapMode.WORD_CHAR,
+            vexpand=False,
+            hexpand=True,
+        )
+        self._thread_reply_view.add_css_class('thread-reply-editor')
+        reply_scroller.set_child(self._thread_reply_view)
+        self._thread_reply_send = Gtk.Button(label='Send', hexpand=False)
+        self._thread_reply_send.add_css_class('suggested-action')
+        self._thread_reply_send.add_css_class('thread-reply-send')
+        self._thread_reply_send.connect('clicked', self._on_thread_reply_send)
+        self._thread_reply_bar.append(reply_scroller)
+        self._thread_reply_bar.append(self._thread_reply_send)
+        self._thread_reply_bar.set_visible(False)
+        viewer_box.append(self._thread_reply_bar)
 
         try:
             from .settings import build_settings_content
@@ -2271,30 +2319,41 @@ class LarkWindow(Adw.ApplicationWindow):
             self._empty_page.set_description(None)
             self._list_stack.set_visible_child_name('empty')
             return False
-        groups = collections.defaultdict(list)
+        groups = collections.OrderedDict()
+        representatives = []
+        singletons = []
         for m in msgs:
             key = self._thread_key_for_msg(m)
-            if key is not None:
-                groups[key].append(m)
+            if key is None:
+                m['thread_count'] = 1
+                m['thread_key'] = None
+                singletons.append(m)
+                continue
+            group = groups.setdefault(key, [])
+            group.append(m)
         self._thread_groups = groups
-        for group in groups.values():
+        for key, group in groups.items():
+            group.sort(key=lambda item: item.get('date') or datetime.min.replace(tzinfo=timezone.utc))
             count = len(group)
-            for item in group:
-                item['thread_count'] = count
-                item['thread_key'] = self._thread_key_for_msg(item)
-        for item in msgs:
-            if item.get('thread_count') is None:
-                item['thread_count'] = 1
-                item['thread_key'] = self._thread_key_for_msg(item)
+            representative = group[-1]
+            representative['thread_count'] = count
+            representative['thread_key'] = key
+            representative['thread_members'] = group
+            representatives.append(representative)
+        ordered_msgs = sorted(
+            representatives + singletons,
+            key=lambda item: item.get('date') or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True,
+        )
         self._prefetch_generation += 1
-        for m in msgs:
+        for m in ordered_msgs:
             accent_class = self._account_class_for((m.get('account') or (m.get('backend_obj').identity if m.get('backend_obj') else '')))
             self.email_list.append(
                 EmailRow(m, self._on_reply, self._on_reply_all, self._on_delete, accent_class=accent_class)
             )
         self._list_stack.set_visible_child_name('list')
-        self._store_message_snapshot(msgs)
-        self._prefetch_bodies(msgs)
+        self._store_message_snapshot(ordered_msgs)
+        self._prefetch_bodies(ordered_msgs)
         self._active_email_row = None
         if preserve_selected_key:
             row = self.email_list.get_first_child()
@@ -2314,6 +2373,30 @@ class LarkWindow(Adw.ApplicationWindow):
                     self._active_email_row = row
                     break
                 row = row.get_next_sibling()
+            if self._active_email_row is None:
+                preserved_group = None
+                for key, group in groups.items():
+                    if preserve_selected_key in {
+                        (m.get('account', ''), m.get('folder', ''), m.get('uid', ''))
+                        for m in group
+                    }:
+                        preserved_group = key
+                        break
+                if preserved_group is not None:
+                    representative = next(
+                        (m for m in ordered_msgs if m.get('thread_key') == preserved_group),
+                        None,
+                    )
+                    if representative is not None:
+                        row = self.email_list.get_first_child()
+                        while row is not None:
+                            if isinstance(row, EmailRow) and row.msg is representative:
+                                self._suppress_email_selection = True
+                                self.email_list.select_row(row)
+                                self._suppress_email_selection = False
+                                self._active_email_row = row
+                                break
+                            row = row.get_next_sibling()
         elif self._startup_autoselect_pending and self.current_folder in (_UNIFIED, 'INBOX', 'inbox'):
             first_row = self.email_list.get_row_at_index(0)
             if first_row is not None:
@@ -2765,6 +2848,8 @@ class LarkWindow(Adw.ApplicationWindow):
         self._message_info_meta.set_visible(bool(parts))
         self._message_info_bar.set_visible(True)
         self._show_attachments(attachments, selected_msg)
+        self._thread_reply_target = self._thread_reply_msg_for_records(records)
+        self._thread_reply_bar.set_visible(True)
         if self._active_email_row is not None and self._active_email_row.msg.get('uid') == selected_msg.get('uid'):
             self._active_email_row.set_thread_count(len(thread_msgs))
         self._update_webview_bg()
@@ -2772,6 +2857,7 @@ class LarkWindow(Adw.ApplicationWindow):
             self._build_thread_html(subject, participants, first_date, last_date, records, attachments),
             'about:blank',
         )
+        GLib.idle_add(self._scroll_thread_to_bottom)
         return False
 
     def _build_thread_html(self, subject, participants, first_date, last_date, records, attachments):
@@ -2786,7 +2872,8 @@ class LarkWindow(Adw.ApplicationWindow):
         first_date = html_lib.escape(first_date or '')
         last_date = html_lib.escape(last_date or '')
         overview = []
-        for index, record in enumerate(records, start=1):
+        ordered_records = list(records)
+        for index, record in enumerate(ordered_records, start=1):
             msg = record['msg']
             label = f"{index}. {(msg.get('sender_name') or msg.get('sender_email') or 'Unknown')}"
             when = _format_date(msg.get('date')) or _format_received_date(msg.get('date'))
@@ -2796,7 +2883,7 @@ class LarkWindow(Adw.ApplicationWindow):
                 f'<a class="thread-chip" href="#msg-{html_lib.escape(msg.get("uid", ""))}">{html_lib.escape(label)}</a>'
             )
         bubbles = []
-        for record in records:
+        for record in ordered_records:
             msg = record['msg']
             uid = html_lib.escape(msg.get('uid', ''))
             sender_name = html_lib.escape((msg.get('sender_name') or msg.get('sender_email') or 'Unknown').strip())
@@ -3001,10 +3088,119 @@ class LarkWindow(Adw.ApplicationWindow):
                     <div class="thread-overview">{overview_html}</div>
                 </header>
                 {''.join(bubbles)}
+                <div id="thread-end"></div>
             </div>
         </body>
         </html>
         '''
+
+    def _thread_reply_msg_for_records(self, records):
+        for record in reversed(records or []):
+            msg = record.get('msg') or {}
+            if not self._message_is_self(msg):
+                return msg
+        return (records[-1].get('msg') if records else None)
+
+    def _scroll_thread_to_bottom(self):
+        if not self._thread_view_active:
+            return False
+        try:
+            script = "window.scrollTo(0, document.body.scrollHeight);"
+            self.webview.evaluate_javascript(script, len(script), None, None, None, None, None)
+        except Exception:
+            pass
+        return False
+
+    def _on_webview_load_changed(self, webview, load_event):
+        if load_event == WebKit.LoadEvent.FINISHED and self._thread_view_active:
+            GLib.idle_add(self._scroll_thread_to_bottom)
+
+    def _reply_editor_text(self):
+        buffer = self._thread_reply_view.get_buffer()
+        start, end = buffer.get_bounds()
+        return buffer.get_text(start, end, True).strip()
+
+    def _clear_reply_editor(self):
+        buffer = self._thread_reply_view.get_buffer()
+        buffer.set_text('')
+
+    def _on_thread_reply_send(self, _button=None):
+        if not self._thread_view_active or not self._current_thread_messages:
+            return
+        text = self._reply_editor_text()
+        if not text:
+            self._show_toast('Write a reply first')
+            return
+        target = self._thread_reply_target or self._current_thread_messages[-1].get('msg')
+        if not target:
+            return
+        backend = target.get('backend_obj') or self.current_backend
+        if not backend:
+            self._show_toast('Cannot send reply: no backend')
+            return
+        own_email = (backend.identity or '').strip()
+        sender = (target.get('sender_email') or '').strip()
+        if not sender:
+            self._show_toast('Cannot send reply: missing sender')
+            return
+        to = sender
+        cc = []
+        for m in [record.get('msg') for record in self._current_thread_messages]:
+            for addr in (m.get('to_addrs') or []) + (m.get('cc_addrs') or []):
+                email = (addr.get('email') or '').strip()
+                if email and email.lower() not in {own_email.lower(), sender.lower()} and email not in cc:
+                    cc.append(email)
+        subject = self._thread_subject_for_messages([record.get('msg') for record in self._current_thread_messages])
+        if not subject.lower().startswith('re:'):
+            subject = f'Re: {subject}'
+        thread_records = list(self._current_thread_messages)
+        reply_target = {
+            'message_id': target.get('message_id', ''),
+            'subject': target.get('subject', subject),
+        }
+        def send():
+            try:
+                backend.send_message(to, subject, text, cc=cc, reply_to_msg=reply_target)
+                def _append_local_reply():
+                    sent_msg = {
+                        'uid': f'local-{int(time.time() * 1000)}',
+                        'subject': subject,
+                        'sender_name': backend.identity,
+                        'sender_email': backend.identity,
+                        'to_addrs': [{'name': sender, 'email': sender}],
+                        'cc_addrs': [{'name': c, 'email': c} for c in cc],
+                        'date': datetime.now(timezone.utc),
+                        'is_read': True,
+                        'has_attachments': False,
+                        'snippet': '',
+                        'folder': target.get('folder', self.current_folder),
+                        'backend': target.get('backend', ''),
+                        'account': backend.identity,
+                        'backend_obj': backend,
+                        'thread_id': target.get('thread_id') or target.get('thread_key') or '',
+                        'thread_source': target.get('thread_source', ''),
+                        'message_id': '',
+                        'thread_count': len(thread_records) + 1,
+                        'thread_key': target.get('thread_key'),
+                    }
+                    records = thread_records + [{
+                        'msg': sent_msg,
+                        'html': None,
+                        'text': text,
+                        'attachments': [],
+                        'body_text': text,
+                        'selected': True,
+                    }]
+                    attachments = []
+                    self._clear_reply_editor()
+                    self._show_toast('Reply sent')
+                    self._render_thread_view(sent_msg, records, attachments, self._body_load_generation)
+                    if self._active_email_row is not None:
+                        self._active_email_row.set_thread_count(len(records))
+                GLib.idle_add(_append_local_reply)
+            except Exception as e:
+                GLib.idle_add(self._show_toast, f'Reply failed: {e}')
+        threading.Thread(target=send, daemon=True).start()
 
     def _apply_load_images(self, enabled):
         if getattr(self, '_webview_settings', None) is not None:
@@ -3018,6 +3214,8 @@ class LarkWindow(Adw.ApplicationWindow):
             return False
         self._thread_view_active = False
         self._current_thread_messages = None
+        self._thread_reply_target = None
+        self._thread_reply_bar.set_visible(False)
         backend = msg.get('backend_obj') or self.current_backend
         cache_key = (backend.identity, msg.get('folder'), msg['uid'])
         inline_attachments = [att for att in (attachments or []) if _attachment_is_inline_image(att)]
@@ -3060,6 +3258,8 @@ class LarkWindow(Adw.ApplicationWindow):
         self._current_body = None
         self._thread_view_active = False
         self._current_thread_messages = None
+        self._thread_reply_target = None
+        self._thread_reply_bar.set_visible(False)
         if self._message_info_bar is not None:
             self._message_info_bar.set_visible(False)
         self.webview.load_html(
@@ -3071,15 +3271,18 @@ class LarkWindow(Adw.ApplicationWindow):
     def _show_empty_viewer(self):
         self._attachment_bar.set_visible(False)
         self._message_info_bar.set_visible(False)
+        self._thread_reply_bar.set_visible(False)
         self._current_body = None
         self._thread_view_active = False
         self._current_thread_messages = None
+        self._thread_reply_target = None
         self._update_webview_bg()
         self.webview.load_html('<html><body style="background:transparent"></body></html>', None)
 
     def _show_loading_viewer(self):
         if self._current_body is not None:
             return
+        self._thread_reply_bar.set_visible(False)
         self._show_empty_viewer()
 
     def _update_webview_bg(self):

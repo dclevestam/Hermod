@@ -299,6 +299,7 @@ class GmailBackend:
             idx += 1
             parsed = email_parser.message_from_bytes(raw_headers)
             subject = _decode_str(parsed.get('Subject', '(no subject)'))
+            message_id = _decode_str(parsed.get('Message-ID', ''))
             from_ = _decode_str(parsed.get('From', ''))
             date_str = parsed.get('Date', '')
             content_type = parsed.get('Content-Type', '').lower()
@@ -329,6 +330,7 @@ class GmailBackend:
                 'backend_obj': self,
                 'thread_id': thread_id,
                 'thread_source': 'gmail-imap',
+                'message_id': message_id,
             })
         messages.reverse()
         return messages
@@ -367,6 +369,7 @@ class GmailBackend:
             idx += 1
             parsed = email_parser.message_from_bytes(raw_headers)
             subject = _decode_str(parsed.get('Subject', '(no subject)'))
+            message_id = _decode_str(parsed.get('Message-ID', ''))
             from_ = _decode_str(parsed.get('From', ''))
             date_str = parsed.get('Date', '')
             content_type = parsed.get('Content-Type', '').lower()
@@ -397,6 +400,7 @@ class GmailBackend:
                 'backend_obj': self,
                 'thread_id': current_thread_id,
                 'thread_source': 'gmail-imap',
+                'message_id': message_id,
             })
         messages.sort(key=lambda m: m.get('date') or datetime.now(timezone.utc))
         return messages
@@ -493,7 +497,7 @@ class GmailBackend:
         except Exception:
             return []
 
-    def send_message(self, to, subject, body, html=None, cc=None, bcc=None):
+    def send_message(self, to, subject, body, html=None, cc=None, bcc=None, reply_to_msg=None):
         ensure_network_ready()
         token = self._token()
         msg = MIMEMultipart('alternative')
@@ -502,6 +506,10 @@ class GmailBackend:
         msg['Subject'] = subject
         if cc:
             msg['Cc'] = ', '.join(_normalize_recipients(cc))
+        reply_msgid = (reply_to_msg or {}).get('message_id', '') if reply_to_msg else ''
+        if reply_msgid:
+            msg['In-Reply-To'] = reply_msgid
+            msg['References'] = reply_msgid
         msg.attach(MIMEText(body, 'plain', 'utf-8'))
         if html:
             msg.attach(MIMEText(html, 'html', 'utf-8'))
@@ -756,11 +764,16 @@ class MicrosoftBackend:
         except Exception:
             return []
 
-    def send_message(self, to, subject, body, html=None, cc=None, bcc=None):
+    def send_message(self, to, subject, body, html=None, cc=None, bcc=None, reply_to_msg=None):
         ensure_network_ready()
         recipients = [{'emailAddress': {'address': e}} for e in _normalize_recipients(to)]
         cc_recipients = [{'emailAddress': {'address': e}} for e in _normalize_recipients(cc)]
         bcc_recipients = [{'emailAddress': {'address': e}} for e in _normalize_recipients(bcc)]
+        headers = []
+        reply_msgid = (reply_to_msg or {}).get('message_id', '') if reply_to_msg else ''
+        if reply_msgid:
+            headers.append({'name': 'In-Reply-To', 'value': reply_msgid})
+            headers.append({'name': 'References', 'value': reply_msgid})
         self._post('/me/sendMail', {
             'message': {
                 'subject': subject,
@@ -768,5 +781,6 @@ class MicrosoftBackend:
                 'toRecipients': recipients,
                 **({'ccRecipients': cc_recipients} if cc_recipients else {}),
                 **({'bccRecipients': bcc_recipients} if bcc_recipients else {}),
+                **({'internetMessageHeaders': headers} if headers else {}),
             }
         })
