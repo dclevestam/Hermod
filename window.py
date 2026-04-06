@@ -601,7 +601,7 @@ class EmailRow(Gtk.ListBoxRow):
             sender.add_css_class('heading')
         row1.append(sender)
 
-        if msg.get('thread_id'):
+        if msg.get('thread_count', 1) > 1:
             thread_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4, valign=Gtk.Align.CENTER)
             thread_box.add_css_class('thread-indicator')
             thread_icon = Gtk.Image(
@@ -1815,7 +1815,7 @@ class LarkWindow(Adw.ApplicationWindow):
         was_unread = not row.msg.get('is_read', True)
         self._show_mail_view()
         self._body_load_generation += 1
-        if row.msg.get('thread_id'):
+        if row.msg.get('thread_count', 1) > 1:
             self._load_thread_view(row.msg, self._body_load_generation)
         else:
             self._load_body(row.msg, self._body_load_generation)
