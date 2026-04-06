@@ -1614,6 +1614,9 @@ class LarkWindow(Adw.ApplicationWindow):
         self._commit_email_selection(row)
 
     def _commit_email_selection(self, row):
+        # Any explicit email choice cancels the startup auto-pick path so a
+        # later background refresh cannot override the user's selection.
+        self._startup_autoselect_pending = False
         self._active_email_row = row
         mark_on_open = get_settings().get('mark_read_on_open')
         was_unread = not row.msg.get('is_read', True)
