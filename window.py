@@ -3,6 +3,7 @@ import collections
 import gzip
 import hashlib
 import json
+import html as html_lib
 import re
 import sys
 import threading
@@ -40,6 +41,24 @@ CSS = """
     border-bottom: 1px solid alpha(@accent_color, 0.12);
     background-color: alpha(@accent_color, 0.10);
     box-shadow: inset 3px 0 0 0 alpha(@accent_color, 0.95);
+}
+.thread-indicator {
+    background-color: alpha(@window_fg_color, 0.07);
+    border-radius: 999px;
+    padding: 0px 6px;
+    min-height: 18px;
+}
+.thread-indicator image {
+    color: alpha(@window_fg_color, 0.68);
+}
+.thread-badge {
+    color: alpha(@window_fg_color, 0.74);
+    font-size: 0.68em;
+    font-weight: 700;
+    margin-left: 2px;
+}
+.thread-badge-threaded {
+    color: @accent_fg_color;
 }
 .folder-count {
     background-color: alpha(@window_fg_color, 0.10);
@@ -461,6 +480,68 @@ def _replace_cid_images(html, attachments):
     return re.sub(r'cid:([^"\'>\s]+)', repl, html, flags=re.IGNORECASE)
 
 
+def _normalize_thread_subject(subject):
+    text = (subject or '').strip()
+    if not text:
+        return ''
+    while True:
+        new_text = re.sub(r'^(?:(?:re|fw|fwd)\s*:\s*)+', '', text, flags=re.IGNORECASE).strip()
+        if new_text == text:
+            return text.lower()
+        text = new_text
+
+
+def _html_to_text(html):
+    if not html:
+        return ''
+    text = re.sub(r'(?is)<(script|style).*?>.*?</\1>', '', html)
+    text = re.sub(r'(?i)<br\s*/?>', '\n', text)
+    text = re.sub(r'(?i)</p>|</div>|</li>|</tr>|</h[1-6]>', '\n', text)
+    text = re.sub(r'(?s)<[^>]+>', '', text)
+    text = html_lib.unescape(text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
+def _strip_thread_quotes(text):
+    if not text:
+        return ''
+    lines = text.replace('\r\n', '\n').replace('\r', '\n').split('\n')
+    cleaned = []
+    for idx, line in enumerate(lines):
+        stripped = line.strip()
+        if not cleaned and not stripped:
+            continue
+        if re.match(r'^(on .+ wrote:|from: .+|sent: .+|to: .+|subject: .+)$', stripped, re.IGNORECASE):
+            break
+        if stripped in ('--', '-- ', '__', '___'):
+            break
+        if stripped.startswith('-----Original Message-----'):
+            break
+        if stripped.startswith('>') and cleaned:
+            break
+        cleaned.append(line)
+    result = '\n'.join(cleaned).strip()
+    if not result:
+        result = text.strip()
+    return result
+
+
+def _thread_palette(seed_text):
+    palette = [
+        (0xE5, 0x39, 0x35),  # red
+        (0xFB, 0x8C, 0x00),  # orange
+        (0x43, 0xA0, 0x47),  # green
+        (0x1E, 0x88, 0xE5),  # blue
+        (0x8E, 0x24, 0xAA),  # purple
+        (0x00, 0x96, 0x88),  # teal
+        (0xD8, 0x1B, 0x60),  # pink
+        (0x6D, 0x4C, 0x41),  # brown
+    ]
+    idx = int(hashlib.sha256((seed_text or '').encode('utf-8')).hexdigest(), 16) % len(palette)
+    return palette[idx]
+
+
 def _snapshot_scope(backend, folder):
     if folder == _UNIFIED:
         return 'unified-inbox'
@@ -519,6 +600,31 @@ class EmailRow(Gtk.ListBoxRow):
         if not msg.get('is_read'):
             sender.add_css_class('heading')
         row1.append(sender)
+
+        if msg.get('thread_id'):
+            thread_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4, valign=Gtk.Align.CENTER)
+            thread_box.add_css_class('thread-indicator')
+            thread_icon = Gtk.Image(
+                icon_name=_pick_icon_name(
+                    'chat-bubbles-symbolic',
+                    'mail-message-new-symbolic',
+                    'chat-symbolic',
+                    'mail-reply-sender-symbolic',
+                ),
+                pixel_size=13,
+            )
+            thread_box.append(thread_icon)
+            thread_lbl = Gtk.Label(label=str(msg.get('thread_count', 1)))
+            thread_lbl.add_css_class('thread-badge')
+            thread_lbl.add_css_class('thread-badge-threaded')
+            thread_lbl.set_visible(msg.get('thread_count', 1) > 1)
+            thread_box.append(thread_lbl)
+            self._thread_box = thread_box
+            self._thread_label = thread_lbl
+            row1.append(thread_box)
+        else:
+            self._thread_box = None
+            self._thread_label = None
 
         if msg.get('has_attachments'):
             clip = Gtk.Image(icon_name=_pick_icon_name('mail-attachment-symbolic', 'paperclip-symbolic'), pixel_size=14)
@@ -583,6 +689,13 @@ class EmailRow(Gtk.ListBoxRow):
 
         self.set_child(overlay)
         self._sync_action_visibility()
+
+    def set_thread_count(self, count):
+        self.msg['thread_count'] = count
+        if getattr(self, '_thread_label', None) is not None:
+            self._thread_label.set_label(str(count))
+            self._thread_label.set_visible(count > 1)
+            self._thread_box.set_visible(bool(self.msg.get('thread_id')) or count > 1)
 
     def _on_hover_enter(self, *_):
         self._hovering = True
@@ -816,6 +929,9 @@ class LarkWindow(Adw.ApplicationWindow):
         self._diag_lock = threading.Lock()
         self._diag_ops = {}
         self._diag_watchdog_id = None
+        self._thread_groups = {}
+        self._current_thread_messages = None
+        self._thread_view_active = False
         self._compose_view = None
         self._active_folder_row = None
         self._active_email_row = None
@@ -930,6 +1046,83 @@ class LarkWindow(Adw.ApplicationWindow):
             msg.get('folder', ''),
             msg.get('uid', ''),
         )
+
+    def _thread_key_for_msg(self, msg):
+        if not msg:
+            return None
+        thread_id = (msg.get('thread_id') or '').strip()
+        if thread_id:
+            return (msg.get('account', ''), msg.get('backend', ''), thread_id)
+        return None
+
+    def _thread_group_messages(self, msg):
+        key = self._thread_key_for_msg(msg)
+        if key is None:
+            return [msg] if msg else []
+        grouped = self._thread_groups.get(key)
+        if grouped:
+            return grouped
+        return [msg] if msg else []
+
+    def _thread_subject_for_messages(self, msgs):
+        for m in reversed(msgs or []):
+            subj = (m.get('subject') or '').strip()
+            if subj:
+                return subj
+        return '(no subject)'
+
+    def _thread_date_bounds(self, msgs):
+        dates = [m.get('date') for m in (msgs or []) if m.get('date') is not None]
+        if not dates:
+            return '', ''
+        try:
+            first = min(dates)
+            last = max(dates)
+        except Exception:
+            return '', ''
+        return _format_received_date(first), _format_received_date(last)
+
+    def _thread_participants_summary(self, msgs):
+        seen = []
+        for m in msgs or []:
+            sender_name = (m.get('sender_name') or '').strip()
+            sender_email = (m.get('sender_email') or '').strip()
+            label = sender_name or sender_email or 'Unknown'
+            if sender_email and sender_name and sender_email.lower() not in sender_name.lower():
+                label = f'{sender_name}'
+            if label not in seen:
+                seen.append(label)
+        if not seen:
+            return 'Unknown sender'
+        if len(seen) <= 3:
+            return ' • '.join(seen)
+        return ' • '.join(seen[:3]) + f' • +{len(seen) - 3} more'
+
+    def _extract_thread_body(self, html, text):
+        body = text or _html_to_text(html) or ''
+        body = _strip_thread_quotes(body)
+        return body.strip()
+
+    def _message_is_self(self, msg):
+        sender = (msg.get('sender_email') or '').strip().lower()
+        if not sender:
+            return False
+        for backend in self.backends:
+            identity = (backend.identity or '').strip().lower()
+            if identity and sender == identity:
+                return True
+        return False
+
+    def _sender_accent_rgb(self, seed_text):
+        return _thread_palette(seed_text)
+
+    def _thread_attachment_summary(self, attachments):
+        count = len(attachments or [])
+        if count == 0:
+            return ''
+        if count == 1:
+            return '1 attachment'
+        return f'{count} attachments'
 
     def _format_message_size(self, msg, attachments=None):
         size = msg.get('size')
@@ -1622,7 +1815,10 @@ class LarkWindow(Adw.ApplicationWindow):
         was_unread = not row.msg.get('is_read', True)
         self._show_mail_view()
         self._body_load_generation += 1
-        self._load_body(row.msg, self._body_load_generation)
+        if row.msg.get('thread_id'):
+            self._load_thread_view(row.msg, self._body_load_generation)
+        else:
+            self._load_body(row.msg, self._body_load_generation)
         if mark_on_open:
             row.mark_read()
         if was_unread and mark_on_open:
@@ -2069,11 +2265,27 @@ class LarkWindow(Adw.ApplicationWindow):
         while (r := self.email_list.get_row_at_index(0)):
             self.email_list.remove(r)
         if not msgs:
+            self._thread_groups = {}
             self._prefetch_generation += 1
             self._empty_page.set_title('No messages')
             self._empty_page.set_description(None)
             self._list_stack.set_visible_child_name('empty')
             return False
+        groups = collections.defaultdict(list)
+        for m in msgs:
+            key = self._thread_key_for_msg(m)
+            if key is not None:
+                groups[key].append(m)
+        self._thread_groups = groups
+        for group in groups.values():
+            count = len(group)
+            for item in group:
+                item['thread_count'] = count
+                item['thread_key'] = self._thread_key_for_msg(item)
+        for item in msgs:
+            if item.get('thread_count') is None:
+                item['thread_count'] = 1
+                item['thread_key'] = self._thread_key_for_msg(item)
         self._prefetch_generation += 1
         for m in msgs:
             accent_class = self._account_class_for((m.get('account') or (m.get('backend_obj').identity if m.get('backend_obj') else '')))
@@ -2229,6 +2441,8 @@ class LarkWindow(Adw.ApplicationWindow):
                     'folder': m.get('folder', self.current_folder),
                     'backend': m.get('backend', ''),
                     'account': m.get('account', ''),
+                    'thread_id': m.get('thread_id', ''),
+                    'thread_source': m.get('thread_source', ''),
                     'backend_obj': (
                         self.current_backend
                         if self.current_backend and m.get('account') == self.current_backend.identity
@@ -2266,6 +2480,8 @@ class LarkWindow(Adw.ApplicationWindow):
                         'folder': m.get('folder', self.current_folder),
                         'backend': m.get('backend', ''),
                         'account': m.get('account', ''),
+                        'thread_id': m.get('thread_id', ''),
+                        'thread_source': m.get('thread_source', ''),
                     }
                     for m in (msgs or [])[:100]
                 ],
@@ -2367,6 +2583,33 @@ class LarkWindow(Adw.ApplicationWindow):
         except Exception as e:
             _log_exception('Disk body cache prune failed', e)
 
+    def _read_message_body_payload(self, msg):
+        backend = msg.get('backend_obj') or self.current_backend
+        uid = msg['uid']
+        folder = msg.get('folder')
+        cache_key = (backend.identity, folder, uid)
+        disk_cache_key = _body_cache_key(backend.identity, folder, uid)
+        with self._cache_lock:
+            cached_body = self._body_cache.get(cache_key)
+        if cached_body is not None:
+            return cached_body
+        disk_body = self._load_disk_body(disk_cache_key)
+        if disk_body is not None:
+            with self._cache_lock:
+                self._body_cache[cache_key] = disk_body
+                self._body_cache.move_to_end(cache_key)
+                while len(self._body_cache) > _BODY_CACHE_LIMIT:
+                    self._body_cache.popitem(last=False)
+            return disk_body
+        html, text, attachments = backend.fetch_body(uid, folder)
+        with self._cache_lock:
+            self._body_cache[cache_key] = (html, text, attachments)
+            self._body_cache.move_to_end(cache_key)
+            while len(self._body_cache) > _BODY_CACHE_LIMIT:
+                self._body_cache.popitem(last=False)
+        self._store_disk_body(disk_cache_key, html, text, attachments, msg.get('date'))
+        return html, text, attachments
+
     def _set_error(self, msg, generation=None):
         if generation is not None and generation != self._message_load_generation:
             return False
@@ -2386,62 +2629,14 @@ class LarkWindow(Adw.ApplicationWindow):
         backend = msg.get('backend_obj') or self.current_backend
         uid = msg['uid']
         folder = msg.get('folder')
-        cache_key = (backend.identity, folder, uid)
-        disk_cache_key = _body_cache_key(backend.identity, folder, uid)
         op = self._start_background_op(
             'load body',
             f'{backend.identity}/{folder}/{uid}',
             'backend fetch_body, IMAP lock contention, or network latency',
         )
-        cached_body = None
-        with self._cache_lock:
-            if cache_key in self._body_cache:
-                cached_body = self._body_cache[cache_key]
-        if cached_body is not None:
-            self._set_body(msg, *cached_body, generation=generation)
-            # Mark read even for cached bodies
-            if get_settings().get('mark_read_on_open') and not msg.get('is_read'):
-                def _mark():
-                    try:
-                        backend.mark_as_read(uid, folder)
-                        msg['is_read'] = True
-                    except Exception:
-                        pass
-                    finally:
-                        self._end_background_op(op)
-                threading.Thread(target=_mark, daemon=True).start()
-            else:
-                self._end_background_op(op)
-            return
-        disk_body = self._load_disk_body(disk_cache_key)
-        if disk_body is not None:
-            self._set_body(msg, *disk_body, generation=generation)
-            if get_settings().get('mark_read_on_open') and not msg.get('is_read'):
-                def _mark():
-                    try:
-                        backend.mark_as_read(uid, folder)
-                        msg['is_read'] = True
-                    except Exception:
-                        pass
-                    finally:
-                        self._end_background_op(op)
-                threading.Thread(target=_mark, daemon=True).start()
-            else:
-                self._end_background_op(op)
-            return
-        keep_current_body = self._current_body is not None
-        if not network_ready():
-            self._offline_body_pending = True
-            if not keep_current_body:
-                self._show_loading_viewer()
-            self._end_background_op(op)
-            return
-        self._offline_body_pending = False
-        if not keep_current_body:
-            self._show_loading_viewer()
         def fetch():
             try:
-                html, text, attachments = backend.fetch_body(uid, folder)
+                html, text, attachments = self._read_message_body_payload(msg)
                 GLib.idle_add(self._set_body, msg, html, text, attachments, generation)
                 if get_settings().get('mark_read_on_open') and not msg.get('is_read'):
                     try:
@@ -2452,17 +2647,364 @@ class LarkWindow(Adw.ApplicationWindow):
             except Exception as e:
                 if is_transient_network_error(e) or not network_ready():
                     self._offline_body_pending = True
-                    if not keep_current_body:
+                    if self._current_body is None:
                         GLib.idle_add(self._show_loading_viewer)
                 else:
                     _log_exception(f'Load body failed ({backend.identity}, {folder}, {uid})', e)
-                    if keep_current_body:
+                    if self._current_body is not None:
                         GLib.idle_add(self._show_toast, f'Failed to load message: {e}')
                     else:
                         GLib.idle_add(self._set_body_error, str(e), generation)
             finally:
                 GLib.idle_add(self._end_background_op, op)
         threading.Thread(target=fetch, daemon=True).start()
+
+    def _load_thread_view(self, msg, generation=None):
+        backend = msg.get('backend_obj') or self.current_backend
+        thread_id = (msg.get('thread_id') or '').strip()
+        if not backend or not thread_id:
+            self._load_body(msg, generation)
+            return
+        op = self._start_background_op(
+            'load thread',
+            f'{backend.identity}/{thread_id}',
+            'backend thread fetch, body fetches, or mailbox latency',
+        )
+        if self._current_body is None:
+            self._show_loading_viewer()
+
+        def fetch():
+            try:
+                if not hasattr(backend, 'fetch_thread_messages'):
+                    raise AttributeError('thread fetch unavailable')
+                thread_msgs = backend.fetch_thread_messages(thread_id) or []
+                if not thread_msgs:
+                    GLib.idle_add(self._end_background_op, op)
+                    GLib.idle_add(self._load_body, msg, generation)
+                    return
+                records = []
+                attachments = []
+                selected_uid = msg.get('uid')
+                total = len(thread_msgs)
+                for thread_msg in thread_msgs:
+                    try:
+                        html, text, fetched_attachments = self._read_message_body_payload(thread_msg)
+                    except Exception as e:
+                        _log_exception(
+                            f'Thread body failed ({backend.identity}, {thread_msg.get("folder")}, {thread_msg.get("uid")})',
+                            e,
+                        )
+                        html, text, fetched_attachments = None, '', []
+                    thread_msg = dict(thread_msg)
+                    thread_msg['thread_count'] = total
+                    thread_msg['thread_key'] = self._thread_key_for_msg(thread_msg)
+                    records.append({
+                        'msg': thread_msg,
+                        'html': html,
+                        'text': text,
+                        'attachments': fetched_attachments or [],
+                        'body_text': self._extract_thread_body(html, text),
+                        'selected': thread_msg.get('uid') == selected_uid,
+                    })
+                    for att in fetched_attachments or []:
+                        att_copy = dict(att)
+                        att_copy['source_msg'] = thread_msg
+                        attachments.append(att_copy)
+                GLib.idle_add(self._render_thread_view, msg, records, attachments, generation)
+                if get_settings().get('mark_read_on_open') and not msg.get('is_read'):
+                    try:
+                        backend.mark_as_read(msg['uid'], msg.get('folder'))
+                        msg['is_read'] = True
+                    except Exception:
+                        pass
+            except Exception as e:
+                if is_transient_network_error(e) or not network_ready():
+                    self._offline_body_pending = True
+                    if self._current_body is None:
+                        GLib.idle_add(self._show_loading_viewer)
+                else:
+                    _log_exception(f'Load thread failed ({backend.identity}, {thread_id})', e)
+                    GLib.idle_add(self._set_body_error, str(e), generation)
+            finally:
+                GLib.idle_add(self._end_background_op, op)
+
+        threading.Thread(target=fetch, daemon=True).start()
+
+    def _render_thread_view(self, selected_msg, records, attachments, generation=None):
+        if generation is not None and generation != self._body_load_generation:
+            return False
+        thread_msgs = [record['msg'] for record in records]
+        subject = self._thread_subject_for_messages(thread_msgs)
+        participants = self._thread_participants_summary(thread_msgs)
+        first_date, last_date = self._thread_date_bounds(thread_msgs)
+        parts = []
+        if thread_msgs:
+            parts.append(f'{len(thread_msgs)} messages')
+        attachment_summary = self._thread_attachment_summary(attachments)
+        if attachment_summary:
+            parts.append(attachment_summary)
+        self._thread_view_active = True
+        self._current_body = None
+        self._current_thread_messages = records
+        self._update_message_info_bar(
+            {
+                'subject': subject,
+                'sender_name': participants,
+                'sender_email': '',
+                'date': thread_msgs[-1].get('date') if thread_msgs else None,
+            },
+            attachments,
+        )
+        self._message_info_subject.set_label(subject)
+        self._message_info_sender.set_label(participants)
+        if first_date or last_date:
+            self._message_info_date.set_label(f'First: {first_date} • Last: {last_date}')
+        else:
+            self._message_info_date.set_label('')
+        self._message_info_meta.set_label(' • '.join(parts))
+        self._message_info_meta.set_visible(bool(parts))
+        self._message_info_bar.set_visible(True)
+        self._show_attachments(attachments, selected_msg)
+        if self._active_email_row is not None and self._active_email_row.msg.get('uid') == selected_msg.get('uid'):
+            self._active_email_row.set_thread_count(len(thread_msgs))
+        self._update_webview_bg()
+        self.webview.load_html(
+            self._build_thread_html(subject, participants, first_date, last_date, records, attachments),
+            'about:blank',
+        )
+        return False
+
+    def _build_thread_html(self, subject, participants, first_date, last_date, records, attachments):
+        is_dark = Adw.StyleManager.get_default().get_dark()
+        page_bg = '#161616' if is_dark else '#f4f2ef'
+        text = '#f0f0f0' if is_dark else '#202124'
+        subtext = '#c4c4c4' if is_dark else '#5f6368'
+        border = 'rgba(255,255,255,0.10)' if is_dark else 'rgba(32,33,36,0.12)'
+        header_bg = 'rgba(255,255,255,0.04)' if is_dark else 'rgba(255,255,255,0.72)'
+        header_subject = html_lib.escape(subject or '(no subject)')
+        participants = html_lib.escape(participants or 'Unknown sender')
+        first_date = html_lib.escape(first_date or '')
+        last_date = html_lib.escape(last_date or '')
+        overview = []
+        for index, record in enumerate(records, start=1):
+            msg = record['msg']
+            label = f"{index}. {(msg.get('sender_name') or msg.get('sender_email') or 'Unknown')}"
+            when = _format_date(msg.get('date')) or _format_received_date(msg.get('date'))
+            if when:
+                label += f' · {when}'
+            overview.append(
+                f'<a class="thread-chip" href="#msg-{html_lib.escape(msg.get("uid", ""))}">{html_lib.escape(label)}</a>'
+            )
+        bubbles = []
+        for record in records:
+            msg = record['msg']
+            uid = html_lib.escape(msg.get('uid', ''))
+            sender_name = html_lib.escape((msg.get('sender_name') or msg.get('sender_email') or 'Unknown').strip())
+            sender_email = (msg.get('sender_email') or '').strip()
+            when = html_lib.escape(_format_received_date(msg.get('date')) or _format_date(msg.get('date')) or '')
+            body_text = html_lib.escape(record.get('body_text') or '(no content)')
+            is_self = self._message_is_self(msg)
+            r, g, b = self._sender_accent_rgb(sender_email or sender_name)
+            bubble_bg = f'rgba({r}, {g}, {b}, 0.12)' if not is_dark else f'rgba({r}, {g}, {b}, 0.18)'
+            bubble_border = f'rgba({r}, {g}, {b}, 0.28)' if not is_dark else f'rgba({r}, {g}, {b}, 0.34)'
+            bubble_text = f'rgb({r}, {g}, {b})'
+            align_class = 'self' if is_self else 'other'
+            if record.get('selected'):
+                align_class += ' selected'
+            subj = (msg.get('subject') or '').strip()
+            subj_norm = _normalize_thread_subject(subj)
+            thread_subj = _normalize_thread_subject(subject)
+            subject_chip = ''
+            if subj and subj_norm and subj_norm != thread_subj:
+                subject_chip = f'<div class="bubble-subject">Subject changed to: {html_lib.escape(subj)}</div>'
+            attachment_bits = [html_lib.escape(att.get('name', 'attachment')) for att in record.get('attachments') or []]
+            attachment_html = ''
+            if attachment_bits:
+                attachment_html = (
+                    '<div class="bubble-attachments">'
+                    '<span class="bubble-attachment-label">Attachments</span>'
+                    f'<span class="bubble-attachment-list">{", ".join(attachment_bits)}</span>'
+                    '</div>'
+                )
+            bubbles.append(
+                f'''
+                <article id="msg-{uid}" class="bubble {align_class}" style="
+                    --bubble-bg: {bubble_bg};
+                    --bubble-border: {bubble_border};
+                    --bubble-text: {text};
+                    --bubble-accent: {bubble_text};
+                ">
+                    <div class="bubble-head">
+                        <div class="bubble-sender">{sender_name}</div>
+                        <div class="bubble-time">{when}</div>
+                    </div>
+                    {subject_chip}
+                    <div class="bubble-body">{body_text}</div>
+                    {attachment_html}
+                </article>
+                '''
+            )
+        overview_html = ' '.join(overview)
+        attachment_count = len(attachments or [])
+        return f'''
+        <html>
+        <head>
+            <meta charset="utf-8" />
+            <style>
+                html, body {{
+                    margin: 0;
+                    padding: 0;
+                    background: {page_bg};
+                    color: {text};
+                    font-family: -apple-system, system-ui, sans-serif;
+                }}
+                body {{
+                    padding: 18px 18px 28px;
+                }}
+                .thread-shell {{
+                    max-width: 980px;
+                    margin: 0 auto;
+                }}
+                .thread-header {{
+                    position: sticky;
+                    top: 0;
+                    z-index: 3;
+                    background: linear-gradient(to bottom, {page_bg} 72%, rgba(0,0,0,0));
+                    padding: 0 0 14px;
+                    margin-bottom: 10px;
+                }}
+                .thread-title {{
+                    font-size: 1.16rem;
+                    font-weight: 700;
+                    line-height: 1.2;
+                    margin: 0 0 6px;
+                    color: {text};
+                }}
+                .thread-meta {{
+                    color: {subtext};
+                    font-size: 0.92rem;
+                    line-height: 1.45;
+                    margin-bottom: 8px;
+                }}
+                .thread-overview {{
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                    margin-bottom: 10px;
+                }}
+                .thread-chip {{
+                    display: inline-flex;
+                    align-items: center;
+                    padding: 6px 10px;
+                    border-radius: 999px;
+                    border: 1px solid {border};
+                    background: {header_bg};
+                    color: {text};
+                    text-decoration: none;
+                    font-size: 0.84rem;
+                    white-space: nowrap;
+                }}
+                .thread-chip:hover {{
+                    border-color: rgba(30, 136, 229, 0.45);
+                }}
+                .thread-stats {{
+                    color: {subtext};
+                    font-size: 0.84rem;
+                    margin-bottom: 4px;
+                }}
+                .bubble {{
+                    max-width: 78%;
+                    border-radius: 20px;
+                    border: 1px solid var(--bubble-border);
+                    background: var(--bubble-bg);
+                    color: var(--bubble-text);
+                    padding: 13px 14px 12px;
+                    margin: 0 0 12px;
+                    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+                }}
+                .bubble.self {{
+                    margin-left: auto;
+                    border-top-right-radius: 8px;
+                }}
+                .bubble.other {{
+                    margin-right: auto;
+                    border-top-left-radius: 8px;
+                }}
+                .bubble.selected {{
+                    box-shadow: 0 0 0 2px rgba(30, 136, 229, 0.30), 0 1px 2px rgba(0,0,0,0.08);
+                }}
+                .bubble-head {{
+                    display: flex;
+                    justify-content: space-between;
+                    gap: 16px;
+                    margin-bottom: 8px;
+                    align-items: baseline;
+                }}
+                .bubble-sender {{
+                    font-weight: 700;
+                    color: var(--bubble-accent);
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }}
+                .bubble-time {{
+                    color: {subtext};
+                    font-size: 0.82rem;
+                    white-space: nowrap;
+                    flex: none;
+                }}
+                .bubble-subject {{
+                    display: inline-block;
+                    padding: 4px 8px;
+                    border-radius: 999px;
+                    font-size: 0.78rem;
+                    font-weight: 700;
+                    margin-bottom: 8px;
+                    background: rgba(255,255,255,0.12);
+                    color: {text};
+                }}
+                .bubble-body {{
+                    white-space: pre-wrap;
+                    line-height: 1.55;
+                    font-size: 0.95rem;
+                    color: {text};
+                }}
+                .bubble-attachments {{
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                    margin-top: 10px;
+                    padding-top: 10px;
+                    border-top: 1px solid rgba(127,127,127,0.22);
+                    color: {subtext};
+                    font-size: 0.82rem;
+                }}
+                .bubble-attachment-label {{
+                    font-weight: 700;
+                    color: {text};
+                }}
+                .bubble-attachment-list {{
+                    color: {subtext};
+                }}
+                a {{
+                    color: inherit;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="thread-shell">
+                <header class="thread-header">
+                    <div class="thread-title">{header_subject}</div>
+                    <div class="thread-meta">{participants}</div>
+                    <div class="thread-meta">First received: {first_date}<br/>Last updated: {last_date}</div>
+                    <div class="thread-stats">{len(records)} messages{f' • {attachment_count} attachments' if attachment_count else ''}</div>
+                    <div class="thread-overview">{overview_html}</div>
+                </header>
+                {''.join(bubbles)}
+            </div>
+        </body>
+        </html>
+        '''
 
     def _apply_load_images(self, enabled):
         if getattr(self, '_webview_settings', None) is not None:
@@ -2474,6 +3016,8 @@ class LarkWindow(Adw.ApplicationWindow):
     def _render_body(self, msg, html, text, attachments, cache=True, generation=None):
         if generation is not None and generation != self._body_load_generation:
             return False
+        self._thread_view_active = False
+        self._current_thread_messages = None
         backend = msg.get('backend_obj') or self.current_backend
         cache_key = (backend.identity, msg.get('folder'), msg['uid'])
         inline_attachments = [att for att in (attachments or []) if _attachment_is_inline_image(att)]
@@ -2514,6 +3058,8 @@ class LarkWindow(Adw.ApplicationWindow):
         if get_settings().get('debug_logging'):
             print(f'Body error: {msg}', file=sys.stderr)
         self._current_body = None
+        self._thread_view_active = False
+        self._current_thread_messages = None
         if self._message_info_bar is not None:
             self._message_info_bar.set_visible(False)
         self.webview.load_html(
@@ -2526,6 +3072,8 @@ class LarkWindow(Adw.ApplicationWindow):
         self._attachment_bar.set_visible(False)
         self._message_info_bar.set_visible(False)
         self._current_body = None
+        self._thread_view_active = False
+        self._current_thread_messages = None
         self._update_webview_bg()
         self.webview.load_html('<html><body style="background:transparent"></body></html>', None)
 
@@ -2576,10 +3124,16 @@ pre { background: #f0f0f0; padding: 12px; border-radius: 4px; overflow-x: auto; 
             self._attachment_flow.append(self._make_attachment_chip(att, msg))
 
     def _make_attachment_chip(self, att, msg=None):
+        source_msg = att.get('source_msg') or msg
         btn = Gtk.Button()
         btn.add_css_class('attachment-chip')
         btn.add_css_class('flat')
-        btn.set_tooltip_text(f"{att.get('name', 'attachment')} — {_format_size(att.get('size', 0))}")
+        tooltip = f"{att.get('name', 'attachment')} — {_format_size(att.get('size', 0))}"
+        if source_msg is not None:
+            sender = source_msg.get('sender_name') or source_msg.get('sender_email') or 'Unknown sender'
+            when = _format_received_date(source_msg.get('date')) or _format_date(source_msg.get('date')) or ''
+            tooltip = f'{tooltip}\n{sender} {when}'.strip()
+        btn.set_tooltip_text(tooltip)
 
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8,
                       margin_top=4, margin_bottom=4, margin_start=4, margin_end=4)
@@ -2612,7 +3166,7 @@ pre { background: #f0f0f0; padding: 12px; border-radius: 4px; overflow-x: auto; 
         box.append(save_icon)
 
         btn.set_child(box)
-        btn.connect('clicked', lambda _, a=att, m=msg: self._save_attachment(a, m))
+        btn.connect('clicked', lambda _, a=att, m=source_msg: self._save_attachment(a, m))
         return btn
 
     def _save_attachment(self, att, msg=None):

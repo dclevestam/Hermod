@@ -281,7 +281,7 @@ class GmailBackend:
             uid_str = b','.join(uids)
             _, fetch_data = imap.uid(
                 'fetch', uid_str,
-                '(UID FLAGS BODY.PEEK[HEADER.FIELDS (FROM TO CC SUBJECT DATE CONTENT-TYPE)])'
+                '(UID FLAGS X-GM-THRID BODY.PEEK[HEADER.FIELDS (FROM TO CC SUBJECT DATE CONTENT-TYPE MESSAGE-ID IN-REPLY-TO REFERENCES)])'
             )
         messages = []
         idx = 0
@@ -293,6 +293,8 @@ class GmailBackend:
             is_read = '\\Seen' in info
             uid_m = re.search(r'\bUID\s+(\d+)', info, re.IGNORECASE)
             uid = uid_m.group(1) if uid_m else uids[min(idx, len(uids) - 1)].decode()
+            thrid_m = re.search(r'\bX-GM-THRID\s+(\d+)', info, re.IGNORECASE)
+            thread_id = thrid_m.group(1) if thrid_m else ''
             idx += 1
             parsed = email_parser.message_from_bytes(raw_headers)
             subject = _decode_str(parsed.get('Subject', '(no subject)'))
@@ -324,8 +326,78 @@ class GmailBackend:
                 'backend': 'gmail',
                 'account': self.identity,
                 'backend_obj': self,
+                'thread_id': thread_id,
+                'thread_source': 'gmail-imap',
             })
         messages.reverse()
+        return messages
+
+    def fetch_thread_messages(self, thread_id):
+        if not thread_id:
+            return []
+        with self._lock:
+            imap = self._get_imap()
+            all_mail = self._special_folders.get('_flag:\\all') or self._special_folders.get('[Gmail]/All Mail')
+            if all_mail:
+                imap.select(_imap_folder(all_mail), readonly=True)
+            else:
+                imap.select(_imap_folder(self._resolve_folder('INBOX')), readonly=True)
+            _, data = imap.uid('search', None, f'X-GM-THRID {thread_id}')
+            uids = data[0].split() if data and data[0] else []
+            if not uids:
+                return []
+            uid_str = b','.join(uids)
+            _, fetch_data = imap.uid(
+                'fetch', uid_str,
+                '(UID FLAGS X-GM-THRID BODY.PEEK[HEADER.FIELDS (FROM TO CC SUBJECT DATE CONTENT-TYPE MESSAGE-ID IN-REPLY-TO REFERENCES)])'
+            )
+        messages = []
+        idx = 0
+        for chunk in fetch_data:
+            if not isinstance(chunk, tuple):
+                continue
+            info_bytes, raw_headers = chunk
+            info = info_bytes.decode(errors='replace')
+            is_read = '\\Seen' in info
+            uid_m = re.search(r'\bUID\s+(\d+)', info, re.IGNORECASE)
+            uid = uid_m.group(1) if uid_m else uids[min(idx, len(uids) - 1)].decode()
+            thrid_m = re.search(r'\bX-GM-THRID\s+(\d+)', info, re.IGNORECASE)
+            current_thread_id = thrid_m.group(1) if thrid_m else thread_id
+            idx += 1
+            parsed = email_parser.message_from_bytes(raw_headers)
+            subject = _decode_str(parsed.get('Subject', '(no subject)'))
+            from_ = _decode_str(parsed.get('From', ''))
+            date_str = parsed.get('Date', '')
+            content_type = parsed.get('Content-Type', '').lower()
+            has_attachments = 'multipart/mixed' in content_type
+            to_addrs = _parse_addrs(_decode_str(parsed.get('To', '')))
+            cc_addrs = _parse_addrs(_decode_str(parsed.get('Cc', '')))
+            sender_name, sender_email = email_parser.utils.parseaddr(from_)
+            if not sender_name:
+                sender_name = sender_email
+            try:
+                date = email_parser.utils.parsedate_to_datetime(date_str)
+            except Exception:
+                date = datetime.now(timezone.utc)
+            messages.append({
+                'uid': uid,
+                'subject': subject,
+                'sender_name': sender_name or sender_email,
+                'sender_email': sender_email,
+                'to_addrs': to_addrs,
+                'cc_addrs': cc_addrs,
+                'date': date,
+                'is_read': is_read,
+                'has_attachments': has_attachments,
+                'snippet': '',
+                'folder': all_mail or 'INBOX',
+                'backend': 'gmail',
+                'account': self.identity,
+                'backend_obj': self,
+                'thread_id': current_thread_id,
+                'thread_source': 'gmail-imap',
+            })
+        messages.sort(key=lambda m: m.get('date') or datetime.now(timezone.utc))
         return messages
 
     def fetch_body(self, uid, folder='INBOX'):
@@ -542,7 +614,7 @@ class MicrosoftBackend:
             f'/me/mailFolders/{folder}/messages'
             f'?$top={limit}&$orderby=receivedDateTime+desc'
             f'&$select=id,subject,from,toRecipients,ccRecipients,'
-            f'receivedDateTime,isRead,bodyPreview,hasAttachments'
+            f'receivedDateTime,isRead,bodyPreview,hasAttachments,conversationId,internetMessageId'
         )
         messages = []
         for m in data.get('value', []):
@@ -573,6 +645,54 @@ class MicrosoftBackend:
                 'backend': 'microsoft',
                 'account': self.identity,
                 'backend_obj': self,
+                'thread_id': m.get('conversationId') or '',
+                'thread_source': 'microsoft-graph',
+                'message_id': m.get('internetMessageId') or '',
+            })
+        return messages
+
+    def fetch_thread_messages(self, thread_id):
+        if not thread_id:
+            return []
+        data = self._get(
+            '/me/messages'
+            f"?$filter=conversationId eq '{thread_id}'"
+            '&$orderby=receivedDateTime+asc'
+            '&$select=id,subject,from,toRecipients,ccRecipients,'
+            'receivedDateTime,isRead,bodyPreview,hasAttachments,conversationId,internetMessageId'
+        )
+        messages = []
+        for m in data.get('value', []):
+            from_info = m.get('from', {}).get('emailAddress', {})
+            try:
+                date = datetime.fromisoformat(m['receivedDateTime'].replace('Z', '+00:00'))
+            except Exception:
+                date = datetime.now(timezone.utc)
+
+            def _ms_addrs(key):
+                return [{'name': r.get('emailAddress', {}).get('name', ''),
+                         'email': r.get('emailAddress', {}).get('address', '')}
+                        for r in m.get(key, [])
+                        if r.get('emailAddress', {}).get('address')]
+
+            messages.append({
+                'uid': m['id'],
+                'subject': m.get('subject') or '(no subject)',
+                'sender_name': from_info.get('name') or from_info.get('address', 'Unknown'),
+                'sender_email': from_info.get('address', ''),
+                'to_addrs': _ms_addrs('toRecipients'),
+                'cc_addrs': _ms_addrs('ccRecipients'),
+                'date': date,
+                'is_read': m.get('isRead', True),
+                'has_attachments': m.get('hasAttachments', False),
+                'snippet': m.get('bodyPreview', ''),
+                'folder': 'inbox',
+                'backend': 'microsoft',
+                'account': self.identity,
+                'backend_obj': self,
+                'thread_id': m.get('conversationId') or '',
+                'thread_source': 'microsoft-graph',
+                'message_id': m.get('internetMessageId') or '',
             })
         return messages
 
