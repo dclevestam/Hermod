@@ -269,29 +269,47 @@ CSS = """
 }
 .message-info-bar {
     border-bottom: 1px solid alpha(@borders, 0.22);
-    background-color: alpha(@window_bg_color, 0.58);
-    padding: 4px 12px 3px;
-    min-height: 42px;
+    background-color: alpha(@window_bg_color, 0.62);
+    padding: 8px 12px 7px;
+    min-height: 58px;
 }
 .message-info-top {
-    min-height: 16px;
+    min-height: 20px;
+}
+.message-info-top-row {
+    min-height: 20px;
+}
+.message-info-actions {
+    min-width: 118px;
+}
+.thread-info-button {
+    min-height: 26px;
+    padding: 0px 10px;
+    font-size: 0.82em;
+    font-weight: 700;
+}
+.thread-info-senders {
+    margin-top: 5px;
+}
+.message-info-sender-line {
+    color: alpha(@window_fg_color, 0.80);
 }
 .message-info-subject {
-    font-size: 0.94em;
-    font-weight: 500;
+    font-size: 0.92em;
+    font-weight: 700;
     color: alpha(@window_fg_color, 0.94);
     letter-spacing: 0.01em;
     min-height: 18px;
     line-height: 1.2;
 }
 .message-info-sender {
-    font-size: 0.82em;
+    font-size: 0.80em;
     font-weight: 400;
     color: alpha(@window_fg_color, 0.80);
     line-height: 1.10;
 }
 .message-info-date {
-    font-size: 0.82em;
+    font-size: 0.80em;
     font-weight: 400;
     color: alpha(@window_fg_color, 0.80);
     line-height: 1.10;
@@ -310,6 +328,71 @@ CSS = """
     background-color: alpha(@window_bg_color, 0.90);
     border: none;
     border-radius: 0;
+}
+.thread-sidebar-dim {
+    background-color: alpha(@window_bg_color, 0.10);
+}
+.thread-sidebar {
+    border-left: 1px solid alpha(@borders, 0.18);
+    background-color: alpha(@window_bg_color, 0.96);
+    min-width: 330px;
+}
+.thread-sidebar-header {
+    padding: 12px 12px 10px;
+    border-bottom: 1px solid alpha(@borders, 0.18);
+}
+.thread-sidebar-title {
+    font-size: 0.90em;
+    font-weight: 700;
+}
+.thread-sidebar-close {
+    min-height: 24px;
+    min-width: 24px;
+    padding: 0px;
+}
+.thread-sidebar-list {
+    padding: 8px 0px 10px;
+}
+.thread-sidebar-row {
+    border-radius: 12px;
+    margin: 4px 10px;
+    padding: 8px 10px;
+}
+.thread-sidebar-row:selected {
+    background-color: alpha(@accent_color, 0.11);
+}
+.thread-sidebar-row:hover {
+    background-color: alpha(@window_fg_color, 0.04);
+}
+.thread-sidebar-avatar {
+    min-width: 30px;
+    min-height: 30px;
+    border-radius: 999px;
+    color: #ffffff;
+    font-size: 0.70em;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+}
+.thread-sidebar-avatar.generic {
+    background-color: alpha(@window_fg_color, 0.22);
+    color: alpha(@window_fg_color, 0.86);
+}
+.thread-sidebar-sender {
+    font-size: 0.86em;
+    font-weight: 700;
+}
+.thread-sidebar-snippet {
+    font-size: 0.76em;
+    color: alpha(@window_fg_color, 0.68);
+}
+.thread-sidebar-time {
+    font-size: 0.74em;
+    color: alpha(@window_fg_color, 0.70);
+}
+.thread-sidebar-strip {
+    min-width: 4px;
+    min-height: 18px;
+    border-radius: 999px;
 }
 .content-split separator {
     min-width: 7px;
@@ -559,6 +642,43 @@ def _thread_palette(seed_text):
     return palette[idx]
 
 
+def _sender_initials(name, email):
+    text = (name or '').strip() or (email or '').strip()
+    if not text:
+        return '?'
+    parts = [part for part in re.split(r'[\s._\-]+', text) if part]
+    if len(parts) >= 2:
+        initials = ''.join(part[0] for part in parts[:2])
+    else:
+        initials = ''.join(ch for ch in text if ch.isalnum())[:2]
+    return (initials or '?').upper()
+
+
+def _thread_day_label(dt):
+    if dt is None:
+        return ''
+    try:
+        local_dt = dt.astimezone()
+    except Exception:
+        local_dt = dt
+    try:
+        return local_dt.strftime('%A, %B %-d, %Y')
+    except Exception:
+        try:
+            return local_dt.strftime('%A, %d %B %Y')
+        except Exception:
+            return _format_date(dt)
+
+
+def _thread_message_summary(text, limit=92):
+    if not text:
+        return ''
+    text = ' '.join(text.split())
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)].rstrip() + '…'
+
+
 def _snapshot_scope(backend, folder):
     if folder == _UNIFIED:
         return 'unified-inbox'
@@ -730,6 +850,99 @@ class EmailRow(Gtk.ListBoxRow):
 
     def mark_unread(self):
         self._dot.set_opacity(1)
+
+
+class ThreadNavRow(Gtk.ListBoxRow):
+    def __init__(self, record, on_activate):
+        super().__init__()
+        self.record = record
+        self.msg = record.get('msg') or {}
+        self.uid = self.msg.get('uid', '')
+        self.add_css_class('thread-sidebar-row')
+
+        msg = self.msg
+        sender_name = (msg.get('sender_name') or msg.get('sender_email') or 'Unknown sender').strip()
+        sender_email = (msg.get('sender_email') or '').strip()
+        body = record.get('body_text') or ''
+        sender_seed = sender_email or sender_name
+        r, g, b = _thread_palette(sender_seed)
+        initials = _sender_initials(sender_name, sender_email)
+        has_avatar = bool((msg.get('sender_name') or '').strip() or sender_email)
+        row_box = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=10,
+            margin_top=0,
+            margin_bottom=0,
+            margin_start=0,
+            margin_end=0,
+        )
+
+        strip = Gtk.Box(valign=Gtk.Align.FILL)
+        strip.set_size_request(4, 34)
+        strip.add_css_class('thread-sidebar-strip')
+        row_box.append(strip)
+
+        avatar = Gtk.Label(label=initials, halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER)
+        avatar.add_css_class('thread-sidebar-avatar')
+        if not has_avatar:
+            avatar.add_css_class('generic')
+        avatar.set_size_request(30, 30)
+        avatar.set_halign(Gtk.Align.CENTER)
+        avatar.set_valign(Gtk.Align.CENTER)
+        row_box.append(avatar)
+
+        text_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=True)
+        sender_lbl = Gtk.Label(label=sender_name, halign=Gtk.Align.START, hexpand=True)
+        sender_lbl.set_xalign(0.0)
+        sender_lbl.set_ellipsize(Pango.EllipsizeMode.END)
+        sender_lbl.add_css_class('thread-sidebar-sender')
+        text_col.append(sender_lbl)
+
+        snippet = _thread_message_summary(body or (msg.get('snippet') or '').strip())
+        snippet_lbl = Gtk.Label(label=snippet or '(no content)', halign=Gtk.Align.START, hexpand=True)
+        snippet_lbl.set_xalign(0.0)
+        snippet_lbl.set_ellipsize(Pango.EllipsizeMode.END)
+        snippet_lbl.add_css_class('thread-sidebar-snippet')
+        text_col.append(snippet_lbl)
+        row_box.append(text_col)
+
+        meta_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, halign=Gtk.Align.END)
+        time_lbl = Gtk.Label(label=_format_received_date(msg.get('date')) or _format_date(msg.get('date')) or '', halign=Gtk.Align.END)
+        time_lbl.set_xalign(1.0)
+        time_lbl.add_css_class('thread-sidebar-time')
+        meta_col.append(time_lbl)
+        if msg.get('has_attachments'):
+            att_lbl = Gtk.Label(label='Attachment', halign=Gtk.Align.END)
+            att_lbl.set_xalign(1.0)
+            att_lbl.add_css_class('thread-sidebar-time')
+            meta_col.append(att_lbl)
+        row_box.append(meta_col)
+
+        self.set_child(row_box)
+        self._sender_name = sender_name
+        self._avatar = avatar
+        self._strip = strip
+        self._on_activate = on_activate
+        self._set_accent_color(r, g, b)
+        self.connect('activate', self._activated)
+
+    def _set_accent_color(self, r, g, b):
+        avatar_name = f'thread-sidebar-avatar-{self.uid or id(self)}'
+        strip_name = f'thread-sidebar-strip-{self.uid or id(self)}'
+        self._avatar.set_widget_name(avatar_name)
+        self._strip.set_widget_name(strip_name)
+        avatar_provider = Gtk.CssProvider()
+        avatar_provider.load_from_string(f'#{avatar_name} {{ background-color: rgb({r}, {g}, {b}); }}')
+        strip_provider = Gtk.CssProvider()
+        strip_provider.load_from_string(f'#{strip_name} {{ background-color: rgb({r}, {g}, {b}); }}')
+        self._avatar.get_style_context().add_provider(avatar_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self._strip.get_style_context().add_provider(strip_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self._avatar_provider = avatar_provider
+        self._strip_provider = strip_provider
+
+    def _activated(self, *_):
+        if callable(self._on_activate):
+            self._on_activate(self.record)
 
 
 # ── Sidebar rows ──────────────────────────────────────────────────────────────
@@ -1142,6 +1355,68 @@ class LarkWindow(Adw.ApplicationWindow):
             return '1 attachment'
         return f'{count} attachments'
 
+    def _thread_sender_summary(self, msgs):
+        seen = []
+        for m in msgs or []:
+            sender_name = (m.get('sender_name') or '').strip()
+            sender_email = (m.get('sender_email') or '').strip()
+            label = sender_name or sender_email or 'Unknown sender'
+            if label not in seen:
+                seen.append(label)
+        if not seen:
+            return 'Unknown sender'
+        return ' • '.join(seen[:4]) + (f' • +{len(seen) - 4} more' if len(seen) > 4 else '')
+
+    def _thread_is_open(self):
+        return bool(getattr(self, '_thread_sidebar_revealer', None)) and self._thread_sidebar_revealer.get_reveal_child()
+
+    def _set_thread_sidebar_visible(self, visible):
+        if getattr(self, '_thread_sidebar_revealer', None) is None:
+            return
+        self._thread_sidebar_overlay.set_visible(bool(visible))
+        self._thread_sidebar_revealer.set_reveal_child(bool(visible))
+        self._thread_sidebar_dismiss.set_visible(bool(visible))
+
+    def _populate_thread_sidebar(self, records):
+        if getattr(self, '_thread_sidebar_list', None) is None:
+            return
+        while (row := self._thread_sidebar_list.get_row_at_index(0)):
+            self._thread_sidebar_list.remove(row)
+        ordered = sorted(
+            list(records or []),
+            key=lambda record: record.get('msg', {}).get('date') or datetime.min.replace(tzinfo=timezone.utc),
+        )
+        for record in ordered:
+            row = ThreadNavRow(record, self._scroll_thread_to_message)
+            self._thread_sidebar_list.append(row)
+        if ordered:
+            self._thread_sidebar_list.select_row(self._thread_sidebar_list.get_row_at_index(len(ordered) - 1))
+
+    def _on_thread_sidebar_row_activated(self, _listbox, row):
+        if not isinstance(row, ThreadNavRow):
+            return
+        self._scroll_thread_to_message(row.record)
+
+    def _scroll_thread_to_message(self, record):
+        msg = (record or {}).get('msg') or {}
+        uid = msg.get('uid', '')
+        if not uid:
+            return
+        try:
+            script = f"""
+                (function() {{
+                    const el = document.getElementById({json.dumps(f'msg-{uid}')});
+                    if (el) {{
+                        document.querySelectorAll('.bubble.selected').forEach((node) => node.classList.remove('selected'));
+                        el.classList.add('selected');
+                        el.scrollIntoView({{behavior: 'smooth', block: 'center'}});
+                    }}
+                }})();
+            """
+            self.webview.evaluate_javascript(script, len(script), None, None, None, None, None)
+        except Exception:
+            pass
+
     def _format_message_size(self, msg, attachments=None):
         size = msg.get('size')
         if isinstance(size, int) and size > 0:
@@ -1499,13 +1774,6 @@ class LarkWindow(Adw.ApplicationWindow):
 
         self._message_info_bar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self._message_info_bar.add_css_class('message-info-bar')
-        self._message_info_subject = Gtk.Label(halign=Gtk.Align.START, xalign=0)
-        self._message_info_subject.add_css_class('message-info-subject')
-        self._message_info_subject.set_wrap(False)
-        self._message_info_subject.set_ellipsize(Pango.EllipsizeMode.END)
-        self._message_info_subject.set_hexpand(True)
-        self._message_info_bar.append(self._message_info_subject)
-
         self._message_info_top = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=10,
@@ -1513,18 +1781,41 @@ class LarkWindow(Adw.ApplicationWindow):
             valign=Gtk.Align.CENTER,
         )
         self._message_info_top.add_css_class('message-info-top')
+        self._message_info_subject = Gtk.Label(halign=Gtk.Align.START, xalign=0)
+        self._message_info_subject.add_css_class('message-info-subject')
+        self._message_info_subject.set_wrap(False)
+        self._message_info_subject.set_ellipsize(Pango.EllipsizeMode.END)
+        self._message_info_subject.set_hexpand(True)
+        self._message_info_top.append(self._message_info_subject)
+
+        self._thread_messages_btn = Gtk.Button(label='All Messages')
+        self._thread_messages_btn.add_css_class('thread-info-button')
+        self._thread_messages_btn.set_visible(False)
+        self._thread_messages_btn.connect('clicked', lambda *_: self._set_thread_sidebar_visible(True))
+        self._message_info_actions = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=6,
+            halign=Gtk.Align.END,
+            valign=Gtk.Align.CENTER,
+        )
+        self._message_info_actions.add_css_class('message-info-actions')
+        self._message_info_actions.append(self._thread_messages_btn)
+        self._message_info_top.append(self._message_info_actions)
+        self._message_info_bar.append(self._message_info_top)
+
         self._message_info_sender = Gtk.Label(halign=Gtk.Align.START, xalign=0)
         self._message_info_sender.add_css_class('message-info-sender')
+        self._message_info_sender.add_css_class('message-info-sender-line')
         self._message_info_sender.set_wrap(False)
         self._message_info_sender.set_ellipsize(Pango.EllipsizeMode.END)
         self._message_info_sender.set_hexpand(True)
-        self._message_info_top.append(self._message_info_sender)
-        self._message_info_date = Gtk.Label(halign=Gtk.Align.END, xalign=1)
+        self._message_info_bar.append(self._message_info_sender)
+
+        self._message_info_date = Gtk.Label(halign=Gtk.Align.START, xalign=0)
         self._message_info_date.add_css_class('message-info-date')
         self._message_info_date.set_wrap(False)
         self._message_info_date.set_ellipsize(Pango.EllipsizeMode.END)
-        self._message_info_top.append(self._message_info_date)
-        self._message_info_bar.append(self._message_info_top)
+        self._message_info_bar.append(self._message_info_date)
 
         self._message_info_meta = Gtk.Label(halign=Gtk.Align.START, xalign=0)
         self._message_info_meta.add_css_class('message-info-meta')
@@ -1601,10 +1892,70 @@ class LarkWindow(Adw.ApplicationWindow):
         self._viewer_stack.add_named(self._compose_holder, 'compose')
         self._viewer_stack.set_visible_child_name('viewer')
 
+        self._thread_sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self._thread_sidebar.add_css_class('thread-sidebar')
+        sidebar_header = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=8,
+            halign=Gtk.Align.FILL,
+            valign=Gtk.Align.CENTER,
+        )
+        sidebar_header.add_css_class('thread-sidebar-header')
+        sidebar_title = Gtk.Label(label='All Messages', halign=Gtk.Align.START, xalign=0)
+        sidebar_title.add_css_class('thread-sidebar-title')
+        sidebar_title.set_hexpand(True)
+        sidebar_header.append(sidebar_title)
+        sidebar_close = Gtk.Button(icon_name='window-close-symbolic')
+        sidebar_close.add_css_class('flat')
+        sidebar_close.set_has_frame(False)
+        sidebar_close.add_css_class('thread-sidebar-close')
+        sidebar_close.connect('clicked', lambda *_: self._set_thread_sidebar_visible(False))
+        sidebar_header.append(sidebar_close)
+        self._thread_sidebar.append(sidebar_header)
+
+        sidebar_scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
+        sidebar_scroll.set_vexpand(True)
+        sidebar_scroll.set_hexpand(True)
+        self._thread_sidebar_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE)
+        self._thread_sidebar_list.add_css_class('thread-sidebar-list')
+        self._thread_sidebar_list.connect('row-activated', self._on_thread_sidebar_row_activated)
+        sidebar_scroll.set_child(self._thread_sidebar_list)
+        self._thread_sidebar.append(sidebar_scroll)
+        self._thread_sidebar_revealer = Gtk.Revealer(
+            transition_type=Gtk.RevealerTransitionType.SLIDE_LEFT,
+            transition_duration=240,
+            halign=Gtk.Align.END,
+            valign=Gtk.Align.FILL,
+        )
+        self._thread_sidebar_revealer.set_child(self._thread_sidebar)
+        self._thread_sidebar_revealer.set_reveal_child(False)
+
+        self._thread_sidebar_dismiss = Gtk.Button()
+        self._thread_sidebar_dismiss.add_css_class('thread-sidebar-dim')
+        self._thread_sidebar_dismiss.set_hexpand(True)
+        self._thread_sidebar_dismiss.set_vexpand(True)
+        self._thread_sidebar_dismiss.set_has_frame(False)
+        self._thread_sidebar_dismiss.set_visible(False)
+        self._thread_sidebar_dismiss.connect('clicked', lambda *_: self._set_thread_sidebar_visible(False))
+
+        self._thread_sidebar_overlay = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            halign=Gtk.Align.FILL,
+            valign=Gtk.Align.FILL,
+        )
+        self._thread_sidebar_overlay.set_hexpand(True)
+        self._thread_sidebar_overlay.set_vexpand(True)
+        self._thread_sidebar_overlay.set_visible(False)
+        self._thread_sidebar_overlay.append(self._thread_sidebar_dismiss)
+        self._thread_sidebar_overlay.append(self._thread_sidebar_revealer)
+
+        viewer_overlay = Gtk.Overlay(vexpand=True, hexpand=True)
         viewer_shell = Gtk.Frame(vexpand=True, hexpand=True, margin_top=5)
         viewer_shell.add_css_class('reading-pane-shell')
         viewer_shell.set_child(self._viewer_stack)
-        right.set_end_child(viewer_shell)
+        viewer_overlay.set_child(viewer_shell)
+        viewer_overlay.add_overlay(self._thread_sidebar_overlay)
+        right.set_end_child(viewer_overlay)
         body.append(right)
 
         self._toast_overlay = Adw.ToastOverlay()
@@ -2816,9 +3167,13 @@ class LarkWindow(Adw.ApplicationWindow):
     def _render_thread_view(self, selected_msg, records, attachments, generation=None):
         if generation is not None and generation != self._body_load_generation:
             return False
-        thread_msgs = [record['msg'] for record in records]
+        ordered_records = sorted(
+            list(records or []),
+            key=lambda record: record.get('msg', {}).get('date') or datetime.min.replace(tzinfo=timezone.utc),
+        )
+        thread_msgs = [record['msg'] for record in ordered_records]
         subject = self._thread_subject_for_messages(thread_msgs)
-        participants = self._thread_participants_summary(thread_msgs)
+        participants = self._thread_sender_summary(thread_msgs)
         first_date, last_date = self._thread_date_bounds(thread_msgs)
         parts = []
         if thread_msgs:
@@ -2828,7 +3183,7 @@ class LarkWindow(Adw.ApplicationWindow):
             parts.append(attachment_summary)
         self._thread_view_active = True
         self._current_body = None
-        self._current_thread_messages = records
+        self._current_thread_messages = ordered_records
         self._update_message_info_bar(
             {
                 'subject': subject,
@@ -2848,41 +3203,34 @@ class LarkWindow(Adw.ApplicationWindow):
         self._message_info_meta.set_visible(bool(parts))
         self._message_info_bar.set_visible(True)
         self._show_attachments(attachments, selected_msg)
-        self._thread_reply_target = self._thread_reply_msg_for_records(records)
-        self._thread_reply_bar.set_visible(True)
+        self._thread_reply_target = self._thread_reply_msg_for_records(ordered_records)
+        self._thread_reply_bar.set_visible(len(thread_msgs) > 1)
+        self._thread_messages_btn.set_visible(len(thread_msgs) > 1)
+        self._populate_thread_sidebar(ordered_records)
+        self._set_thread_sidebar_visible(False)
         if self._active_email_row is not None and self._active_email_row.msg.get('uid') == selected_msg.get('uid'):
             self._active_email_row.set_thread_count(len(thread_msgs))
         self._update_webview_bg()
         self.webview.load_html(
-            self._build_thread_html(subject, participants, first_date, last_date, records, attachments),
+            self._build_thread_html(selected_msg, subject, participants, first_date, last_date, ordered_records, attachments),
             'about:blank',
         )
         GLib.idle_add(self._scroll_thread_to_bottom)
         return False
 
-    def _build_thread_html(self, subject, participants, first_date, last_date, records, attachments):
+    def _build_thread_html(self, selected_msg, subject, participants, first_date, last_date, records, attachments):
         is_dark = Adw.StyleManager.get_default().get_dark()
         page_bg = '#161616' if is_dark else '#f4f2ef'
         text = '#f0f0f0' if is_dark else '#202124'
         subtext = '#c4c4c4' if is_dark else '#5f6368'
         border = 'rgba(255,255,255,0.10)' if is_dark else 'rgba(32,33,36,0.12)'
         header_bg = 'rgba(255,255,255,0.04)' if is_dark else 'rgba(255,255,255,0.72)'
-        header_subject = html_lib.escape(subject or '(no subject)')
-        participants = html_lib.escape(participants or 'Unknown sender')
-        first_date = html_lib.escape(first_date or '')
-        last_date = html_lib.escape(last_date or '')
-        overview = []
         ordered_records = list(records)
-        for index, record in enumerate(ordered_records, start=1):
-            msg = record['msg']
-            label = f"{index}. {(msg.get('sender_name') or msg.get('sender_email') or 'Unknown')}"
-            when = _format_date(msg.get('date')) or _format_received_date(msg.get('date'))
-            if when:
-                label += f' · {when}'
-            overview.append(
-                f'<a class="thread-chip" href="#msg-{html_lib.escape(msg.get("uid", ""))}">{html_lib.escape(label)}</a>'
-            )
         bubbles = []
+        last_day = None
+        thread_account_seed = (selected_msg.get('account') or (selected_msg.get('backend_obj').identity if selected_msg.get('backend_obj') else '') or selected_msg.get('sender_email') or selected_msg.get('sender_name') or '')
+        self_color = self._sender_accent_rgb(thread_account_seed)
+        self_color_rgb = f'rgb({self_color[0]}, {self_color[1]}, {self_color[2]})'
         for record in ordered_records:
             msg = record['msg']
             uid = html_lib.escape(msg.get('uid', ''))
@@ -2892,6 +3240,8 @@ class LarkWindow(Adw.ApplicationWindow):
             body_text = html_lib.escape(record.get('body_text') or '(no content)')
             is_self = self._message_is_self(msg)
             r, g, b = self._sender_accent_rgb(sender_email or sender_name)
+            if is_self:
+                r, g, b = self_color
             bubble_bg = f'rgba({r}, {g}, {b}, 0.12)' if not is_dark else f'rgba({r}, {g}, {b}, 0.18)'
             bubble_border = f'rgba({r}, {g}, {b}, 0.28)' if not is_dark else f'rgba({r}, {g}, {b}, 0.34)'
             bubble_text = f'rgb({r}, {g}, {b})'
@@ -2908,13 +3258,25 @@ class LarkWindow(Adw.ApplicationWindow):
             attachment_html = ''
             if attachment_bits:
                 attachment_html = (
-                    '<div class="bubble-attachments">'
-                    '<span class="bubble-attachment-label">Attachments</span>'
-                    f'<span class="bubble-attachment-list">{", ".join(attachment_bits)}</span>'
+                    '<div class="bubble-footer">'
+                    '<div class="bubble-chip">Attachments</div>'
+                    f'<div class="bubble-chip">{", ".join(attachment_bits)}</div>'
                     '</div>'
                 )
+            msg_day = None
+            try:
+                msg_day = msg.get('date').astimezone().date() if msg.get('date') else None
+            except Exception:
+                msg_day = None
+            day_separator = ''
+            if msg_day is not None and msg_day != last_day:
+                day_separator = f'<div class="thread-day-separator"><span class="thread-day-label">{html_lib.escape(_thread_day_label(msg.get("date")) or "")}</span></div>'
+                last_day = msg_day
+            initials = html_lib.escape(_sender_initials(msg.get('sender_name'), sender_email))
+            sender_label = html_lib.escape((msg.get('sender_name') or msg.get('sender_email') or 'Unknown').strip())
             bubbles.append(
                 f'''
+                {day_separator}
                 <article id="msg-{uid}" class="bubble {align_class}" style="
                     --bubble-bg: {bubble_bg};
                     --bubble-border: {bubble_border};
@@ -2922,7 +3284,11 @@ class LarkWindow(Adw.ApplicationWindow):
                     --bubble-accent: {bubble_text};
                 ">
                     <div class="bubble-head">
-                        <div class="bubble-sender">{sender_name}</div>
+                        <div class="bubble-head-left">
+                            <div class="bubble-strip"></div>
+                            <div class="bubble-avatar">{initials}</div>
+                            <div class="bubble-sender">{sender_label}</div>
+                        </div>
                         <div class="bubble-time">{when}</div>
                     </div>
                     {subject_chip}
@@ -2931,8 +3297,6 @@ class LarkWindow(Adw.ApplicationWindow):
                 </article>
                 '''
             )
-        overview_html = ' '.join(overview)
-        attachment_count = len(attachments or [])
         return f'''
         <html>
         <head>
@@ -2949,55 +3313,8 @@ class LarkWindow(Adw.ApplicationWindow):
                     padding: 18px 18px 28px;
                 }}
                 .thread-shell {{
-                    max-width: 980px;
+                    max-width: 820px;
                     margin: 0 auto;
-                }}
-                .thread-header {{
-                    position: sticky;
-                    top: 0;
-                    z-index: 3;
-                    background: linear-gradient(to bottom, {page_bg} 72%, rgba(0,0,0,0));
-                    padding: 0 0 14px;
-                    margin-bottom: 10px;
-                }}
-                .thread-title {{
-                    font-size: 1.16rem;
-                    font-weight: 700;
-                    line-height: 1.2;
-                    margin: 0 0 6px;
-                    color: {text};
-                }}
-                .thread-meta {{
-                    color: {subtext};
-                    font-size: 0.92rem;
-                    line-height: 1.45;
-                    margin-bottom: 8px;
-                }}
-                .thread-overview {{
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 8px;
-                    margin-bottom: 10px;
-                }}
-                .thread-chip {{
-                    display: inline-flex;
-                    align-items: center;
-                    padding: 6px 10px;
-                    border-radius: 999px;
-                    border: 1px solid {border};
-                    background: {header_bg};
-                    color: {text};
-                    text-decoration: none;
-                    font-size: 0.84rem;
-                    white-space: nowrap;
-                }}
-                .thread-chip:hover {{
-                    border-color: rgba(30, 136, 229, 0.45);
-                }}
-                .thread-stats {{
-                    color: {subtext};
-                    font-size: 0.84rem;
-                    margin-bottom: 4px;
                 }}
                 .bubble {{
                     max-width: 78%;
@@ -3005,7 +3322,7 @@ class LarkWindow(Adw.ApplicationWindow):
                     border: 1px solid var(--bubble-border);
                     background: var(--bubble-bg);
                     color: var(--bubble-text);
-                    padding: 13px 14px 12px;
+                    padding: 12px 13px 11px;
                     margin: 0 0 12px;
                     box-shadow: 0 1px 2px rgba(0,0,0,0.06);
                 }}
@@ -3024,8 +3341,38 @@ class LarkWindow(Adw.ApplicationWindow):
                     display: flex;
                     justify-content: space-between;
                     gap: 16px;
-                    margin-bottom: 8px;
+                    margin-bottom: 7px;
                     align-items: baseline;
+                }}
+                .bubble-head-left {{
+                    display: flex;
+                    align-items: center;
+                    gap: 9px;
+                    min-width: 0;
+                }}
+                .bubble-strip {{
+                    width: 4px;
+                    min-width: 4px;
+                    height: 16px;
+                    border-radius: 999px;
+                    background: var(--bubble-accent);
+                    flex: none;
+                }}
+                .bubble-avatar {{
+                    width: 26px;
+                    height: 26px;
+                    min-width: 26px;
+                    min-height: 26px;
+                    border-radius: 999px;
+                    background: var(--bubble-accent);
+                    color: #ffffff;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 0.72rem;
+                    font-weight: 800;
+                    letter-spacing: 0.03em;
+                    flex: none;
                 }}
                 .bubble-sender {{
                     font-weight: 700;
@@ -3056,6 +3403,23 @@ class LarkWindow(Adw.ApplicationWindow):
                     font-size: 0.95rem;
                     color: {text};
                 }}
+                .bubble-footer {{
+                    margin-top: 8px;
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 6px;
+                }}
+                .bubble-chip {{
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    padding: 4px 8px;
+                    border-radius: 999px;
+                    background: rgba(255,255,255,0.10);
+                    color: {subtext};
+                    font-size: 0.74rem;
+                    font-weight: 700;
+                }}
                 .bubble-attachments {{
                     display: flex;
                     flex-wrap: wrap;
@@ -3073,6 +3437,22 @@ class LarkWindow(Adw.ApplicationWindow):
                 .bubble-attachment-list {{
                     color: {subtext};
                 }}
+                .thread-day-separator {{
+                    display: flex;
+                    justify-content: center;
+                    margin: 16px 0 14px;
+                }}
+                .thread-day-label {{
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 4px 12px;
+                    border-radius: 999px;
+                    background-color: rgba(255,255,255,0.08);
+                    color: {subtext};
+                    font-size: 0.78rem;
+                    font-weight: 700;
+                }}
                 a {{
                     color: inherit;
                 }}
@@ -3080,13 +3460,6 @@ class LarkWindow(Adw.ApplicationWindow):
         </head>
         <body>
             <div class="thread-shell">
-                <header class="thread-header">
-                    <div class="thread-title">{header_subject}</div>
-                    <div class="thread-meta">{participants}</div>
-                    <div class="thread-meta">First received: {first_date}<br/>Last updated: {last_date}</div>
-                    <div class="thread-stats">{len(records)} messages{f' • {attachment_count} attachments' if attachment_count else ''}</div>
-                    <div class="thread-overview">{overview_html}</div>
-                </header>
                 {''.join(bubbles)}
                 <div id="thread-end"></div>
             </div>
@@ -3216,6 +3589,8 @@ class LarkWindow(Adw.ApplicationWindow):
         self._current_thread_messages = None
         self._thread_reply_target = None
         self._thread_reply_bar.set_visible(False)
+        self._thread_messages_btn.set_visible(False)
+        self._set_thread_sidebar_visible(False)
         backend = msg.get('backend_obj') or self.current_backend
         cache_key = (backend.identity, msg.get('folder'), msg['uid'])
         inline_attachments = [att for att in (attachments or []) if _attachment_is_inline_image(att)]
@@ -3260,6 +3635,8 @@ class LarkWindow(Adw.ApplicationWindow):
         self._current_thread_messages = None
         self._thread_reply_target = None
         self._thread_reply_bar.set_visible(False)
+        self._thread_messages_btn.set_visible(False)
+        self._set_thread_sidebar_visible(False)
         if self._message_info_bar is not None:
             self._message_info_bar.set_visible(False)
         self.webview.load_html(
@@ -3272,6 +3649,8 @@ class LarkWindow(Adw.ApplicationWindow):
         self._attachment_bar.set_visible(False)
         self._message_info_bar.set_visible(False)
         self._thread_reply_bar.set_visible(False)
+        self._thread_messages_btn.set_visible(False)
+        self._set_thread_sidebar_visible(False)
         self._current_body = None
         self._thread_view_active = False
         self._current_thread_messages = None
