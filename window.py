@@ -684,6 +684,17 @@ def _thread_message_summary(text, limit=92):
     return text[: max(0, limit - 1)].rstrip() + '…'
 
 
+def _rgb_to_hex(rgb):
+    r, g, b = rgb
+    return f'#{r:02x}{g:02x}{b:02x}'
+
+
+def _sender_key(msg):
+    sender_email = (msg.get('sender_email') or '').strip().lower()
+    sender_name = (msg.get('sender_name') or '').strip().lower()
+    return sender_email or sender_name or 'unknown'
+
+
 def _demo_thread_fixture(identity='lark-demo@local'):
     base = datetime.now(timezone.utc).replace(hour=9, minute=10, second=0, microsecond=0)
     senders = [
@@ -1451,6 +1462,22 @@ class LarkWindow(Adw.ApplicationWindow):
             return 'Unknown sender'
         return ' • '.join(seen[:4]) + (f' • +{len(seen) - 4} more' if len(seen) > 4 else '')
 
+    def _thread_sender_markup(self, msgs, sender_colors):
+        seen = []
+        parts = []
+        for m in msgs or []:
+            name = (m.get('sender_name') or m.get('sender_email') or 'Unknown sender').strip()
+            key = _sender_key(m)
+            if key in seen:
+                continue
+            seen.append(key)
+            rgb = sender_colors.get(key)
+            color_hex = _rgb_to_hex(rgb) if rgb else '#9aa0a6'
+            parts.append(f'<span foreground="{color_hex}" weight="700">{html_lib.escape(name)}</span>')
+        if not parts:
+            return 'Unknown sender'
+        return ' • '.join(parts)
+
     def _thread_is_open(self):
         return bool(getattr(self, '_thread_sidebar_revealer', None)) and self._thread_sidebar_revealer.get_reveal_child()
 
@@ -1852,7 +1879,7 @@ class LarkWindow(Adw.ApplicationWindow):
         viewer_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 
         wk_settings = WebKit.Settings()
-        wk_settings.set_enable_javascript(False)
+        wk_settings.set_enable_javascript(True)
         wk_settings.set_auto_load_images(get_settings().get('load_images'))
         wk_settings.set_enable_write_console_messages_to_stdout(False)
         self._webview_settings = wk_settings
@@ -3289,7 +3316,28 @@ class LarkWindow(Adw.ApplicationWindow):
         )
         thread_msgs = [record['msg'] for record in ordered_records]
         subject = self._thread_subject_for_messages(thread_msgs)
-        participants = self._thread_sender_summary(thread_msgs)
+        thread_account_seed = (
+            selected_msg.get('account')
+            or (selected_msg.get('backend_obj').identity if selected_msg.get('backend_obj') else '')
+            or selected_msg.get('sender_email')
+            or selected_msg.get('sender_name')
+            or ''
+        )
+        self_color = self._sender_accent_rgb(thread_account_seed)
+        sender_colors = {}
+        sender_lanes = {}
+        palette_index = 0
+        for msg in thread_msgs:
+            key = _sender_key(msg)
+            if key not in sender_colors:
+                if self._message_is_self(msg):
+                    sender_colors[key] = self_color
+                else:
+                    sender_colors[key] = _thread_palette(f'{key}-{palette_index}')
+                    palette_index += 1
+            if key not in sender_lanes:
+                sender_lanes[key] = len(sender_lanes)
+        participants = self._thread_sender_markup(thread_msgs, sender_colors)
         first_date, last_date = self._thread_date_bounds(thread_msgs)
         parts = []
         if thread_msgs:
@@ -3300,19 +3348,11 @@ class LarkWindow(Adw.ApplicationWindow):
         self._thread_view_active = True
         self._current_body = None
         self._current_thread_messages = ordered_records
-        thread_account_seed = (
-            selected_msg.get('account')
-            or (selected_msg.get('backend_obj').identity if selected_msg.get('backend_obj') else '')
-            or selected_msg.get('sender_email')
-            or selected_msg.get('sender_name')
-            or ''
-        )
-        accent_r, accent_g, accent_b = self._sender_accent_rgb(thread_account_seed)
+        accent_r, accent_g, accent_b = self_color
         if Adw.StyleManager.get_default().get_dark():
-            self._webview_bg_color = f'rgba({accent_r}, {accent_g}, {accent_b}, 0.16)'
+            self._webview_bg_color = f'rgba({accent_r}, {accent_g}, {accent_b}, 0.30)'
         else:
-            self._webview_bg_color = f'rgba({accent_r}, {accent_g}, {accent_b}, 0.10)'
-        accent_r, accent_g, accent_b = self._sender_accent_rgb(thread_account_seed)
+            self._webview_bg_color = f'rgba({accent_r}, {accent_g}, {accent_b}, 0.22)'
         accent_name = f'message-info-accent-{selected_msg.get("uid") or id(selected_msg)}'
         try:
             self._message_info_accent.set_name(accent_name)
@@ -3337,7 +3377,7 @@ class LarkWindow(Adw.ApplicationWindow):
             attachments,
         )
         self._message_info_subject.set_label(subject)
-        self._message_info_sender.set_label(participants)
+        self._message_info_sender.set_markup(participants)
         if first_date or last_date:
             self._message_info_date.set_label(f'First: {first_date} • Last: {last_date}')
         else:
@@ -3355,25 +3395,20 @@ class LarkWindow(Adw.ApplicationWindow):
             self._active_email_row.set_thread_count(len(thread_msgs))
         self._update_webview_bg()
         self.webview.load_html(
-            self._build_thread_html(selected_msg, subject, participants, first_date, last_date, ordered_records, attachments),
+            self._build_thread_html(selected_msg, subject, first_date, last_date, ordered_records, attachments, sender_colors, sender_lanes),
             'about:blank',
         )
         GLib.idle_add(self._scroll_thread_to_bottom)
         return False
 
-    def _build_thread_html(self, selected_msg, subject, participants, first_date, last_date, records, attachments):
+    def _build_thread_html(self, selected_msg, subject, first_date, last_date, records, attachments, sender_colors, sender_lanes):
         is_dark = Adw.StyleManager.get_default().get_dark()
         page_bg = '#161616' if is_dark else '#f4f2ef'
         text = '#f0f0f0' if is_dark else '#202124'
         subtext = '#c4c4c4' if is_dark else '#5f6368'
-        border = 'rgba(255,255,255,0.10)' if is_dark else 'rgba(32,33,36,0.12)'
-        header_bg = 'rgba(255,255,255,0.04)' if is_dark else 'rgba(255,255,255,0.72)'
         ordered_records = list(records)
         bubbles = []
         last_day = None
-        thread_account_seed = (selected_msg.get('account') or (selected_msg.get('backend_obj').identity if selected_msg.get('backend_obj') else '') or selected_msg.get('sender_email') or selected_msg.get('sender_name') or '')
-        self_color = self._sender_accent_rgb(thread_account_seed)
-        self_color_rgb = f'rgb({self_color[0]}, {self_color[1]}, {self_color[2]})'
         for record in ordered_records:
             msg = record['msg']
             uid = html_lib.escape(msg.get('uid', ''))
@@ -3382,21 +3417,15 @@ class LarkWindow(Adw.ApplicationWindow):
             when = html_lib.escape(_format_received_date(msg.get('date')) or _format_date(msg.get('date')) or '')
             body_text = html_lib.escape(record.get('body_text') or '(no content)')
             is_self = self._message_is_self(msg)
-            r, g, b = self._sender_accent_rgb(sender_email or sender_name)
-            if is_self:
-                r, g, b = self_color
-            bubble_bg = f'rgba({r}, {g}, {b}, 0.12)' if not is_dark else f'rgba({r}, {g}, {b}, 0.18)'
-            bubble_border = f'rgba({r}, {g}, {b}, 0.28)' if not is_dark else f'rgba({r}, {g}, {b}, 0.34)'
+            sender_key = _sender_key(msg)
+            r, g, b = sender_colors.get(sender_key, self._sender_accent_rgb(sender_email or sender_name))
+            bubble_bg = f'rgba({r}, {g}, {b}, 0.14)' if not is_dark else f'rgba({r}, {g}, {b}, 0.22)'
+            bubble_border = f'rgba({r}, {g}, {b}, 0.30)' if not is_dark else f'rgba({r}, {g}, {b}, 0.38)'
             bubble_text = f'rgb({r}, {g}, {b})'
             align_class = 'self' if is_self else 'other'
             if record.get('selected'):
                 align_class += ' selected'
-            subj = (msg.get('subject') or '').strip()
-            subj_norm = _normalize_thread_subject(subj)
-            thread_subj = _normalize_thread_subject(subject)
-            subject_chip = ''
-            if subj and subj_norm and subj_norm != thread_subj:
-                subject_chip = f'<div class="bubble-subject">Subject changed to: {html_lib.escape(subj)}</div>'
+            lane = sender_lanes.get(sender_key, 0)
             attachment_bits = [html_lib.escape(att.get('name', 'attachment')) for att in record.get('attachments') or []]
             attachment_html = ''
             if attachment_bits:
@@ -3425,6 +3454,7 @@ class LarkWindow(Adw.ApplicationWindow):
                     --bubble-border: {bubble_border};
                     --bubble-text: {text};
                     --bubble-accent: {bubble_text};
+                    --sender-lane: {lane};
                 ">
                     <div class="bubble-head">
                         <div class="bubble-head-left">
@@ -3434,7 +3464,6 @@ class LarkWindow(Adw.ApplicationWindow):
                         </div>
                         <div class="bubble-time">{when}</div>
                     </div>
-                    {subject_chip}
                     <div class="bubble-body">{body_text}</div>
                     {attachment_html}
                 </article>
@@ -3471,10 +3500,12 @@ class LarkWindow(Adw.ApplicationWindow):
                 }}
                 .bubble.self {{
                     margin-left: auto;
+                    margin-right: 8px;
                     border-top-right-radius: 8px;
                 }}
                 .bubble.other {{
                     margin-right: auto;
+                    margin-left: calc(8px + (var(--sender-lane, 0) * 11px));
                     border-top-left-radius: 8px;
                 }}
                 .bubble.selected {{
@@ -3530,16 +3561,6 @@ class LarkWindow(Adw.ApplicationWindow):
                     white-space: nowrap;
                     flex: none;
                 }}
-                .bubble-subject {{
-                    display: inline-block;
-                    padding: 4px 8px;
-                    border-radius: 999px;
-                    font-size: 0.78rem;
-                    font-weight: 700;
-                    margin-bottom: 8px;
-                    background: rgba(255,255,255,0.12);
-                    color: {text};
-                }}
                 .bubble-body {{
                     white-space: pre-wrap;
                     line-height: 1.55;
@@ -3591,7 +3612,7 @@ class LarkWindow(Adw.ApplicationWindow):
                     justify-content: center;
                     padding: 4px 12px;
                     border-radius: 999px;
-                    background-color: rgba(255,255,255,0.08);
+                    background-color: rgba(255,255,255,0.12);
                     color: {subtext};
                     font-size: 0.78rem;
                     font-weight: 700;
@@ -3737,9 +3758,9 @@ class LarkWindow(Adw.ApplicationWindow):
         sender_seed = (msg.get('account') or (msg.get('backend_obj').identity if msg.get('backend_obj') else '') or msg.get('sender_email') or msg.get('sender_name') or '')
         accent_r, accent_g, accent_b = self._sender_accent_rgb(sender_seed)
         if Adw.StyleManager.get_default().get_dark():
-            self._webview_bg_color = f'rgba({accent_r}, {accent_g}, {accent_b}, 0.16)'
+            self._webview_bg_color = f'rgba({accent_r}, {accent_g}, {accent_b}, 0.30)'
         else:
-            self._webview_bg_color = f'rgba({accent_r}, {accent_g}, {accent_b}, 0.10)'
+            self._webview_bg_color = f'rgba({accent_r}, {accent_g}, {accent_b}, 0.22)'
         backend = msg.get('backend_obj') or self.current_backend
         cache_key = (backend.identity, msg.get('folder'), msg['uid'])
         inline_attachments = [att for att in (attachments or []) if _attachment_is_inline_image(att)]
