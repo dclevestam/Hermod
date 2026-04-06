@@ -288,6 +288,11 @@ CSS = """
     font-size: 0.82em;
     font-weight: 700;
 }
+.thread-tab {
+    border-radius: 999px 0px 0px 999px;
+    padding: 0px 12px 0px 14px;
+    min-height: 30px;
+}
 .thread-info-button.active {
     background-color: alpha(@accent_color, 0.14);
     color: @accent_fg_color;
@@ -341,19 +346,6 @@ CSS = """
     border-left: 1px solid alpha(@borders, 0.18);
     background-color: alpha(@window_bg_color, 0.96);
     min-width: 330px;
-}
-.thread-sidebar-header {
-    padding: 12px 12px 10px;
-    border-bottom: 1px solid alpha(@borders, 0.18);
-}
-.thread-sidebar-title {
-    font-size: 0.90em;
-    font-weight: 700;
-}
-.thread-sidebar-close {
-    min-height: 24px;
-    min-width: 24px;
-    padding: 0px;
 }
 .thread-sidebar-list {
     padding: 8px 0px 10px;
@@ -695,6 +687,53 @@ def _sender_key(msg):
     return sender_email or sender_name or 'unknown'
 
 
+def _thread_color_map(thread_seed, sender_keys):
+    palette = [
+        (0xE5, 0x39, 0x35),
+        (0xFB, 0x8C, 0x00),
+        (0x43, 0xA0, 0x47),
+        (0x1E, 0x88, 0xE5),
+        (0x8E, 0x24, 0xAA),
+        (0x00, 0x96, 0x88),
+        (0xD8, 0x1B, 0x60),
+        (0x6D, 0x4C, 0x41),
+    ]
+    digest = hashlib.sha256((thread_seed or 'thread').encode('utf-8')).digest()
+    order = list(range(len(palette)))
+    order.sort(key=lambda idx: digest[idx % len(digest)])
+    colors = [palette[idx] for idx in order]
+    mapping = {}
+    for idx, key in enumerate(sender_keys):
+        mapping[key] = colors[idx % len(colors)]
+    return mapping
+
+
+def _email_background_hint(html, text, fallback_rgb):
+    candidates = []
+    sources = [html or '', text or '']
+    patterns = [
+        r'(?i)background(?:-color)?\s*:\s*(#[0-9a-f]{3,8}|rgb\([^)]+\)|rgba\([^)]+\))',
+        r'(?i)bgcolor\s*=\s*["\']?(#[0-9a-f]{3,8}|[a-z]+)',
+        r'(?i)background\s*=\s*["\']?(#[0-9a-f]{3,8}|[a-z]+)',
+    ]
+    for source in sources:
+        for pattern in patterns:
+            match = re.search(pattern, source)
+            if match:
+                candidates.append(match.group(1))
+    for color in candidates:
+        rgba = Gdk.RGBA()
+        try:
+            if rgba.parse(color):
+                r = int(round(rgba.red * 255))
+                g = int(round(rgba.green * 255))
+                b = int(round(rgba.blue * 255))
+                return (r, g, b)
+        except Exception:
+            continue
+    return fallback_rgb
+
+
 def _demo_thread_fixture(identity='lark-demo@local'):
     base = datetime.now(timezone.utc).replace(hour=9, minute=10, second=0, microsecond=0)
     senders = [
@@ -783,6 +822,16 @@ def _snapshot_path(scope):
 
 def _backend_for_identity(backends, identity):
     return next((b for b in backends if b.identity == identity), None)
+
+
+def _backend_for_message(backends, msg):
+    backend = msg.get('backend_obj')
+    if backend is not None:
+        return backend
+    identity = (msg.get('account') or '').strip()
+    if identity:
+        return _backend_for_identity(backends, identity)
+    return None
 
 
 # ── Email list row ────────────────────────────────────────────────────────────
@@ -942,7 +991,7 @@ class EmailRow(Gtk.ListBoxRow):
 
 
 class ThreadNavRow(Gtk.ListBoxRow):
-    def __init__(self, record, on_activate):
+    def __init__(self, record, on_activate, accent_rgb=None):
         super().__init__()
         self.record = record
         self.msg = record.get('msg') or {}
@@ -954,7 +1003,7 @@ class ThreadNavRow(Gtk.ListBoxRow):
         sender_email = (msg.get('sender_email') or '').strip()
         body = record.get('body_text') or ''
         sender_seed = sender_email or sender_name
-        r, g, b = _thread_palette(sender_seed)
+        r, g, b = accent_rgb or record.get('sender_color') or _thread_palette(sender_seed)
         initials = _sender_initials(sender_name, sender_email)
         has_avatar = bool((msg.get('sender_name') or '').strip() or sender_email)
         row_box = Gtk.Box(
@@ -1010,6 +1059,7 @@ class ThreadNavRow(Gtk.ListBoxRow):
         self.set_child(row_box)
         self._sender_name = sender_name
         self._avatar = avatar
+        self._sender_lbl = sender_lbl
         self._strip = strip
         self._on_activate = on_activate
         self._set_accent_color(r, g, b)
@@ -1018,6 +1068,7 @@ class ThreadNavRow(Gtk.ListBoxRow):
     def _set_accent_color(self, r, g, b):
         avatar_name = f'thread-sidebar-avatar-{self.uid or id(self)}'
         strip_name = f'thread-sidebar-strip-{self.uid or id(self)}'
+        sender_name = f'thread-sidebar-sender-{self.uid or id(self)}'
         try:
             self._avatar.set_name(avatar_name)
         except Exception:
@@ -1026,14 +1077,22 @@ class ThreadNavRow(Gtk.ListBoxRow):
             self._strip.set_name(strip_name)
         except Exception:
             pass
+        try:
+            self._sender_lbl.set_name(sender_name)
+        except Exception:
+            pass
         avatar_provider = Gtk.CssProvider()
         avatar_provider.load_from_string(f'#{avatar_name} {{ background-color: rgb({r}, {g}, {b}); }}')
         strip_provider = Gtk.CssProvider()
         strip_provider.load_from_string(f'#{strip_name} {{ background-color: rgb({r}, {g}, {b}); }}')
+        sender_provider = Gtk.CssProvider()
+        sender_provider.load_from_string(f'#{sender_name} {{ color: rgb({r}, {g}, {b}); }}')
         self._avatar.get_style_context().add_provider(avatar_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self._strip.get_style_context().add_provider(strip_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self._sender_lbl.get_style_context().add_provider(sender_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         self._avatar_provider = avatar_provider
         self._strip_provider = strip_provider
+        self._sender_provider = sender_provider
 
     def _activated(self, *_):
         if callable(self._on_activate):
@@ -1500,7 +1559,7 @@ class LarkWindow(Adw.ApplicationWindow):
             key=lambda record: record.get('msg', {}).get('date') or datetime.min.replace(tzinfo=timezone.utc),
         )
         for record in ordered:
-            row = ThreadNavRow(record, self._scroll_thread_to_message)
+            row = ThreadNavRow(record, self._scroll_thread_to_message, accent_rgb=record.get('sender_color'))
             self._thread_sidebar_list.append(row)
         if ordered:
             self._thread_sidebar_list.select_row(self._thread_sidebar_list.get_row_at_index(len(ordered) - 1))
@@ -1904,27 +1963,6 @@ class LarkWindow(Adw.ApplicationWindow):
         self._message_info_subject.set_ellipsize(Pango.EllipsizeMode.END)
         self._message_info_subject.set_hexpand(True)
         self._message_info_top.append(self._message_info_subject)
-
-        self._thread_messages_btn = Gtk.Button(label='All Messages')
-        self._thread_messages_btn.add_css_class('thread-info-button')
-        self._thread_messages_btn.set_visible(False)
-        self._thread_messages_btn.connect(
-            'clicked',
-            lambda *_: self._set_thread_sidebar_visible(
-                not getattr(self, '_thread_sidebar_revealer', None).get_reveal_child()
-                if getattr(self, '_thread_sidebar_revealer', None) is not None
-                else True
-            ),
-        )
-        self._message_info_actions = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL,
-            spacing=6,
-            halign=Gtk.Align.END,
-            valign=Gtk.Align.CENTER,
-        )
-        self._message_info_actions.add_css_class('message-info-actions')
-        self._message_info_actions.append(self._thread_messages_btn)
-        self._message_info_top.append(self._message_info_actions)
         self._message_info_bar.append(self._message_info_top)
 
         self._message_info_sender = Gtk.Label(halign=Gtk.Align.START, xalign=0)
@@ -1952,7 +1990,6 @@ class LarkWindow(Adw.ApplicationWindow):
         self.webview.set_settings(wk_settings)
         self.webview.connect('load-changed', self._on_webview_load_changed)
         viewer_box.append(self._message_info_bar)
-        viewer_box.append(self.webview)
 
         att_bar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, visible=False)
         att_bar.add_css_class('attachment-bar')
@@ -2018,25 +2055,6 @@ class LarkWindow(Adw.ApplicationWindow):
 
         self._thread_sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self._thread_sidebar.add_css_class('thread-sidebar')
-        sidebar_header = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL,
-            spacing=8,
-            halign=Gtk.Align.FILL,
-            valign=Gtk.Align.CENTER,
-        )
-        sidebar_header.add_css_class('thread-sidebar-header')
-        sidebar_title = Gtk.Label(label='All Messages', halign=Gtk.Align.START, xalign=0)
-        sidebar_title.add_css_class('thread-sidebar-title')
-        sidebar_title.set_hexpand(True)
-        sidebar_header.append(sidebar_title)
-        sidebar_close = Gtk.Button(icon_name='window-close-symbolic')
-        sidebar_close.add_css_class('flat')
-        sidebar_close.set_has_frame(False)
-        sidebar_close.add_css_class('thread-sidebar-close')
-        sidebar_close.connect('clicked', lambda *_: self._set_thread_sidebar_visible(False))
-        sidebar_header.append(sidebar_close)
-        self._thread_sidebar.append(sidebar_header)
-
         sidebar_scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
         sidebar_scroll.set_vexpand(True)
         sidebar_scroll.set_hexpand(True)
@@ -2054,14 +2072,33 @@ class LarkWindow(Adw.ApplicationWindow):
         self._thread_sidebar_revealer.set_child(self._thread_sidebar)
         self._thread_sidebar_revealer.set_reveal_child(False)
 
-        viewer_box.remove(self.webview)
+        self._thread_webview_overlay = Gtk.Overlay(vexpand=True, hexpand=True)
+        self._thread_webview_overlay.set_child(self.webview)
+        self._thread_messages_btn = Gtk.Button(label='All Messages')
+        self._thread_messages_btn.add_css_class('thread-info-button')
+        self._thread_messages_btn.add_css_class('thread-tab')
+        self._thread_messages_btn.set_visible(False)
+        self._thread_messages_btn.set_halign(Gtk.Align.END)
+        self._thread_messages_btn.set_valign(Gtk.Align.START)
+        self._thread_messages_btn.set_margin_top(10)
+        self._thread_messages_btn.set_margin_end(10)
+        self._thread_messages_btn.connect(
+            'clicked',
+            lambda *_: self._set_thread_sidebar_visible(
+                not getattr(self, '_thread_sidebar_revealer', None).get_reveal_child()
+                if getattr(self, '_thread_sidebar_revealer', None) is not None
+                else True
+            ),
+        )
+        self._thread_webview_overlay.add_overlay(self._thread_messages_btn)
+
         self._thread_body_row = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=0,
             hexpand=True,
             vexpand=True,
         )
-        self._thread_body_row.append(self.webview)
+        self._thread_body_row.append(self._thread_webview_overlay)
         self._thread_body_row.append(self._thread_sidebar_revealer)
         viewer_box.insert_child_after(self._thread_body_row, self._message_info_bar)
 
@@ -2775,11 +2812,6 @@ class LarkWindow(Adw.ApplicationWindow):
         if generation is not None and generation != self._message_load_generation:
             return False
         msgs = list(msgs or [])
-        if get_settings().get('debug_logging') and self.current_folder in (_UNIFIED, 'INBOX', 'inbox'):
-            demo_thread = _demo_thread_fixture(self.current_backend.identity if self.current_backend else 'lark-demo@local')
-            demo_keys = {self._message_key(m) for m in demo_thread}
-            msgs = [m for m in msgs if self._message_key(m) not in demo_keys]
-            msgs = demo_thread + msgs
         while (r := self.email_list.get_row_at_index(0)):
             self.email_list.remove(r)
         if not msgs:
@@ -3137,7 +3169,11 @@ class LarkWindow(Adw.ApplicationWindow):
             _log_exception('Disk body cache prune failed', e)
 
     def _read_message_body_payload(self, msg):
-        backend = msg.get('backend_obj') or self.current_backend
+        backend = _backend_for_message(self.backends, msg) or self.current_backend
+        if backend is None:
+            backend = _backend_for_identity(self.backends, msg.get('account'))
+        if backend is None:
+            raise RuntimeError('No backend available for message')
         uid = msg['uid']
         folder = msg.get('folder')
         cache_key = (backend.identity, folder, uid)
@@ -3179,12 +3215,15 @@ class LarkWindow(Adw.ApplicationWindow):
             from .settings import get_settings
         except ImportError:
             from settings import get_settings
-        backend = msg.get('backend_obj') or self.current_backend
+        backend = _backend_for_message(self.backends, msg) or self.current_backend
+        if backend is None:
+            backend = _backend_for_identity(self.backends, msg.get('account'))
         uid = msg['uid']
         folder = msg.get('folder')
+        backend_identity = backend.identity if backend is not None else (msg.get('account') or 'unknown')
         op = self._start_background_op(
             'load body',
-            f'{backend.identity}/{folder}/{uid}',
+            f'{backend_identity}/{folder}/{uid}',
             'backend fetch_body, IMAP lock contention, or network latency',
         )
         def fetch():
@@ -3203,7 +3242,7 @@ class LarkWindow(Adw.ApplicationWindow):
                     if self._current_body is None:
                         GLib.idle_add(self._show_loading_viewer)
                 else:
-                    _log_exception(f'Load body failed ({backend.identity}, {folder}, {uid})', e)
+                    _log_exception(f'Load body failed ({backend_identity}, {folder}, {uid})', e)
                     if self._current_body is not None:
                         GLib.idle_add(self._show_toast, f'Failed to load message: {e}')
                     else:
@@ -3213,7 +3252,9 @@ class LarkWindow(Adw.ApplicationWindow):
         threading.Thread(target=fetch, daemon=True).start()
 
     def _load_thread_view(self, msg, generation=None):
-        backend = msg.get('backend_obj') or self.current_backend
+        backend = _backend_for_message(self.backends, msg) or self.current_backend
+        if backend is None:
+            backend = _backend_for_identity(self.backends, msg.get('account'))
         thread_id = (msg.get('thread_id') or '').strip()
         if msg.get('thread_source') == 'demo' and msg.get('thread_members'):
             thread_msgs = list(msg.get('thread_members') or [])
@@ -3244,7 +3285,7 @@ class LarkWindow(Adw.ApplicationWindow):
             return
         op = self._start_background_op(
             'load thread',
-            f'{backend.identity}/{thread_id}',
+            f'{(backend.identity if backend else (msg.get("account") or "unknown"))}/{thread_id}',
             'backend thread fetch, body fetches, or mailbox latency',
         )
         if self._current_body is None:
@@ -3252,7 +3293,7 @@ class LarkWindow(Adw.ApplicationWindow):
 
         def fetch():
             try:
-                if not hasattr(backend, 'fetch_thread_messages'):
+                if not backend or not hasattr(backend, 'fetch_thread_messages'):
                     raise AttributeError('thread fetch unavailable')
                 thread_msgs = backend.fetch_thread_messages(thread_id) or []
                 if not thread_msgs:
@@ -3300,7 +3341,7 @@ class LarkWindow(Adw.ApplicationWindow):
                     if self._current_body is None:
                         GLib.idle_add(self._show_loading_viewer)
                 else:
-                    _log_exception(f'Load thread failed ({backend.identity}, {thread_id})', e)
+                    _log_exception(f'Load thread failed ({backend.identity if backend else (msg.get("account") or "unknown")}, {thread_id})', e)
                     GLib.idle_add(self._set_body_error, str(e), generation)
             finally:
                 GLib.idle_add(self._end_background_op, op)
@@ -3316,6 +3357,15 @@ class LarkWindow(Adw.ApplicationWindow):
         )
         thread_msgs = [record['msg'] for record in ordered_records]
         subject = self._thread_subject_for_messages(thread_msgs)
+        thread_seed = str(
+            selected_msg.get('thread_id')
+            or selected_msg.get('thread_key')
+            or selected_msg.get('account')
+            or selected_msg.get('sender_email')
+            or selected_msg.get('sender_name')
+            or subject
+            or ''
+        )
         thread_account_seed = (
             selected_msg.get('account')
             or (selected_msg.get('backend_obj').identity if selected_msg.get('backend_obj') else '')
@@ -3324,19 +3374,26 @@ class LarkWindow(Adw.ApplicationWindow):
             or ''
         )
         self_color = self._sender_accent_rgb(thread_account_seed)
-        sender_colors = {}
-        sender_lanes = {}
-        palette_index = 0
+        sender_order = []
         for msg in thread_msgs:
             key = _sender_key(msg)
-            if key not in sender_colors:
-                if self._message_is_self(msg):
-                    sender_colors[key] = self_color
-                else:
-                    sender_colors[key] = _thread_palette(f'{key}-{palette_index}')
-                    palette_index += 1
-            if key not in sender_lanes:
-                sender_lanes[key] = len(sender_lanes)
+            if key not in sender_order:
+                sender_order.append(key)
+        self_keys = {_sender_key(msg) for msg in thread_msgs if self._message_is_self(msg)}
+        non_self_keys = [key for key in sender_order if key not in self_keys]
+        sender_colors = _thread_color_map(thread_seed, non_self_keys)
+        for key in self_keys:
+            sender_colors[key] = self_color
+        sender_lanes = {key: idx for idx, key in enumerate(non_self_keys)}
+        render_records = []
+        for record in ordered_records:
+            msg = record.get('msg') or {}
+            key = _sender_key(msg)
+            record = dict(record)
+            record['sender_color'] = sender_colors.get(key, self_color)
+            record['sender_lane'] = sender_lanes.get(key, 0)
+            record['is_self'] = self._message_is_self(msg)
+            render_records.append(record)
         participants = self._thread_sender_markup(thread_msgs, sender_colors)
         first_date, last_date = self._thread_date_bounds(thread_msgs)
         parts = []
@@ -3386,22 +3443,22 @@ class LarkWindow(Adw.ApplicationWindow):
         self._message_info_meta.set_visible(bool(parts))
         self._message_info_bar.set_visible(True)
         self._show_attachments(attachments, selected_msg)
-        self._thread_reply_target = self._thread_reply_msg_for_records(ordered_records)
+        self._thread_reply_target = self._thread_reply_msg_for_records(render_records)
         self._thread_reply_bar.set_visible(len(thread_msgs) > 1)
         self._thread_messages_btn.set_visible(len(thread_msgs) > 1)
-        self._populate_thread_sidebar(ordered_records)
+        self._populate_thread_sidebar(render_records)
         self._set_thread_sidebar_visible(False)
         if self._active_email_row is not None and self._active_email_row.msg.get('uid') == selected_msg.get('uid'):
             self._active_email_row.set_thread_count(len(thread_msgs))
         self._update_webview_bg()
         self.webview.load_html(
-            self._build_thread_html(selected_msg, subject, first_date, last_date, ordered_records, attachments, sender_colors, sender_lanes),
+            self._build_thread_html(selected_msg, subject, first_date, last_date, render_records, attachments),
             'about:blank',
         )
         GLib.idle_add(self._scroll_thread_to_bottom)
         return False
 
-    def _build_thread_html(self, selected_msg, subject, first_date, last_date, records, attachments, sender_colors, sender_lanes):
+    def _build_thread_html(self, selected_msg, subject, first_date, last_date, records, attachments):
         is_dark = Adw.StyleManager.get_default().get_dark()
         page_bg = '#161616' if is_dark else '#f4f2ef'
         text = '#f0f0f0' if is_dark else '#202124'
@@ -3418,14 +3475,14 @@ class LarkWindow(Adw.ApplicationWindow):
             body_text = html_lib.escape(record.get('body_text') or '(no content)')
             is_self = self._message_is_self(msg)
             sender_key = _sender_key(msg)
-            r, g, b = sender_colors.get(sender_key, self._sender_accent_rgb(sender_email or sender_name))
+            r, g, b = record.get('sender_color') or self._sender_accent_rgb(sender_email or sender_name)
             bubble_bg = f'rgba({r}, {g}, {b}, 0.14)' if not is_dark else f'rgba({r}, {g}, {b}, 0.22)'
             bubble_border = f'rgba({r}, {g}, {b}, 0.30)' if not is_dark else f'rgba({r}, {g}, {b}, 0.38)'
             bubble_text = f'rgb({r}, {g}, {b})'
             align_class = 'self' if is_self else 'other'
             if record.get('selected'):
                 align_class += ' selected'
-            lane = sender_lanes.get(sender_key, 0)
+            lane = record.get('sender_lane', 0)
             attachment_bits = [html_lib.escape(att.get('name', 'attachment')) for att in record.get('attachments') or []]
             attachment_html = ''
             if attachment_bits:
@@ -3502,11 +3559,13 @@ class LarkWindow(Adw.ApplicationWindow):
                     margin-left: auto;
                     margin-right: 8px;
                     border-top-right-radius: 8px;
+                    border-bottom-right-radius: 8px;
                 }}
                 .bubble.other {{
                     margin-right: auto;
                     margin-left: calc(8px + (var(--sender-lane, 0) * 11px));
                     border-top-left-radius: 8px;
+                    border-bottom-left-radius: 8px;
                 }}
                 .bubble.selected {{
                     box-shadow: 0 0 0 2px rgba(30, 136, 229, 0.30), 0 1px 2px rgba(0,0,0,0.08);
@@ -3761,10 +3820,25 @@ class LarkWindow(Adw.ApplicationWindow):
             self._webview_bg_color = f'rgba({accent_r}, {accent_g}, {accent_b}, 0.30)'
         else:
             self._webview_bg_color = f'rgba({accent_r}, {accent_g}, {accent_b}, 0.22)'
-        backend = msg.get('backend_obj') or self.current_backend
-        cache_key = (backend.identity, msg.get('folder'), msg['uid'])
+        backend = _backend_for_message(self.backends, msg) or self.current_backend
+        if backend is None:
+            backend = _backend_for_identity(self.backends, msg.get('account'))
+        backend_identity = backend.identity if backend is not None else (msg.get('account') or 'unknown')
+        cache_key = (backend_identity, msg.get('folder'), msg['uid'])
         inline_attachments = [att for att in (attachments or []) if _attachment_is_inline_image(att)]
         self._update_message_info_bar(msg, attachments)
+        bg_rgb = _email_background_hint(
+            html,
+            text,
+            self._sender_accent_rgb(
+                msg.get('account')
+                or (msg.get('backend_obj').identity if msg.get('backend_obj') else '')
+                or msg.get('sender_email')
+                or msg.get('sender_name')
+                or ''
+            ),
+        )
+        self._webview_bg_color = f'rgba({bg_rgb[0]}, {bg_rgb[1]}, {bg_rgb[2]}, 1.0)'
         if cache:
             with self._cache_lock:
                 self._body_cache[cache_key] = (html, text, attachments)
@@ -3772,7 +3846,7 @@ class LarkWindow(Adw.ApplicationWindow):
                 while len(self._body_cache) > _BODY_CACHE_LIMIT:
                     self._body_cache.popitem(last=False)
             self._store_disk_body(
-                _body_cache_key(backend.identity, msg.get('folder'), msg['uid']),
+                _body_cache_key(backend_identity, msg.get('folder'), msg['uid']),
                 html,
                 text,
                 attachments,
@@ -3847,9 +3921,8 @@ class LarkWindow(Adw.ApplicationWindow):
         self.webview.set_background_color(rgba)
 
     def _get_email_css(self):
-        # Email content always renders on white — emails are designed for white backgrounds.
-        # The dark frame around the content area is handled by webview.set_background_color().
-        # DO NOT add forced color overrides here — they break emails with explicit light backgrounds.
+        # Keep the HTML content transparent so the pane tint can match the email's outer edge.
+        # Avoid forcing text/background overrides on the message itself; only the shell is styled.
         link = '#3584e4'
         return """<style>
 html { background-color: transparent; }
@@ -3860,8 +3933,10 @@ body {
     color: #222222;
     background-color: transparent;
     max-width: 860px;
+    width: min(860px, calc(100vw - 32px));
     margin: 24px auto;
     padding: 0 16px;
+    box-sizing: border-box;
 }
 img { max-width: 100%; height: auto; }
 a { color: """ + link + """; }
@@ -3945,7 +4020,9 @@ pre { background: rgba(255,255,255,0.82); padding: 12px; border-radius: 4px; ove
             except Exception as e:
                 self._show_toast(f'Save failed: {e}')
             return
-        backend = msg.get('backend_obj') or self.current_backend if msg else None
+        backend = (_backend_for_message(self.backends, msg) or self.current_backend) if msg else None
+        if backend is None and msg:
+            backend = _backend_for_identity(self.backends, msg.get('account'))
         if not backend:
             self._show_toast('Cannot fetch attachment: no backend')
             return
