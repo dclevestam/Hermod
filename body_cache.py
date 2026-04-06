@@ -57,7 +57,7 @@ def load_disk_body(cache_key):
             path.unlink()
         except Exception:
             pass
-        return None
+        return None, None, []
 
 
 def store_disk_body(cache_key, html, text, attachments, msg_date=None):

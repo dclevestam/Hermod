@@ -133,6 +133,24 @@ COMPOSE_CSS = """
 .compose-draft:hover {
     background: rgba(241, 196, 15, 0.18);
 }
+.compose-attach-strip {
+    padding: 4px 12px;
+    min-height: 32px;
+}
+.compose-attach-chip {
+    border-radius: 6px;
+    padding: 2px 6px;
+    background: alpha(@window_fg_color, 0.06);
+    font-size: 0.85em;
+}
+.compose-attach-chip-remove {
+    min-width: 18px;
+    min-height: 18px;
+    padding: 0;
+    border-radius: 4px;
+    background: none;
+    border: none;
+}
 """
 
 def _rgba_to_hex(rgba):
@@ -154,6 +172,8 @@ class ComposeView(Gtk.Box):
         self._selected_backend_index = next((i for i, b in enumerate(self._backends) if b is backend), 0)
         self._selected_backend_class = account_class_for_index(self._selected_backend_index)
         self._contact_timer = None
+        self._contact_fetch_gen = 0
+        self._attachments = []
         self._buffer = None
         self._tag_bold = None
         self._tag_italic = None
@@ -246,10 +266,18 @@ class ComposeView(Gtk.Box):
 
         self._operator_bar = self._build_operator_bar(backend)
 
+        self._attach_strip = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=6,
+            visible=False,
+        )
+        self._attach_strip.add_css_class('compose-attach-strip')
+
         shell.append(meta)
         shell.append(fields)
         shell.append(self._format_box)
         shell.append(scroll)
+        shell.append(self._attach_strip)
         shell.append(self._operator_bar)
         toolbar.set_content(shell)
         self.append(toolbar)
@@ -276,8 +304,6 @@ class ComposeView(Gtk.Box):
                     self.cc_entry.set_text(cc_emails)
                     fields.append(self._make_entry_field('Cc:', self.cc_entry))
                     self.cc_entry.connect('changed', self._on_compose_content_changed)
-                else:
-                    self.to_entry.set_text(sender)
 
             subj = reply_to.get('subject', '')
             if not subj.lower().startswith('re:'):
@@ -325,6 +351,7 @@ class ComposeView(Gtk.Box):
             'bcc_me': self._bcc_switch.get_active(),
             'body': self._buffer_to_plain_text(),
             'html': self._buffer_to_html(),
+            'attachments': [a['name'] for a in self._attachments],
         }
 
     def _attachment_count(self):
@@ -435,6 +462,17 @@ class ComposeView(Gtk.Box):
         draft_btn.set_size_request(30, 30)
         draft_btn.set_valign(Gtk.Align.CENTER)
         bar.append(draft_btn)
+
+        attach_btn = self._make_tool_button(
+            ['mail-attachment-symbolic', 'document-open-symbolic'],
+            'Attach file',
+            self._on_attach_clicked,
+            '⊕',
+        )
+        attach_btn.add_css_class('compose-operator-action')
+        attach_btn.set_size_request(30, 30)
+        attach_btn.set_valign(Gtk.Align.CENTER)
+        bar.append(attach_btn)
 
         self.send_btn = Gtk.Button(label='Send')
         self.send_btn.add_css_class('suggested-action')
@@ -924,6 +962,109 @@ class ComposeView(Gtk.Box):
             buf.insert(insert, prefix)
         self.body.grab_focus()
 
+    # ── File attachments ──────────────────────────────────────────────────────
+
+    def _on_attach_clicked(self, _button=None):
+        try:
+            dialog = Gtk.FileDialog()
+            dialog.open_multiple(self._parent, None, self._on_files_chosen)
+        except Exception:
+            # Fallback for GTK < 4.10
+            chooser = Gtk.FileChooserDialog(
+                title='Attach files',
+                transient_for=self._parent,
+                action=Gtk.FileChooserAction.OPEN,
+            )
+            chooser.add_button('Cancel', Gtk.ResponseType.CANCEL)
+            chooser.add_button('Open', Gtk.ResponseType.ACCEPT)
+            chooser.set_select_multiple(True)
+            chooser.connect('response', self._on_chooser_response)
+            chooser.present()
+
+    def _on_files_chosen(self, dialog, result):
+        try:
+            files = dialog.open_multiple_finish(result)
+        except Exception:
+            return
+        if files is None:
+            return
+        for i in range(files.get_n_items()):
+            gfile = files.get_item(i)
+            self._load_gfile(gfile)
+
+    def _on_chooser_response(self, chooser, response):
+        if response == Gtk.ResponseType.ACCEPT:
+            for gfile in chooser.get_files():
+                self._load_gfile(gfile)
+        chooser.destroy()
+
+    def _load_gfile(self, gfile):
+        try:
+            path = gfile.get_path()
+            if not path:
+                return
+            import os, mimetypes
+            name = os.path.basename(path)
+            size = os.path.getsize(path)
+            if size > 25 * 1024 * 1024:
+                self._show_toast(f'{name} is too large (max 25 MB)')
+                return
+            with open(path, 'rb') as f:
+                data = f.read()
+            content_type = mimetypes.guess_type(path)[0] or 'application/octet-stream'
+            self._attachments.append({
+                'name': name,
+                'data': data,
+                'content_type': content_type,
+                'size': size,
+            })
+            self._add_attachment_chip(name, len(self._attachments) - 1)
+            self._refresh_compose_summary()
+        except Exception as e:
+            self._show_toast(f'Could not attach file: {e}')
+
+    def _add_attachment_chip(self, name, index):
+        chip = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        chip.add_css_class('compose-attach-chip')
+        chip._attach_index = index
+        lbl = Gtk.Label(label=name)
+        lbl.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
+        lbl.set_max_width_chars(24)
+        remove_btn = Gtk.Button()
+        remove_btn.add_css_class('compose-attach-chip-remove')
+        remove_btn.add_css_class('flat')
+        try:
+            remove_btn.set_icon_name('window-close-symbolic')
+        except Exception:
+            remove_btn.set_label('×')
+        remove_btn.set_tooltip_text(f'Remove {name}')
+        remove_btn.connect('clicked', self._on_remove_attachment, chip)
+        chip.append(lbl)
+        chip.append(remove_btn)
+        self._attach_strip.append(chip)
+        self._attach_strip.set_visible(True)
+
+    def _on_remove_attachment(self, _btn, chip):
+        idx = chip._attach_index
+        if 0 <= idx < len(self._attachments):
+            self._attachments.pop(idx)
+            # Re-index remaining chips
+            child = self._attach_strip.get_first_child()
+            i = 0
+            while child is not None:
+                if hasattr(child, '_attach_index'):
+                    child._attach_index = i
+                    i += 1
+                child = child.get_next_sibling()
+        self._attach_strip.remove(chip)
+        if self._attach_strip.get_first_child() is None:
+            self._attach_strip.set_visible(False)
+        self._refresh_compose_summary()
+
+    def _show_toast(self, msg):
+        if hasattr(self._parent, '_show_toast'):
+            self._parent._show_toast(msg)
+
     # ── Contacts autocomplete ─────────────────────────────────────────────────
 
     def _on_to_changed(self, entry):
@@ -941,14 +1082,18 @@ class ComposeView(Gtk.Box):
 
     def _fetch_contacts(self, query):
         self._contact_timer = None
+        self._contact_fetch_gen += 1
+        gen = self._contact_fetch_gen
         backend = self._get_selected_backend()
         def fetch():
             contacts = backend.fetch_contacts(query)
-            GLib.idle_add(self._show_contacts, contacts)
+            GLib.idle_add(self._show_contacts, contacts, gen)
         threading.Thread(target=fetch, daemon=True).start()
         return GLib.SOURCE_REMOVE
 
-    def _show_contacts(self, contacts):
+    def _show_contacts(self, contacts, gen=None):
+        if gen is not None and gen != self._contact_fetch_gen:
+            return
         while (child := self._contact_list_box.get_first_child()):
             self._contact_list_box.remove(child)
         if not contacts:
@@ -984,6 +1129,7 @@ class ComposeView(Gtk.Box):
         self._contact_popover.popup()
 
     def _on_contact_selected(self, _, row):
+        self._contact_fetch_gen += 1
         c = row._contact
         addr = f"{c['name']} <{c['email']}>" if c['name'] else c['email']
         current = self.to_entry.get_text()
@@ -1014,9 +1160,11 @@ class ComposeView(Gtk.Box):
         self.send_btn.set_label('Sending…')
         backend = self._get_selected_backend()
 
+        attachments = list(self._attachments)
         def send():
             try:
-                backend.send_message(to, subject, body, html=html, cc=cc_text, bcc=bcc)
+                backend.send_message(to, subject, body, html=html, cc=cc_text, bcc=bcc,
+                                     attachments=attachments)
                 GLib.idle_add(self._on_send_success)
             except Exception as e:
                 GLib.idle_add(self._on_send_error, str(e))

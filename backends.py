@@ -5,6 +5,7 @@ import urllib.request
 import urllib.parse
 import email as email_parser
 from email.header import decode_header as _decode_header_raw
+from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime, timezone
@@ -497,22 +498,44 @@ class GmailBackend:
         except Exception:
             return []
 
-    def send_message(self, to, subject, body, html=None, cc=None, bcc=None, reply_to_msg=None):
+    def send_message(self, to, subject, body, html=None, cc=None, bcc=None, reply_to_msg=None, attachments=None):
         ensure_network_ready()
         token = self._token()
-        msg = MIMEMultipart('alternative')
-        msg['From'] = self.identity
-        msg['To'] = to
-        msg['Subject'] = subject
-        if cc:
-            msg['Cc'] = ', '.join(_normalize_recipients(cc))
         reply_msgid = (reply_to_msg or {}).get('message_id', '') if reply_to_msg else ''
-        if reply_msgid:
-            msg['In-Reply-To'] = reply_msgid
-            msg['References'] = reply_msgid
-        msg.attach(MIMEText(body, 'plain', 'utf-8'))
-        if html:
-            msg.attach(MIMEText(html, 'html', 'utf-8'))
+        if attachments:
+            outer = MIMEMultipart('mixed')
+            outer['From'] = self.identity
+            outer['To'] = to
+            outer['Subject'] = subject
+            if cc:
+                outer['Cc'] = ', '.join(_normalize_recipients(cc))
+            if reply_msgid:
+                outer['In-Reply-To'] = reply_msgid
+                outer['References'] = reply_msgid
+            body_part = MIMEMultipart('alternative')
+            body_part.attach(MIMEText(body, 'plain', 'utf-8'))
+            if html:
+                body_part.attach(MIMEText(html, 'html', 'utf-8'))
+            outer.attach(body_part)
+            for att in attachments:
+                part = MIMEApplication(att['data'], Name=att['name'])
+                part['Content-Type'] = f"{att.get('content_type', 'application/octet-stream')}; name=\"{att['name']}\""
+                part['Content-Disposition'] = f"attachment; filename=\"{att['name']}\""
+                outer.attach(part)
+            msg = outer
+        else:
+            msg = MIMEMultipart('alternative')
+            msg['From'] = self.identity
+            msg['To'] = to
+            msg['Subject'] = subject
+            if cc:
+                msg['Cc'] = ', '.join(_normalize_recipients(cc))
+            if reply_msgid:
+                msg['In-Reply-To'] = reply_msgid
+                msg['References'] = reply_msgid
+            msg.attach(MIMEText(body, 'plain', 'utf-8'))
+            if html:
+                msg.attach(MIMEText(html, 'html', 'utf-8'))
         auth_str = f'user={self.identity}\x01auth=Bearer {token}\x01\x01'
         smtp = smtplib.SMTP('smtp.gmail.com', 587)
         try:
@@ -764,7 +787,7 @@ class MicrosoftBackend:
         except Exception:
             return []
 
-    def send_message(self, to, subject, body, html=None, cc=None, bcc=None, reply_to_msg=None):
+    def send_message(self, to, subject, body, html=None, cc=None, bcc=None, reply_to_msg=None, attachments=None):
         ensure_network_ready()
         recipients = [{'emailAddress': {'address': e}} for e in _normalize_recipients(to)]
         cc_recipients = [{'emailAddress': {'address': e}} for e in _normalize_recipients(cc)]
@@ -774,6 +797,15 @@ class MicrosoftBackend:
         if reply_msgid:
             headers.append({'name': 'In-Reply-To', 'value': reply_msgid})
             headers.append({'name': 'References', 'value': reply_msgid})
+        att_payload = [
+            {
+                '@odata.type': '#microsoft.graph.fileAttachment',
+                'name': att['name'],
+                'contentType': att.get('content_type', 'application/octet-stream'),
+                'contentBytes': base64.b64encode(att['data']).decode('ascii'),
+            }
+            for att in (attachments or [])
+        ]
         self._post('/me/sendMail', {
             'message': {
                 'subject': subject,
@@ -782,5 +814,6 @@ class MicrosoftBackend:
                 **({'ccRecipients': cc_recipients} if cc_recipients else {}),
                 **({'bccRecipients': bcc_recipients} if bcc_recipients else {}),
                 **({'internetMessageHeaders': headers} if headers else {}),
+                **({'attachments': att_payload} if att_payload else {}),
             }
         })

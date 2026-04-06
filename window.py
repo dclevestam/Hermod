@@ -1683,6 +1683,13 @@ class LarkWindow(Adw.ApplicationWindow):
                                 self._active_email_row = row
                                 break
                             row = row.get_next_sibling()
+            if self._active_email_row is None:
+                first_row = self.email_list.get_row_at_index(0)
+                if first_row is not None:
+                    self._suppress_email_selection = True
+                    self.email_list.select_row(first_row)
+                    self._suppress_email_selection = False
+                    self._active_email_row = first_row
         elif self._startup_autoselect_pending and self.current_folder in (_UNIFIED, 'INBOX', 'inbox'):
             first_row = self.email_list.get_row_at_index(0)
             if first_row is not None:
@@ -2149,7 +2156,7 @@ class LarkWindow(Adw.ApplicationWindow):
         self._thread_reply_bar.set_visible(len(thread_msgs) > 1)
         self._thread_messages_btn.set_visible(len(thread_msgs) > 1)
         self._populate_thread_sidebar(render_records)
-        self._set_thread_sidebar_visible(False)
+        self._set_thread_sidebar_visible(len(thread_msgs) > 1)
         if self._active_email_row is not None and self._active_email_row.msg.get('uid') == selected_msg.get('uid'):
             self._active_email_row.set_thread_count(len(thread_msgs))
         self._update_webview_bg()
