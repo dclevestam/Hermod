@@ -886,6 +886,9 @@ class LarkWindow(Adw.ApplicationWindow):
                 lambda proceed: GLib.idle_add(self._finish_window_close_request, bool(proceed))
             )
             return True
+        if get_settings().get('close_minimizes'):
+            self.hide()
+            return True
         if self._diag_watchdog_id is not None:
             GLib.source_remove(self._diag_watchdog_id)
             self._diag_watchdog_id = None
@@ -893,8 +896,11 @@ class LarkWindow(Adw.ApplicationWindow):
 
     def _finish_window_close_request(self, proceed):
         if proceed:
-            self._close_after_compose_prompt = True
-            self.close()
+            if get_settings().get('close_minimizes'):
+                self.hide()
+            else:
+                self._close_after_compose_prompt = True
+                self.close()
         return False
 
     def _compose_active(self):

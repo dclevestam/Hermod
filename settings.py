@@ -17,6 +17,7 @@ DEFAULTS = {
     'poll_interval': 5,
     'load_images': True,
     'mark_read_on_open': True,
+    'close_minimizes': False,
     'show_unified_trash': True,
     'show_unified_spam': True,
     'debug_logging': True,
@@ -208,6 +209,16 @@ def build_settings_content(parent, on_close=None):
     reading_group.add(mark_row)
     content.append(reading_section)
 
+    behavior_section, behavior_group = _make_settings_section('Behavior')
+    close_row = Adw.SwitchRow(
+        title='Close minimizes app',
+        subtitle='Keep Lark running in the background when you close the window',
+    )
+    close_row.set_active(s.get('close_minimizes'))
+    close_row.connect('notify::active', lambda r, _: s.set('close_minimizes', r.get_active()))
+    behavior_group.add(close_row)
+    content.append(behavior_section)
+
     sidebar_section, sidebar_group = _make_settings_section('Sidebar')
     trash_row = Adw.SwitchRow(
         title='Show All Trash',
@@ -335,5 +346,3 @@ def build_settings_content(parent, on_close=None):
     content.append(debug_section)
 
     return root
-
-

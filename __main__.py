@@ -59,7 +59,6 @@ class LarkApp(Adw.Application):
             self.backends = []
 
         self.window = LarkWindow(self, self.backends)
-        self.window.connect('close-request', self._on_close)
         self.window.connect('notify::suspended', self._on_window_suspended)
         self._network_monitor.connect('network-changed', self._on_network_changed)
         self.window.set_network_offline(not network_ready())
@@ -68,9 +67,6 @@ class LarkApp(Adw.Application):
         if self.backends:
             self._notif_thread = threading.Thread(target=self._poll_loop, daemon=True)
             self._notif_thread.start()
-
-    def _on_close(self, _):
-        return False
 
     def _on_shutdown(self, _):
         self._poll_stop.set()
@@ -184,5 +180,5 @@ def main():
     app = LarkApp()
     sys.exit(app.run(sys.argv))
 
-
-main()
+if __name__ == '__main__':
+    main()
