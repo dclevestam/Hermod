@@ -3,7 +3,7 @@
 Use this checklist in a live GTK session.
 
 ## Preflight
-- [ ] From `/home/david/lark`, run `python3 -m py_compile *.py`
+- [ ] From `/home/david/Projects/Lark`, run `python3 -m py_compile *.py`
 - [ ] Launch the app with `python3 -m lark`
 - [ ] Confirm debug logging does not hide startup errors
 
@@ -54,4 +54,3 @@ Use this checklist in a live GTK session.
 - Pass/Fail:
 - Notes:
 - Follow-up bugs:
-
