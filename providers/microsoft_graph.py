@@ -20,6 +20,7 @@ try:
         ensure_network_ready,
         network_ready,
     )
+    from .sync_rows import deserialize_sync_messages, serialize_sync_messages
 except ImportError:
     from accounts.auth.goa_oauth import get_goa_access_token
     from sync_state import get_account_state, set_account_state
@@ -31,6 +32,7 @@ except ImportError:
         ensure_network_ready,
         network_ready,
     )
+    from providers.sync_rows import deserialize_sync_messages, serialize_sync_messages
 
 
 _GRAPH_REQUEST_TIMEOUT_SECS = 20
@@ -81,56 +83,23 @@ class MicrosoftBackend:
             }
 
     def _serialize_sync_messages(self, messages):
-        serial = []
-        for msg in (messages or [])[:_SYNC_RECENT_MESSAGES_LIMIT]:
-            serial.append({
-                'uid': msg.get('uid', ''),
-                'subject': msg.get('subject', '(no subject)'),
-                'sender_name': msg.get('sender_name', ''),
-                'sender_email': msg.get('sender_email', ''),
-                'to_addrs': msg.get('to_addrs', []),
-                'cc_addrs': msg.get('cc_addrs', []),
-                'date': (msg.get('date').isoformat() if msg.get('date') else ''),
-                'is_read': msg.get('is_read', True),
-                'has_attachments': msg.get('has_attachments', False),
-                'snippet': msg.get('snippet', ''),
-                'folder': msg.get('folder', 'inbox'),
-                'thread_id': msg.get('thread_id', ''),
-                'thread_source': msg.get('thread_source', 'microsoft-graph'),
-                'message_id': msg.get('message_id', ''),
-            })
-        return serial
+        return serialize_sync_messages(
+            messages,
+            limit=_SYNC_RECENT_MESSAGES_LIMIT,
+            default_folder='inbox',
+            default_thread_source='microsoft-graph',
+        )
 
     def _deserialize_sync_messages(self, messages):
-        restored = []
-        for msg in messages or []:
-            try:
-                date = _aware_utc_datetime(
-                    datetime.fromisoformat(msg.get('date')) if msg.get('date') else None
-                )
-            except Exception:
-                date = datetime.now(timezone.utc)
-            restored.append({
-                'uid': msg.get('uid', ''),
-                'subject': msg.get('subject', '(no subject)'),
-                'sender_name': msg.get('sender_name', ''),
-                'sender_email': msg.get('sender_email', ''),
-                'to_addrs': msg.get('to_addrs', []),
-                'cc_addrs': msg.get('cc_addrs', []),
-                'date': date,
-                'is_read': msg.get('is_read', True),
-                'has_attachments': msg.get('has_attachments', False),
-                'snippet': msg.get('snippet', ''),
-                'folder': msg.get('folder', 'inbox'),
-                'backend': 'microsoft',
-                'account': self.identity,
-                'backend_obj': self,
-                'thread_id': msg.get('thread_id', ''),
-                'thread_source': msg.get('thread_source', 'microsoft-graph'),
-                'message_id': msg.get('message_id', ''),
-            })
-        restored.sort(key=lambda item: _aware_utc_datetime(item.get('date')), reverse=True)
-        return restored[:_SYNC_RECENT_MESSAGES_LIMIT]
+        return deserialize_sync_messages(
+            messages,
+            limit=_SYNC_RECENT_MESSAGES_LIMIT,
+            default_folder='inbox',
+            provider_name='microsoft',
+            identity=self.identity,
+            backend_obj=self,
+            default_thread_source='microsoft-graph',
+        )
 
     def _persist_sync_state(self):
         with self._sync_lock:
