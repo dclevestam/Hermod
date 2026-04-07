@@ -13,10 +13,10 @@ from gi.repository import GLib
 
 try:
     from .health import build_health_snapshot
-    from .logger import events_file, log_event
+    from .logger import events_file, log_event, recent_perf_events
 except ImportError:
     from diagnostics.health import build_health_snapshot
-    from diagnostics.logger import events_file, log_event
+    from diagnostics.logger import events_file, log_event, recent_perf_events
 
 
 def default_export_path():
@@ -36,6 +36,7 @@ def export_diagnostics_bundle(target_path=None):
             archive.write(path, arcname='events.jsonl')
         else:
             archive.writestr('events.jsonl', '')
+        archive.writestr('perf.json', json.dumps(recent_perf_events(), indent=2, ensure_ascii=True) + '\n')
     log_event(
         'diagnostics-export',
         level='info',

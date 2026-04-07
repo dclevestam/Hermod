@@ -16,10 +16,18 @@ gi.require_version('GdkPixbuf', '2.0')
 from gi.repository import Gtk, GLib, Gdk, GdkPixbuf
 
 try:
-    from .diagnostics.logger import log_exception as _diag_log_exception, should_print_debug_tracebacks
+    from .diagnostics.logger import (
+        log_exception as _diag_log_exception,
+        record_perf as _diag_record_perf,
+        should_print_debug_tracebacks,
+    )
     from .settings import get_settings, get_disk_cache_budget_limit_mb
 except ImportError:
-    from diagnostics.logger import log_exception as _diag_log_exception, should_print_debug_tracebacks
+    from diagnostics.logger import (
+        log_exception as _diag_log_exception,
+        record_perf as _diag_record_perf,
+        should_print_debug_tracebacks,
+    )
     from settings import get_settings, get_disk_cache_budget_limit_mb
 
 
@@ -144,12 +152,13 @@ def _perf_message(kind, detail, elapsed_ms):
 
 
 def _log_perf(kind, detail='', started=None, elapsed_ms=None):
-    if not _perf_enabled():
-        return None
     if elapsed_ms is None:
         if started is None:
             return None
         elapsed_ms = _perf_elapsed_ms(started)
+    _diag_record_perf(kind, elapsed_ms)
+    if not _perf_enabled():
+        return None
     print(_perf_message(kind, detail, elapsed_ms), file=sys.stderr)
     return elapsed_ms
 

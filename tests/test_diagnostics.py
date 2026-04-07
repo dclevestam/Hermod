@@ -33,6 +33,17 @@ class DiagnosticsRedactionTests(unittest.TestCase):
         self.assertIn('access_token=<redacted>', redacted)
         self.assertIn('<message-id:redacted>', redacted)
 
+    def test_redact_value_masks_recipient_lists(self):
+        value = {
+            'to_addrs': [{'email': 'user@example.com'}],
+            'cc_addrs': [{'email': 'copy@example.com'}],
+        }
+
+        redacted = redact_module.redact_value(value)
+
+        self.assertTrue(str(redacted['to_addrs']).startswith('<redacted:'))
+        self.assertTrue(str(redacted['cc_addrs']).startswith('<redacted:'))
+
 
 class DiagnosticsLoggerTests(unittest.TestCase):
     def test_log_exception_persists_redacted_event(self):
@@ -54,6 +65,17 @@ class DiagnosticsLoggerTests(unittest.TestCase):
             self.assertEqual(event['kind'], 'exception')
             self.assertEqual(event['level'], 'error')
 
+    def test_log_event_does_not_persist_when_diagnostics_disabled(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            diag_dir = Path(tmpdir)
+            events_path = diag_dir / 'events.jsonl'
+            with mock.patch.object(logger_module, '_DIAGNOSTICS_DIR', diag_dir), \
+                 mock.patch.object(logger_module, '_EVENTS_FILE', events_path), \
+                 mock.patch.object(logger_module, 'diagnostics_enabled', return_value=False):
+                logger_module.log_event('startup', message='Application started')
+
+            self.assertFalse(events_path.exists())
+
 
 class DiagnosticsExportTests(unittest.TestCase):
     def test_export_bundle_contains_manifest_and_events(self):
@@ -62,7 +84,13 @@ class DiagnosticsExportTests(unittest.TestCase):
             events_path = diag_dir / 'events.jsonl'
             bundle_path = Path(tmpdir) / 'bundle.zip'
             with mock.patch.object(logger_module, '_DIAGNOSTICS_DIR', diag_dir), \
-                 mock.patch.object(logger_module, '_EVENTS_FILE', events_path):
+                 mock.patch.object(logger_module, '_EVENTS_FILE', events_path), \
+                 mock.patch.object(export_module, 'recent_perf_events', return_value=[{'kind': 'activate', 'elapsed_ms': 12.3}]), \
+                 mock.patch.object(export_module, 'build_health_snapshot', return_value={
+                     'python_version': '3.14.3',
+                     'settings': {'diagnostics_enabled': True},
+                     'account_summary': {'goa:gmail': 1},
+                 }):
                 logger_module.log_event(
                     'startup',
                     message='Application started',
@@ -77,5 +105,8 @@ class DiagnosticsExportTests(unittest.TestCase):
                 manifest = json.loads(archive.read('manifest.json'))
                 self.assertIn('python_version', manifest)
                 self.assertIn('settings', manifest)
+                self.assertEqual(manifest['account_summary'], {'goa:gmail': 1})
                 self.assertNotIn('cache_dir', manifest)
                 self.assertNotIn('config_dir', manifest)
+                perf = json.loads(archive.read('perf.json'))
+                self.assertEqual(perf[0]['kind'], 'activate')

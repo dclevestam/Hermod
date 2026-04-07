@@ -21,6 +21,10 @@ _SENSITIVE_KEY_TOKENS = (
     'password',
     'cookie',
     'authorization',
+    'recipient',
+    'to_addrs',
+    'cc_addrs',
+    'bcc',
     'uid',
     'message_id',
     'thread_id',
@@ -52,14 +56,14 @@ def redact_text(value):
 
 def redact_value(value, key=None):
     key_text = str(key or '').lower()
+    if any(token in key_text for token in _SENSITIVE_KEY_TOKENS):
+        return f'<redacted:{_hash_text(value)}>'
     if isinstance(value, dict):
         return {str(k): redact_value(v, key=k) for k, v in value.items()}
     if isinstance(value, (list, tuple, set)):
         return [redact_value(item, key=key) for item in value]
     if value is None:
         return None
-    if any(token in key_text for token in _SENSITIVE_KEY_TOKENS):
-        return f'<redacted:{_hash_text(value)}>'
     if isinstance(value, (bool, int, float)):
         return value
     return redact_text(value)

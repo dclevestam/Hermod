@@ -20,6 +20,7 @@ DEFAULTS = {
     'close_minimizes': False,
     'show_unified_trash': True,
     'show_unified_spam': True,
+    'diagnostics_enabled': True,
     'debug_logging': True,
     'disk_cache_budget_mb': 64,
 }
@@ -345,6 +346,14 @@ def build_settings_content(parent, on_close=None):
     debug_row.set_active(s.get('debug_logging'))
     debug_row.connect('notify::active', lambda r, _: s.set('debug_logging', r.get_active()))
     debug_group.add(debug_row)
+
+    diagnostics_row = Adw.SwitchRow(
+        title='Diagnostics capture',
+        subtitle='Store a small redacted local diagnostics log for bug exports',
+    )
+    diagnostics_row.set_active(s.get('diagnostics_enabled'))
+    diagnostics_row.connect('notify::active', lambda r, _: s.set('diagnostics_enabled', r.get_active()))
+    debug_group.add(diagnostics_row)
 
     export_row = Adw.ActionRow(
         title='Export diagnostics',

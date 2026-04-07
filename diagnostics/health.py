@@ -12,8 +12,10 @@ gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw
 
 try:
+    from ..accounts.sources.goa import get_goa_account_descriptors
     from ..settings import get_settings
 except ImportError:
+    from accounts.sources.goa import get_goa_account_descriptors
     from settings import get_settings
 
 
@@ -31,11 +33,19 @@ _EXPORTABLE_SETTINGS = (
 
 def build_health_snapshot():
     settings = get_settings()
+    account_summary = {}
+    try:
+        for descriptor in get_goa_account_descriptors():
+            key = f'{descriptor.source}:{descriptor.provider_kind}'
+            account_summary[key] = account_summary.get(key, 0) + 1
+    except Exception:
+        account_summary = {}
     return {
         'generated_at': datetime.now(timezone.utc).isoformat(),
         'python_version': sys.version.split()[0],
         'platform': platform.platform(),
         'gtk_version': f'{Gtk.get_major_version()}.{Gtk.get_minor_version()}.{Gtk.get_micro_version()}',
         'adw_version': f'{Adw.get_major_version()}.{Adw.get_minor_version()}.{Adw.get_micro_version()}',
+        'account_summary': account_summary,
         'settings': {key: settings.get(key) for key in _EXPORTABLE_SETTINGS},
     }

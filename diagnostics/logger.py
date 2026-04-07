@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -24,6 +25,8 @@ _DIAGNOSTICS_DIR = Path(GLib.get_user_cache_dir()) / 'lark' / 'diagnostics'
 _EVENTS_FILE = _DIAGNOSTICS_DIR / 'events.jsonl'
 _MAX_EVENT_BYTES = 256 * 1024
 _MAX_EVENT_LINES = 400
+_MAX_PERF_EVENTS = 64
+_PERF_EVENTS = deque(maxlen=_MAX_PERF_EVENTS)
 
 
 def diagnostics_dir():
@@ -72,6 +75,8 @@ def log_event(kind, *, level='info', message='', context=None, persist=True):
         'message': redact_text(message),
         'context': redact_value(context or {}),
     }
+    if not diagnostics_enabled():
+        return event
     if not persist:
         return event
     try:
@@ -113,6 +118,22 @@ def recent_events(limit=_MAX_EVENT_LINES):
     return events
 
 
+def record_perf(kind, elapsed_ms):
+    try:
+        elapsed = max(0.0, float(elapsed_ms))
+    except Exception:
+        elapsed = 0.0
+    _PERF_EVENTS.append({
+        'ts': _utcnow_iso(),
+        'kind': str(kind or 'perf'),
+        'elapsed_ms': round(elapsed, 2),
+    })
+
+
+def recent_perf_events(limit=_MAX_PERF_EVENTS):
+    return list(_PERF_EVENTS)[-max(0, int(limit)):]
+
+
 def log_startup_summary(backends):
     if not backends:
         provider_counts = {}
@@ -145,3 +166,10 @@ def should_print_debug_tracebacks():
         return bool(get_settings().get('debug_logging'))
     except Exception:
         return False
+
+
+def diagnostics_enabled():
+    try:
+        return bool(get_settings().get('diagnostics_enabled'))
+    except Exception:
+        return True
