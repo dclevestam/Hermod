@@ -10,7 +10,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import backends as backends_module
+import providers.gmail as gmail_module
+import providers.microsoft_graph as microsoft_module
 from backends import GmailBackend, MicrosoftBackend, _GRAPH_SYNC_CUSTOM_FOLDER_LIMIT, _aware_utc_datetime
 
 
@@ -159,7 +160,7 @@ class GmailBackendSyncTests(unittest.TestCase):
         backend = self.make_backend()
         sent_messages = [_message('42', folder='[Gmail]/Sent Mail', gmail_msgid='900')]
 
-        with mock.patch.object(backends_module, 'set_account_state') as set_state:
+        with mock.patch.object(gmail_module, 'set_account_state') as set_state:
             backend._update_folder_sync_state('[Gmail]/Sent Mail', messages=sent_messages, history_id='history-sent')
 
         provider, identity, state = set_state.call_args.args
@@ -279,7 +280,7 @@ class MicrosoftBackendSyncTests(unittest.TestCase):
                 'last_accessed_at': (datetime.now(timezone.utc) - timedelta(hours=idx)).isoformat(),
             }
 
-        with mock.patch.object(backends_module, 'set_account_state') as set_state:
+        with mock.patch.object(microsoft_module, 'set_account_state') as set_state:
             backend._persist_sync_state()
 
         self.assertNotIn('custom-stale', backend._folder_sync)
