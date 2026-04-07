@@ -2,7 +2,6 @@ import argparse
 import sys
 import threading
 import time
-import traceback
 from pathlib import Path
 
 import gi
@@ -14,20 +13,16 @@ from gi.repository import Gtk, Adw, Notify, GLib, Gio
 
 try:
     from .backends import get_backends, is_transient_network_error, network_ready
+    from .diagnostics.logger import log_network_change, log_startup_summary
     from .window import LarkWindow
     from .settings import get_settings
-    from .utils import _perf_counter, _log_perf
+    from .utils import _log_exception, _perf_counter, _log_perf
 except ImportError:
     from backends import get_backends, is_transient_network_error, network_ready
+    from diagnostics.logger import log_network_change, log_startup_summary
     from window import LarkWindow
     from settings import get_settings
-    from utils import _perf_counter, _log_perf
-
-
-def _log_exception(prefix, exc):
-    if get_settings().get('debug_logging'):
-        print(f'{prefix}: {exc}', file=sys.stderr)
-        traceback.print_exc()
+    from utils import _log_exception, _perf_counter, _log_perf
 
 
 class LarkApp(Adw.Application):
@@ -72,6 +67,7 @@ class LarkApp(Adw.Application):
         except Exception as e:
             _log_exception('Failed to load accounts', e)
             self.backends = []
+        log_startup_summary(self.backends)
         _log_perf('activate accounts', f'{len(self.backends)} backends', started=accounts_started)
 
         window_started = _perf_counter()
@@ -112,6 +108,7 @@ class LarkApp(Adw.Application):
         self._poll_wake.set()
 
     def _on_network_changed(self, _monitor, available):
+        log_network_change(available)
         if available:
             self._next_poll_at = min(self._next_poll_at, time.monotonic())
             if self.window is not None:

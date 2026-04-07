@@ -345,6 +345,32 @@ def build_settings_content(parent, on_close=None):
     debug_row.set_active(s.get('debug_logging'))
     debug_row.connect('notify::active', lambda r, _: s.set('debug_logging', r.get_active()))
     debug_group.add(debug_row)
+
+    export_row = Adw.ActionRow(
+        title='Export diagnostics',
+        subtitle='Write a redacted diagnostics zip to Downloads. No message bodies, attachments, or tokens are included.',
+    )
+    export_btn = Gtk.Button(label='Export')
+    export_btn.add_css_class('flat')
+
+    def on_export(_btn):
+        try:
+            try:
+                from .diagnostics.export import export_diagnostics_bundle
+            except ImportError:
+                from diagnostics.export import export_diagnostics_bundle
+            path = export_diagnostics_bundle()
+        except Exception as exc:
+            if parent is not None and hasattr(parent, '_show_toast'):
+                parent._show_toast(f'Diagnostics export failed: {exc}')
+            return
+        if parent is not None and hasattr(parent, '_show_toast'):
+            parent._show_toast(f'Diagnostics exported to {path}')
+
+    export_btn.connect('clicked', on_export)
+    export_row.add_suffix(export_btn)
+    export_row.set_activatable(False)
+    debug_group.add(export_row)
     content.append(debug_section)
 
     return root

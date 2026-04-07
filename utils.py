@@ -16,8 +16,10 @@ gi.require_version('GdkPixbuf', '2.0')
 from gi.repository import Gtk, GLib, Gdk, GdkPixbuf
 
 try:
+    from .diagnostics.logger import log_exception as _diag_log_exception, should_print_debug_tracebacks
     from .settings import get_settings, get_disk_cache_budget_limit_mb
 except ImportError:
+    from diagnostics.logger import log_exception as _diag_log_exception, should_print_debug_tracebacks
     from settings import get_settings, get_disk_cache_budget_limit_mb
 
 
@@ -108,7 +110,8 @@ def _pick_icon_name(*candidates):
 # ── Logging ───────────────────────────────────────────────────────────────────
 
 def _log_exception(prefix, exc):
-    if get_settings().get('debug_logging'):
+    _diag_log_exception(prefix, exc)
+    if should_print_debug_tracebacks():
         print(f'{prefix}: {exc}', file=sys.stderr)
         traceback.print_exc()
 

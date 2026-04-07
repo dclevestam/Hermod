@@ -1,0 +1,1 @@
+"""Lightweight diagnostics helpers."""
