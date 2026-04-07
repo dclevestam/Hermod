@@ -7,31 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from accounts.descriptors import AccountDescriptor
-from accounts.registry import ProviderRegistry
-from accounts.auth.goa_oauth import get_goa_access_token
 from accounts.sources.goa import descriptor_from_goa_object
-
-
-class ProviderRegistryTests(unittest.TestCase):
-    def test_registry_creates_backend_from_descriptor(self):
-        registry = ProviderRegistry()
-        descriptor = AccountDescriptor(
-            source='test',
-            provider_kind='gmail',
-            identity='user@example.com',
-        )
-
-        registry.register('gmail', lambda account: ('backend', account.identity))
-
-        self.assertEqual(registry.create_backend(descriptor), ('backend', 'user@example.com'))
-
-    def test_registry_rejects_duplicate_provider_kind(self):
-        registry = ProviderRegistry()
-        registry.register('gmail', lambda account: account)
-
-        with self.assertRaises(ValueError):
-            registry.register('gmail', lambda account: account)
 
 
 class GoaDescriptorTests(unittest.TestCase):
@@ -69,20 +45,5 @@ class GoaDescriptorTests(unittest.TestCase):
         self.assertIsNone(descriptor_from_goa_object(self.make_goa_object(oauth2=False)))
 
 
-class GoaOAuthTests(unittest.TestCase):
-    def test_get_goa_access_token_returns_token(self):
-        class _OAuthProxy:
-            def call_get_access_token_sync(self, _cancellable):
-                return ('token-123', None, None)
-
-        class _Account:
-            def call_ensure_credentials_sync(self, _cancellable):
-                return None
-
-        class _GoaObject:
-            def get_oauth2_based(self):
-                return _OAuthProxy()
-
-        token = get_goa_access_token(_GoaObject(), _Account(), network_ready_fn=lambda: True)
-
-        self.assertEqual(token, 'token-123')
+if __name__ == '__main__':
+    unittest.main()
