@@ -996,7 +996,7 @@ class MessageListMixin:
                     msg.get('folder', ''),
                     msg.get('uid', ''),
                 ) == preserve_selected_key:
-                    self._select_message_item(item, suppress=True)
+                    self._select_message_item(item, suppress=True, grab_focus=True)
                     self._active_email_row = item
                     break
             if self._active_email_row is None:
@@ -1014,14 +1014,14 @@ class MessageListMixin:
                         None,
                     )
                     if representative_item is not None:
-                        self._select_message_item(representative_item, suppress=True)
+                        self._select_message_item(representative_item, suppress=True, grab_focus=True)
                         self._active_email_row = representative_item
                         should_commit_selected = True
             if self._active_email_row is None:
                 for index in range(self._filtered_message_model.get_n_items()):
                     item = self._filtered_message_model.get_item(index)
                     if isinstance(item, MessageListItem):
-                        self._set_selected_visible_index(index, suppress=True)
+                        self._set_selected_visible_index(index, suppress=True, grab_focus=True)
                         self._active_email_row = item
                         should_commit_selected = True
                         break

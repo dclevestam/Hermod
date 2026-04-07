@@ -324,14 +324,17 @@ class ReaderMixin:
         self._message_info_meta.set_visible(bool(parts))
         self._message_info_bar.set_visible(True)
 
-    def _set_original_message_source(self, subject, html, text):
+    def _set_original_message_source(self, subject, html, text, uid=None):
         self._original_message_source = {
             'subject': (subject or '(no subject)').strip() or '(no subject)',
             'html': html or '',
             'text': text or '',
         } if html or text else None
         if getattr(self, '_message_info_original_btn', None) is not None:
-            self._message_info_original_btn.set_visible(self._original_message_source is not None and bool(getattr(self, '_thread_view_active', False)))
+            has_active_original = self._original_message_source is not None and bool(getattr(self, '_thread_view_active', False))
+            if has_active_original and uid:
+                has_active_original = uid in (self._thread_original_sources or {})
+            self._message_info_original_btn.set_visible(has_active_original)
 
     def _show_original_message_dialog(self, _button=None):
         source = self._original_message_source
@@ -627,6 +630,7 @@ class ReaderMixin:
             selected_msg.get('subject') or subject,
             (selected_record or {}).get('html'),
             (selected_record or {}).get('text'),
+            uid=self._active_email_row.msg.get('uid') if self._active_email_row else selected_msg.get('uid'),
         )
         self._show_attachments(attachments, selected_msg)
         self._thread_reply_target = self._thread_reply_msg_for_records(render_records)
@@ -938,12 +942,13 @@ body {
 .lark-message-shell {
     box-sizing: border-box;
     width: 100%;
-    padding: 24px 18px 30px;
+    padding: 10px 10px 12px;
 }
 .lark-message-frame {
-    max-width: 1200px;
-    width: min(1200px, 100%);
-    margin: 0 auto;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
 }
 .lark-message-frame img { max-width: 100%; height: auto; }
 .lark-message-frame table { max-width: 100%; }
