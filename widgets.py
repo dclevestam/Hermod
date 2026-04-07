@@ -3,7 +3,7 @@
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-from gi.repository import Gtk, Pango
+from gi.repository import Gtk, Pango, GObject
 
 try:
     from .utils import (
@@ -19,13 +19,63 @@ except ImportError:
     )
 
 
-# ── Email list row ────────────────────────────────────────────────────────────
+# ── Email list items / rows ──────────────────────────────────────────────────
 
-class EmailRow(Gtk.ListBoxRow):
-    def __init__(self, msg, on_reply, on_reply_all, on_delete, accent_class=None):
+class MailListItem(GObject.Object):
+    def __init__(self, kind):
         super().__init__()
+        self.kind = kind
+        self.widget = None
+
+    def bind_widget(self, widget):
+        self.widget = widget
+
+    def unbind_widget(self, widget):
+        if self.widget is widget:
+            self.widget = None
+
+    def set_selected(self, selected):
+        if self.widget is not None:
+            self.widget.set_selected(selected)
+
+    def grab_focus(self):
+        if self.widget is not None:
+            self.widget.grab_focus()
+
+
+class MessageListItem(MailListItem):
+    def __init__(self, msg, accent_class=None):
+        super().__init__('message')
+        self.msg = msg
+        self.accent_class = accent_class
+
+    def set_thread_count(self, count):
+        self.msg['thread_count'] = count
+        if self.widget is not None:
+            self.widget.set_thread_count(count)
+
+    def mark_read(self):
+        self.msg['is_read'] = True
+        if self.widget is not None:
+            self.widget.mark_read()
+
+    def mark_unread(self):
+        self.msg['is_read'] = False
+        if self.widget is not None:
+            self.widget.mark_unread()
+
+class LoadMoreListItem(MailListItem):
+    def __init__(self, label='Load more'):
+        super().__init__('load_more')
+        self.label = label
+
+
+class EmailRow(Gtk.Box):
+    def __init__(self, msg, on_reply, on_reply_all, on_delete, accent_class=None):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.msg = msg
         self._hovering = False
+        self._selected = False
         self.add_css_class('email-row')
         if accent_class:
             self.add_css_class(accent_class)
@@ -57,8 +107,7 @@ class EmailRow(Gtk.ListBoxRow):
             ellipsize=Pango.EllipsizeMode.END,
             max_width_chars=28,
         )
-        if not msg.get('is_read'):
-            sender.add_css_class('heading')
+        self._sender_label = sender
         row1.append(sender)
 
         if msg.get('thread_count', 1) > 1:
@@ -99,6 +148,7 @@ class EmailRow(Gtk.ListBoxRow):
         )
         date_lbl.add_css_class('caption')
         date_lbl.add_css_class('dim-label')
+        self._date_label = date_lbl
         row1.append(date_lbl)
         col.append(row1)
 
@@ -109,6 +159,8 @@ class EmailRow(Gtk.ListBoxRow):
             max_width_chars=50,
         )
         subj.add_css_class('caption')
+        self._subject_label = subj
+        self._apply_unread_style()
         col.append(subj)
 
         outer.append(col)
@@ -144,10 +196,16 @@ class EmailRow(Gtk.ListBoxRow):
         motion.connect('enter', self._on_hover_enter)
         motion.connect('leave', self._on_hover_leave)
         self.add_controller(motion)
-        self.connect('notify::parent', lambda *_: self._sync_action_visibility())
-        self.connect('state-flags-changed', lambda *_: self._sync_action_visibility())
 
-        self.set_child(overlay)
+        self.append(overlay)
+        self._sync_action_visibility()
+
+    def set_selected(self, selected):
+        self._selected = bool(selected)
+        if self._selected:
+            self.add_css_class('selected')
+        else:
+            self.remove_css_class('selected')
         self._sync_action_visibility()
 
     def set_thread_count(self, count):
@@ -166,13 +224,49 @@ class EmailRow(Gtk.ListBoxRow):
         self._sync_action_visibility()
 
     def _sync_action_visibility(self):
-        self._action_box.set_visible(self._hovering or self.is_selected())
+        self._action_box.set_visible(self._hovering or self._selected)
 
     def mark_read(self):
+        self.msg['is_read'] = True
         self._dot.set_opacity(0)
+        self._apply_unread_style()
 
     def mark_unread(self):
+        self.msg['is_read'] = False
         self._dot.set_opacity(1)
+        self._apply_unread_style()
+
+    def _apply_unread_style(self):
+        if self.msg.get('is_read', True):
+            self._sender_label.remove_css_class('heading')
+            self._subject_label.remove_css_class('heading')
+        else:
+            self._sender_label.remove_css_class('heading')
+            self._subject_label.add_css_class('heading')
+
+
+class LoadMoreRow(Gtk.Box):
+    def __init__(self, label, on_activate):
+        super().__init__(orientation=Gtk.Orientation.HORIZONTAL)
+        self._selected = False
+        self.add_css_class('load-more-row')
+        self.set_margin_top(8)
+        self.set_margin_bottom(14)
+        self.set_margin_start(12)
+        self.set_margin_end(12)
+
+        button = Gtk.Button(label=label)
+        button.add_css_class('flat')
+        button.connect('clicked', lambda *_: on_activate())
+        self._button = button
+        self.append(button)
+
+    def set_selected(self, selected):
+        self._selected = bool(selected)
+        if self._selected:
+            self.add_css_class('selected')
+        else:
+            self.remove_css_class('selected')
 
 
 # ── Thread sidebar row ────────────────────────────────────────────────────────

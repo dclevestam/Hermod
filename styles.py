@@ -8,10 +8,17 @@ CSS = """
 .email-row {
     border-bottom: 1px solid alpha(@borders, 0.5);
 }
-.email-row:selected {
-    border-bottom: 1px solid alpha(@accent_color, 0.12);
-    background-color: alpha(@accent_color, 0.10);
-    box-shadow: inset 3px 0 0 0 alpha(@accent_color, 0.95);
+.message-list-view row:hover .email-row {
+    background-color: alpha(@window_fg_color, 0.022);
+    box-shadow: none;
+}
+.message-list-view row:selected:hover .email-row,
+.message-list-view row:selected .email-row,
+.email-row:selected,
+.email-row.selected {
+    border-bottom: 1px solid alpha(@accent_color, 0.18);
+    background-color: alpha(@accent_color, 0.16);
+    box-shadow: inset 4px 0 0 0 alpha(@accent_color, 1.0);
 }
 .thread-indicator {
     background-color: alpha(@window_fg_color, 0.07);
@@ -69,11 +76,28 @@ CSS = """
         @window_bg_color 34px);
     padding-left: 14px;
 }
-.email-row:selected .email-actions {
+.message-list-view row:selected .email-row .email-actions,
+.message-list-view row:selected:hover .email-row .email-actions,
+.email-row:selected .email-actions,
+.email-row.selected .email-actions {
     background: linear-gradient(to right,
         alpha(@accent_bg_color, 0),
         alpha(@accent_bg_color, 0.92) 20px,
         @accent_bg_color 34px);
+}
+.load-more-row {
+    border-top: 1px solid alpha(@borders, 0.18);
+    border-bottom: 1px solid alpha(@borders, 0.18);
+    background-color: alpha(@window_fg_color, 0.018);
+    padding: 6px 0px 8px;
+}
+.load-more-row.selected {
+    background-color: alpha(@accent_color, 0.06);
+}
+.load-more-row button {
+    min-height: 38px;
+    min-width: 168px;
+    font-weight: 600;
 }
 .account-accent-strip {
     border-radius: 999px;
@@ -178,8 +202,6 @@ CSS = """
     color: rgba(255, 160, 155, 0.94);
 }
 .sync-auto-value {
-    font-family: monospace;
-    font-variant-numeric: tabular-nums;
     font-size: 0.74em;
     font-weight: 700;
 }
@@ -505,7 +527,8 @@ def build_window_account_css():
 .email-row.{cls} {{
     background-image: linear-gradient(to left, {glow}, rgba(0,0,0,0));
 }}
-.email-row.{cls}:selected {{
+.email-row.{cls}:selected,
+.email-row.{cls}.selected {{
     background-image: linear-gradient(to left, {glow_selected}, rgba(0,0,0,0));
 }}
 .navigation-sidebar row.{cls} .account-accent-strip {{

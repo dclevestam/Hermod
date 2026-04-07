@@ -9,12 +9,12 @@ from gi.repository import Adw
 try:
     from .utils import (
         _format_date, _format_received_date, _thread_day_label,
-        _sender_key, _sender_initials, _thread_palette,
+        _normalize_thread_subject, _sender_key, _sender_initials, _thread_palette,
     )
 except ImportError:
     from utils import (
         _format_date, _format_received_date, _thread_day_label,
-        _sender_key, _sender_initials, _thread_palette,
+        _normalize_thread_subject, _sender_key, _sender_initials, _thread_palette,
     )
 
 
@@ -35,6 +35,8 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
     ordered_records = list(records)
     bubbles = []
     last_day = None
+    root_subject = (subject or '').strip()
+    normalized_root_subject = _normalize_thread_subject(root_subject)
     for record in ordered_records:
         msg = record['msg']
         uid = html_lib.escape(msg.get('uid', ''))
@@ -58,6 +60,31 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
                 '<div class="bubble-footer">'
                 '<div class="bubble-chip">Attachments</div>'
                 f'<div class="bubble-chip">{", ".join(attachment_bits)}</div>'
+                '</div>'
+            )
+        inline_images = list(record.get('inline_images') or [])
+        inline_images_html = ''
+        if inline_images:
+            image_nodes = []
+            for image in inline_images:
+                src = html_lib.escape(image.get('src') or '')
+                label = html_lib.escape(image.get('name') or 'inline image')
+                width = int(image.get('width') or 0)
+                height = int(image.get('height') or 0)
+                image_nodes.append(
+                    f'<figure class="bubble-inline-image">'
+                    f'<img src="{src}" alt="{label}" loading="lazy" '
+                    f'data-width="{width}" data-height="{height}" />'
+                    f'</figure>'
+                )
+            inline_images_html = f'<div class="bubble-inline-images">{"".join(image_nodes)}</div>'
+        current_subject = (msg.get('subject') or '').strip()
+        subject_change_html = ''
+        if current_subject and _normalize_thread_subject(current_subject) != normalized_root_subject:
+            subject_change_html = (
+                '<div class="bubble-subject-change">'
+                f'<span class="bubble-subject-change-label">Subject changed</span> '
+                f'{html_lib.escape(current_subject)}'
                 '</div>'
             )
         msg_day = None
@@ -89,7 +116,9 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
                     </div>
                     <div class="bubble-time">{when}</div>
                 </div>
+                {subject_change_html}
                 <div class="bubble-body">{body_text}</div>
+                {inline_images_html}
                 {attachment_html}
             </article>
             '''
@@ -193,6 +222,50 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
                 line-height: 1.55;
                 font-size: 0.95rem;
                 color: {text};
+            }}
+            .bubble-subject-change {{
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                margin: 0 0 9px;
+                padding: 4px 10px;
+                border-radius: 999px;
+                background: rgba(255,255,255,0.10);
+                color: {subtext};
+                font-size: 0.78rem;
+                font-weight: 600;
+            }}
+            .bubble-subject-change-label {{
+                color: var(--bubble-accent);
+                font-weight: 800;
+                letter-spacing: 0.02em;
+                text-transform: uppercase;
+                font-size: 0.70rem;
+            }}
+            .bubble-inline-images {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+                gap: 10px;
+                margin-top: 10px;
+                max-width: min(360px, 100%);
+            }}
+            .bubble-inline-image {{
+                margin: 0;
+                border-radius: 14px;
+                overflow: hidden;
+                background: rgba(255,255,255,0.08);
+                border: 1px solid rgba(127,127,127,0.18);
+                min-height: 92px;
+                max-height: 230px;
+            }}
+            .bubble-inline-image img {{
+                display: block;
+                width: 100%;
+                height: 100%;
+                min-height: 92px;
+                max-height: 230px;
+                object-fit: cover;
+                background: rgba(255,255,255,0.04);
             }}
             .bubble-footer {{
                 margin-top: 8px;

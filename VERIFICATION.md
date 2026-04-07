@@ -1,10 +1,10 @@
-# Lark Phase 3 Verification Checklist
+# Lark Runtime Verification Checklist
 
 Use this checklist in a live GTK session.
 
 ## Preflight
 - [ ] From `/home/david/Projects/Lark`, run `python3 -m py_compile *.py`
-- [ ] Launch the app with `python3 -m lark`
+- [ ] Launch the app with `python3 lark.py`
 - [ ] Confirm debug logging does not hide startup errors
 
 ## One-account flow
@@ -29,7 +29,9 @@ Use this checklist in a live GTK session.
 - [ ] Trash and spam counts stay dim and separate from inbox counts
 - [ ] Snapshot invalidation works when the account set changes
 - [ ] Manual sync updates all relevant accounts
-- [ ] Poll interval changes are reflected in background sync timing
+- [ ] Background check interval changes are reflected in background update timing
+- [ ] The header control shows `Connected`, `Checking`, and `Offline` at the right times
+- [ ] New Inbox arrivals show notifications without relying on unread-count deltas
 
 ## Message-list and reader correctness
 - [ ] Startup autoselect populates the reading pane

@@ -186,6 +186,10 @@ class ComposeView(Gtk.Box):
         self._active_font_size = None
         self._inserting_rich_text = False
         self._last_selection = None
+        self._dirty = False
+        self._snapshot_cache = None
+        self._dirty_check_id = None
+        self._reply_to_msg = reply_to
         self._apply_css()
 
         is_reply = reply_to is not None
@@ -317,6 +321,7 @@ class ComposeView(Gtk.Box):
         self.subject_entry.connect('changed', self._on_compose_content_changed)
         self._buffer.connect('changed', self._on_compose_content_changed)
         self._initial_snapshot = self._snapshot_state()
+        self._snapshot_cache = self._initial_snapshot
         self._refresh_compose_summary()
 
     def get_title(self):
@@ -354,17 +359,51 @@ class ComposeView(Gtk.Box):
             'attachments': [a['name'] for a in self._attachments],
         }
 
+    def _invalidate_snapshot_cache(self):
+        self._snapshot_cache = None
+
+    def _current_snapshot(self):
+        if self._snapshot_cache is None:
+            self._snapshot_cache = self._snapshot_state()
+        return self._snapshot_cache
+
+    def _cancel_dirty_check(self):
+        if self._dirty_check_id is not None:
+            GLib.source_remove(self._dirty_check_id)
+            self._dirty_check_id = None
+
+    def _refresh_dirty_state(self):
+        self._dirty_check_id = None
+        self._dirty = (self._current_snapshot() != self._initial_snapshot)
+        self._refresh_compose_summary()
+        return GLib.SOURCE_REMOVE
+
+    def _note_compose_change(self):
+        self._invalidate_snapshot_cache()
+        self._dirty = True
+        self._refresh_compose_summary()
+        self._cancel_dirty_check()
+        self._dirty_check_id = GLib.timeout_add(150, self._refresh_dirty_state)
+
     def _attachment_count(self):
         return len(getattr(self, '_attachments', []))
 
     def has_unsaved_changes(self):
-        return self._snapshot_state() != self._initial_snapshot
+        if not self._dirty and self._dirty_check_id is None:
+            return False
+        self._cancel_dirty_check()
+        self._dirty = (self._current_snapshot() != self._initial_snapshot)
+        return self._dirty
 
     def mark_clean(self):
+        self._cancel_dirty_check()
         self._initial_snapshot = self._snapshot_state()
+        self._snapshot_cache = self._initial_snapshot
+        self._dirty = False
         self._refresh_compose_summary()
 
     def _finish_close(self):
+        self._cancel_dirty_check()
         if callable(self._on_close):
             self._on_close(self)
 
@@ -744,6 +783,7 @@ class ComposeView(Gtk.Box):
             else:
                 self._buffer.apply_tag(tag, start, end)
             self._last_selection = (start.copy(), end.copy())
+            self._note_compose_change()
             self.body.grab_focus()
             return
         if tag_name == 'bold':
@@ -758,6 +798,7 @@ class ComposeView(Gtk.Box):
             self._remove_tags_by_prefix(start, end, 'fg:')
             self._buffer.apply_tag(self._get_or_create_color_tag(color_hex), start, end)
             self._last_selection = (start.copy(), end.copy())
+            self._note_compose_change()
         self._active_color = color_hex
         self.body.grab_focus()
 
@@ -767,6 +808,7 @@ class ComposeView(Gtk.Box):
             self._remove_tags_by_prefix(start, end, 'size:')
             self._buffer.apply_tag(self._get_or_create_size_tag(size_points), start, end)
             self._last_selection = (start.copy(), end.copy())
+            self._note_compose_change()
         self._active_font_size = int(size_points)
         self.body.grab_focus()
 
@@ -797,6 +839,7 @@ class ComposeView(Gtk.Box):
         else:
             self._buffer.apply_tag(self._tag_quote, start, end)
         self._last_selection = (start.copy(), end.copy())
+        self._note_compose_change()
         self.body.grab_focus()
 
     def _toggle_list(self, *_):
@@ -929,7 +972,7 @@ class ComposeView(Gtk.Box):
         if hasattr(self, '_from_button'):
             self._from_button.set_tooltip_text(self._backends[idx].identity)
         listbox.select_row(row)
-        self._refresh_compose_summary()
+        self._note_compose_change()
 
     def _ensure_buffer_text(self):
         return self.body.get_buffer()
@@ -1019,7 +1062,7 @@ class ComposeView(Gtk.Box):
                 'size': size,
             })
             self._add_attachment_chip(name, len(self._attachments) - 1)
-            self._refresh_compose_summary()
+            self._note_compose_change()
         except Exception as e:
             self._show_toast(f'Could not attach file: {e}')
 
@@ -1059,7 +1102,7 @@ class ComposeView(Gtk.Box):
         self._attach_strip.remove(chip)
         if self._attach_strip.get_first_child() is None:
             self._attach_strip.set_visible(False)
-        self._refresh_compose_summary()
+        self._note_compose_change()
 
     def _show_toast(self, msg):
         if hasattr(self._parent, '_show_toast'):
@@ -1144,27 +1187,31 @@ class ComposeView(Gtk.Box):
     # ── Send ──────────────────────────────────────────────────────────────────
 
     def _on_send(self, _):
-        to = self.to_entry.get_text().strip().rstrip(',').strip()
-        subject = self.subject_entry.get_text().strip()
-        body = self._buffer_to_plain_text()
-        html = self._buffer_to_html()
-        cc_entry = getattr(self, 'cc_entry', None)
-        cc_text = cc_entry.get_text().strip().rstrip(',').strip() if cc_entry else ''
-        bcc = [self._current_backend_identity()] if self._bcc_switch.get_active() else []
+        try:
+            to = self.to_entry.get_text().strip().rstrip(',').strip()
+            subject = self.subject_entry.get_text().strip()
+            body = self._buffer_to_plain_text()
+            html = self._buffer_to_html()
+            cc_entry = getattr(self, 'cc_entry', None)
+            cc_text = cc_entry.get_text().strip().rstrip(',').strip() if cc_entry else ''
+            bcc = [self._current_backend_identity()] if self._bcc_switch.get_active() else []
+            backend = self._get_selected_backend()
+        except Exception as e:
+            self._on_send_error(str(e))
+            return
 
         if not to:
             self.to_entry.add_css_class('error')
             return
+        self.to_entry.remove_css_class('error')
 
         self.send_btn.set_sensitive(False)
         self.send_btn.set_label('Sending…')
-        backend = self._get_selected_backend()
-
         attachments = list(self._attachments)
         def send():
             try:
                 backend.send_message(to, subject, body, html=html, cc=cc_text, bcc=bcc,
-                                     attachments=attachments)
+                                     reply_to_msg=self._reply_to_msg, attachments=attachments)
                 GLib.idle_add(self._on_send_success)
             except Exception as e:
                 GLib.idle_add(self._on_send_error, str(e))
@@ -1201,6 +1248,13 @@ class ComposeView(Gtk.Box):
 
     def _on_send_success(self):
         self.mark_clean()
+        if hasattr(self._parent, '_show_toast'):
+            self._parent._show_toast('Message sent')
+        if hasattr(self._parent, 'refresh_visible_mail'):
+            GLib.idle_add(self._parent.refresh_visible_mail, True)
+        app = self._parent.get_application() if hasattr(self._parent, 'get_application') else None
+        if app is not None and hasattr(app, 'wake_background_updates'):
+            app.wake_background_updates()
         self._finish_close()
 
     def _on_send_error(self, msg):
@@ -1241,7 +1295,7 @@ class ComposeView(Gtk.Box):
             parts.append(f'Attachments: {attachment_count}')
         if self._bcc_switch.get_active():
             parts.append('BCC on')
-        if self.has_unsaved_changes():
+        if self._dirty:
             parts.append('Unsaved changes')
         return ' • '.join(parts)
 
@@ -1250,4 +1304,4 @@ class ComposeView(Gtk.Box):
             self._summary_label.set_label(self._compose_context_summary())
 
     def _on_compose_content_changed(self, *_):
-        self._refresh_compose_summary()
+        self._note_compose_change()

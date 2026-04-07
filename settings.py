@@ -237,10 +237,10 @@ def build_settings_content(parent, on_close=None):
     sidebar_group.add(spam_row)
     content.append(sidebar_section)
 
-    sync_section, sync_group = _make_settings_section('Sync & Disk Cache')
+    sync_section, sync_group = _make_settings_section('Background Updates & Disk Cache')
     poll_row = Adw.ActionRow(
-        title='Sync interval',
-        subtitle='Minutes between automatic background syncs',
+        title='Background check interval',
+        subtitle='Minutes between background mailbox checks and fallback badge reconciliation',
     )
     poll_spin = Gtk.SpinButton.new_with_range(1, 60, 1)
     poll_spin.set_value(pending['poll_interval'])
@@ -278,7 +278,7 @@ def build_settings_content(parent, on_close=None):
 
     apply_row = Adw.ActionRow(
         title='Apply changes',
-        subtitle='Save sync interval and disk cache budget',
+        subtitle='Save background check interval and disk cache budget',
     )
     save_btn = Gtk.Button(label='Save')
     save_btn.add_css_class('suggested-action')
@@ -324,8 +324,10 @@ def build_settings_content(parent, on_close=None):
             parent._show_toast(f'Disk cache will be pruned to {new_cache} MB')
             if hasattr(parent, '_prune_disk_body_cache'):
                 parent._prune_disk_body_cache()
-        if old_poll != new_poll and parent is not None and hasattr(parent, '_reset_countdown'):
-            parent._reset_countdown()
+        if old_poll != new_poll and parent is not None:
+            app = parent.get_application() if hasattr(parent, 'get_application') else None
+            if app is not None and hasattr(app, 'wake_background_updates'):
+                app.wake_background_updates()
         update_save_state()
         if on_close is not None:
             on_close()

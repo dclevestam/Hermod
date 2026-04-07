@@ -5,13 +5,15 @@ import hashlib
 import html as html_lib
 import re
 import sys
+import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
 import gi
 gi.require_version('Gtk', '4.0')
-from gi.repository import Gtk, GLib, Gdk
+gi.require_version('GdkPixbuf', '2.0')
+from gi.repository import Gtk, GLib, Gdk, GdkPixbuf
 
 try:
     from .settings import get_settings, get_disk_cache_budget_limit_mb
@@ -111,6 +113,44 @@ def _log_exception(prefix, exc):
         traceback.print_exc()
 
 
+def _perf_enabled():
+    try:
+        return bool(get_settings().get('debug_logging'))
+    except Exception:
+        return False
+
+
+def _perf_counter():
+    return time.perf_counter()
+
+
+def _perf_elapsed_ms(started, finished=None):
+    if finished is None:
+        finished = time.perf_counter()
+    try:
+        return max(0.0, (float(finished) - float(started)) * 1000.0)
+    except Exception:
+        return 0.0
+
+
+def _perf_message(kind, detail, elapsed_ms):
+    base = f'Perf: {kind} {elapsed_ms:.1f}ms'
+    if detail:
+        return f'{base} ({detail})'
+    return base
+
+
+def _log_perf(kind, detail='', started=None, elapsed_ms=None):
+    if not _perf_enabled():
+        return None
+    if elapsed_ms is None:
+        if started is None:
+            return None
+        elapsed_ms = _perf_elapsed_ms(started)
+    print(_perf_message(kind, detail, elapsed_ms), file=sys.stderr)
+    return elapsed_ms
+
+
 # ── Cache key / budget helpers ────────────────────────────────────────────────
 
 def _body_cache_key(identity, folder, uid):
@@ -186,6 +226,79 @@ def _replace_cid_images(html, attachments):
         return cid_map.get(cid, match.group(0))
 
     return re.sub(r'cid:([^"\'>\s]+)', repl, html, flags=re.IGNORECASE)
+
+
+def _image_dimensions_from_bytes(data):
+    if not data:
+        return 0, 0
+    try:
+        loader = GdkPixbuf.PixbufLoader()
+        loader.write(data)
+        loader.close()
+        pixbuf = loader.get_pixbuf()
+        if pixbuf is None:
+            return 0, 0
+        return pixbuf.get_width(), pixbuf.get_height()
+    except Exception:
+        return 0, 0
+
+
+def _thread_inline_image_records(html, attachments, max_images=4):
+    if not html:
+        return []
+    ordered_cids = []
+    seen_cids = set()
+    for match in re.finditer(r'(?is)<img\b[^>]+src=["\']cid:([^"\'>\s]+)', html):
+        cid = (match.group(1) or '').strip().strip('<>').strip()
+        if not cid or cid in seen_cids:
+            continue
+        seen_cids.add(cid)
+        ordered_cids.append(cid)
+    if not ordered_cids:
+        return []
+
+    cid_map = {}
+    for att in attachments or []:
+        cid = _attachment_content_id(att)
+        if cid and _attachment_is_inline_image(att):
+            cid_map[cid] = att
+
+    decorative_tokens = (
+        'logo', 'icon', 'avatar', 'footer', 'facebook', 'instagram',
+        'linkedin', 'twitter', 'youtube', 'spacer', 'pixel',
+    )
+    records = []
+    for cid in ordered_cids:
+        att = cid_map.get(cid)
+        if not att:
+            continue
+        uri = _inline_image_data_uri(att)
+        if not uri:
+            continue
+        width, height = _image_dimensions_from_bytes(att.get('data') or b'')
+        if width <= 0 or height <= 0:
+            continue
+        area = width * height
+        if width < 96 or height < 72 or area < 12000:
+            continue
+        name_seed = ' '.join(
+            str(att.get(key, '') or '').lower()
+            for key in ('name', 'content_id')
+        )
+        if any(token in name_seed for token in decorative_tokens) and area < 60000:
+            continue
+        if width >= (height * 4) and height < 140:
+            continue
+        records.append({
+            'src': uri,
+            'name': att.get('name') or 'inline image',
+            'width': width,
+            'height': height,
+            'content_id': cid,
+        })
+        if len(records) >= max_images:
+            break
+    return records
 
 
 # ── GTK widget helpers ────────────────────────────────────────────────────────
