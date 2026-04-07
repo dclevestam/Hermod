@@ -162,6 +162,7 @@ class LarkWindow(MessageListMixin, ReaderMixin, Adw.ApplicationWindow):
             self._thread_sidebar_open = False
             self._active_thread_id = None
             self._original_message_source = None
+            self._thread_original_sources = {}
 
             self._apply_css()
             self._build_ui()
@@ -579,6 +580,14 @@ class LarkWindow(MessageListMixin, ReaderMixin, Adw.ApplicationWindow):
             self._webview_settings = wk_settings
             self._current_body = None
 
+            self.webview = WebKit.WebView(vexpand=True, hexpand=True)
+            self._webview_manager = self.webview.get_user_content_manager()
+            self._webview_manager.register_script_message_handler('lark')
+            self._webview_manager.connect(
+                'script-message-received::lark',
+                self._on_webview_script_message,
+            )
+
             self._message_info_bar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
             self._message_info_bar.add_css_class('message-info-bar')
             self._message_info_top = Gtk.Box(
@@ -634,7 +643,6 @@ class LarkWindow(MessageListMixin, ReaderMixin, Adw.ApplicationWindow):
             self._message_info_bar.append(self._message_info_meta)
             self._message_info_bar.set_visible(False)
 
-            self.webview = WebKit.WebView(vexpand=True, hexpand=True)
             self.webview.set_settings(wk_settings)
             self.webview.connect('load-changed', self._on_webview_load_changed)
             viewer_box.append(self._message_info_bar)

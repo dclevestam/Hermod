@@ -129,6 +129,34 @@ class ThreadRenderingTests(unittest.TestCase):
         self.assertIn('bubble-inline-images', html)
         self.assertIn('hero.png', html)
 
+    def test_thread_html_includes_original_button(self):
+        records = [
+            {
+                'msg': _message('1', subject='Original subject'),
+                'body_text': 'hello',
+                'attachments': [],
+                'inline_images': [],
+                'sender_color': (10, 20, 30),
+                'sender_lane': 0,
+                'selected': True,
+                'html': '<p>Hello</p>',
+                'text': 'Hello',
+            },
+        ]
+
+        html = thread_renderer.build_thread_html(
+            selected_msg=records[0]['msg'],
+            subject='Original subject',
+            first_date='',
+            last_date='',
+            records=records,
+            attachments=[],
+            is_self_fn=lambda _msg: False,
+        )
+
+        self.assertIn('bubble-original', html)
+        self.assertIn('window.larkOriginalBridge', html)
+
     def test_wrap_email_html_frame_wraps_body_contents(self):
         raw_html = '<html><body><table><tr><td>Hello</td></tr></table></body></html>'
 

@@ -48,6 +48,7 @@ Use this checklist in a live GTK session.
 - [ ] Thread-only affordances appear only when a real thread is open
 - [ ] Thread drawer closes and reopens cleanly while shrinking content instead of overlaying it
 - [ ] Thread open/close does not corrupt sender/account info shown in the reader header
+- [ ] Thread bubbles expose an Original button that opens that message’s source
 
 ## Compose and send flow
 - [ ] New compose, reply, and reply-all open in the reading pane

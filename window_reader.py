@@ -552,6 +552,16 @@ class ReaderMixin:
             record['sender_lane'] = sender_lanes.get(key, 0)
             record['is_self'] = self._message_is_self(msg)
             render_records.append(record)
+        self._thread_original_sources = {}
+        for record in ordered_records:
+            uid = (record.get('msg') or {}).get('uid')
+            if not uid:
+                continue
+            self._thread_original_sources[uid] = {
+                'subject': (record.get('msg') or {}).get('subject') or subject,
+                'html': record.get('html'),
+                'text': record.get('text'),
+            }
         participants = self._thread_sender_markup(thread_msgs, sender_colors)
         first_date, last_date = self._thread_date_bounds(thread_msgs)
         current_thread_id = (
@@ -652,6 +662,25 @@ class ReaderMixin:
         except Exception:
             pass
         return False
+
+    def _on_webview_script_message(self, _manager, message):
+        try:
+            value = message.get_js_value().to_string()
+            payload = json.loads(value)
+        except Exception:
+            return
+        if payload.get('action') != 'original':
+            return
+        uid = payload.get('uid')
+        if not uid:
+            return
+        source = getattr(self, '_thread_original_sources', {}).get(uid)
+        if not source:
+            return
+        if not (source.get('html') or source.get('text')):
+            return
+        self._set_original_message_source(source.get('subject'), source.get('html'), source.get('text'))
+        self._show_original_message_dialog()
 
     def _on_webview_load_changed(self, webview, load_event):
         if load_event == WebKit.LoadEvent.FINISHED and self._thread_view_active:
@@ -763,6 +792,7 @@ class ReaderMixin:
         self._thread_sidebar_open = False
         self._current_thread_messages = None
         self._thread_reply_target = None
+        self._thread_original_sources = {}
         self._thread_reply_bar.set_visible(False)
         self._thread_messages_btn.set_visible(False)
         self._set_thread_sidebar_visible(False)
@@ -845,6 +875,7 @@ class ReaderMixin:
         self._current_thread_messages = None
         self._thread_reply_target = None
         self._set_original_message_source('', None, None)
+        self._thread_original_sources = {}
         self._thread_reply_bar.set_visible(False)
         self._thread_messages_btn.set_visible(False)
         self._set_thread_sidebar_visible(False)

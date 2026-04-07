@@ -1,6 +1,7 @@
 """HTML builder for the threaded chat-bubble reading pane."""
 
 import html as html_lib
+import json
 
 import gi
 gi.require_version('Adw', '1')
@@ -39,7 +40,8 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
     normalized_root_subject = _normalize_thread_subject(root_subject)
     for record in ordered_records:
         msg = record['msg']
-        uid = html_lib.escape(msg.get('uid', ''))
+        uid_raw = msg.get('uid') or ''
+        uid = html_lib.escape(uid_raw)
         sender_name = html_lib.escape((msg.get('sender_name') or msg.get('sender_email') or 'Unknown').strip())
         sender_email = (msg.get('sender_email') or '').strip()
         when = html_lib.escape(_format_received_date(msg.get('date')) or _format_date(msg.get('date')) or '')
@@ -98,6 +100,16 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
             last_day = msg_day
         initials = html_lib.escape(_sender_initials(msg.get('sender_name'), sender_email))
         sender_label = html_lib.escape((msg.get('sender_name') or msg.get('sender_email') or 'Unknown').strip())
+        has_original = bool(record.get('html') or record.get('text'))
+        original_button = ''
+        if has_original:
+            js_payload = (
+                "(function(u){ const evt = arguments[0] || window.event; evt && evt.stopPropagation(); "
+                "window.larkOriginalBridge && window.larkOriginalBridge({action:'original',uid:u}); })"
+            )
+            original_button = (
+                f'<button type="button" class="bubble-original" onclick="{js_payload}({json.dumps(uid_raw)});">Original</button>'
+            )
         bubbles.append(
             f'''
             {day_separator}
@@ -114,7 +126,10 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
                         <div class="bubble-avatar">{initials}</div>
                         <div class="bubble-sender">{sender_label}</div>
                     </div>
-                    <div class="bubble-time">{when}</div>
+                    <div class="bubble-head-right">
+                        <div class="bubble-time">{when}</div>
+                        {original_button}
+                    </div>
                 </div>
                 {subject_change_html}
                 <div class="bubble-body">{body_text}</div>
@@ -139,11 +154,12 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
                 padding: 18px 18px 28px;
             }}
             .thread-shell {{
-                max-width: 820px;
+                width: 100%;
+                max-width: none;
                 margin: 0 auto;
             }}
             .bubble {{
-                max-width: 78%;
+                max-width: 100%;
                 border-radius: 20px;
                 border: 1px solid var(--bubble-border);
                 background: var(--bubble-bg);
@@ -179,6 +195,11 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
                 align-items: center;
                 gap: 9px;
                 min-width: 0;
+            }}
+            .bubble-head-right {{
+                display: flex;
+                align-items: center;
+                gap: 8px;
             }}
             .bubble-strip {{
                 width: 4px;
@@ -317,10 +338,31 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
                 font-size: 0.78rem;
                 font-weight: 700;
             }}
+            .bubble-original {{
+                border: 1px solid rgba(255, 255, 255, 0.25);
+                background: rgba(255, 255, 255, 0.08);
+                color: var(--bubble-text);
+                border-radius: 999px;
+                padding: 2px 12px;
+                font-size: 0.72em;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                cursor: pointer;
+                transition: background 120ms ease;
+            }}
+            .bubble-original:hover {{
+                background: rgba(255, 255, 255, 0.22);
+            }}
             a {{
                 color: inherit;
             }}
         </style>
+        <script>
+        (function(window) {{
+            const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.lark;
+            window.larkOriginalBridge = handler ? ((payload) => handler.postMessage(JSON.stringify(payload))) : null;
+        }})(window);
+        </script>
     </head>
     <body>
         <div class="thread-shell">

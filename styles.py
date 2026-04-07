@@ -9,7 +9,7 @@ CSS = """
     border-bottom: 1px solid alpha(@borders, 0.5);
 }
 .message-list-view row:hover .email-row {
-    background-color: alpha(@window_fg_color, 0.04);
+    background-color: alpha(@window_fg_color, 0.03);
     box-shadow: none;
 }
 .message-list-view row:selected:hover .email-row,
@@ -17,8 +17,8 @@ CSS = """
 .email-row:selected,
 .email-row.selected {
     border-bottom: 1px solid alpha(@accent_color, 0.18);
-    background-color: alpha(@accent_color, 0.16);
-    box-shadow: inset 4px 0 0 0 alpha(@accent_color, 1.0);
+    background-color: alpha(@accent_color, 0.28);
+    box-shadow: inset 6px 0 0 0 alpha(@accent_color, 1.0), 0 6px 12px rgba(0,0,0,0.12);
 }
 .thread-indicator {
     background-color: alpha(@window_fg_color, 0.07);
