@@ -1224,17 +1224,6 @@ class MessageListMixin:
         self._snapshot_save_queue.enqueue(scope, payload)
         _log_perf('snapshot save', f'{scope} {len(queued_msgs)} msgs queued', started=started)
 
-    def _set_error(self, msg, generation=None):
-        if generation is not None and generation != self._message_load_generation:
-            return False
-        self._message_store.splice(0, self._message_store.get_n_items(), [])
-        self._message_has_more = False
-        self._empty_page.set_title('Could not load')
-        self._empty_page.set_description(msg)
-        self._list_stack.set_visible_child_name('empty')
-        self._show_toast(f'Error: {msg}')
-        return False
-
     def _count_bucket_for_folder(self, folder):
         folder = (folder or '').lower()
         if folder in (_UNIFIED, 'inbox'):
