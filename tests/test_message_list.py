@@ -246,6 +246,21 @@ class MessageListTests(unittest.TestCase):
         self.assertFalse(win._message_info_sender.use_markup)
         self.assertEqual(win._message_info_sender.label, 'Tester <tester@example.com>')
 
+    def test_original_button_shown_only_for_threads(self):
+        win = window_module.LarkWindow.__new__(window_module.LarkWindow)
+        btn = mock.Mock()
+        win._message_info_original_btn = btn
+        win._thread_view_active = False
+
+        win._set_original_message_source('Subject', '<html></html>', 'text')
+
+        btn.set_visible.assert_called_once_with(False)
+        btn.reset_mock()
+
+        win._thread_view_active = True
+        win._set_original_message_source('Subject', '<html></html>', 'text')
+        btn.set_visible.assert_called_once_with(True)
+
 
 if __name__ == '__main__':
     unittest.main()

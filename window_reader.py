@@ -331,7 +331,7 @@ class ReaderMixin:
             'text': text or '',
         } if html or text else None
         if getattr(self, '_message_info_original_btn', None) is not None:
-            self._message_info_original_btn.set_visible(self._original_message_source is not None)
+            self._message_info_original_btn.set_visible(self._original_message_source is not None and bool(getattr(self, '_thread_view_active', False)))
 
     def _show_original_message_dialog(self, _button=None):
         source = self._original_message_source
@@ -910,8 +910,8 @@ body {
     padding: 24px 18px 30px;
 }
 .lark-message-frame {
-    max-width: 920px;
-    width: min(920px, calc(100vw - 36px));
+    max-width: 1200px;
+    width: min(1200px, 100%);
     margin: 0 auto;
 }
 .lark-message-frame img { max-width: 100%; height: auto; }

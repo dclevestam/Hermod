@@ -9,7 +9,7 @@ CSS = """
     border-bottom: 1px solid alpha(@borders, 0.5);
 }
 .message-list-view row:hover .email-row {
-    background-color: alpha(@window_fg_color, 0.022);
+    background-color: alpha(@window_fg_color, 0.04);
     box-shadow: none;
 }
 .message-list-view row:selected:hover .email-row,

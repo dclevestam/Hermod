@@ -40,6 +40,14 @@ Use this checklist in a live GTK session.
 - [ ] Disk cache reuse works on reopen
 - [ ] Attachment bar visibility is correct
 - [ ] Inline images render when images are allowed
+- [ ] Hover styling is visually weaker than actual selected-row styling
+- [ ] Clicking a message leaves that message visibly selected in the middle column
+- [ ] Keyboard selection movement keeps visible selected-row state in sync with the reader
+- [ ] Reader pane uses the available width without a large dead side column for normal single-message view
+- [ ] `Original` is not shown as a normal-message header action
+- [ ] Thread-only affordances appear only when a real thread is open
+- [ ] Thread drawer closes and reopens cleanly while shrinking content instead of overlaying it
+- [ ] Thread open/close does not corrupt sender/account info shown in the reader header
 
 ## Compose and send flow
 - [ ] New compose, reply, and reply-all open in the reading pane
