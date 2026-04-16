@@ -1,4 +1,4 @@
-"""Disk-based body cache for Lark email messages."""
+"""Disk-based body cache for Hermod email messages."""
 
 import base64
 import gzip

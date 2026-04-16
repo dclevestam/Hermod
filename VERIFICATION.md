@@ -1,11 +1,18 @@
-# Lark Runtime Verification Checklist
+# Hermod Runtime Verification Checklist
 
 Use this checklist in a live GTK session.
 
 ## Preflight
-- [ ] From `/home/david/Projects/Lark`, run `python3 -m py_compile *.py`
-- [ ] Launch the app with `python3 lark.py`
+- [ ] From `/home/david/Projects/Hermod`, run `python3 -m py_compile *.py`
+- [ ] Launch the app with `python3 hermod.py`
 - [ ] Confirm debug logging does not hide startup errors
+- [ ] On GNOME Wayland, prefer the app-native live dump path when you need a visual capture:
+  `python3 hermod.py --dump-ui /tmp/hermod-dump-ui.png`
+- [ ] Use the shared Wayland screenshot helper to preview that PNG in-terminal when needed
+  instead of relying on X11-only screenshot tooling
+- [ ] If the app is already running, use `launch-fresh` for code/UI changes and `launch-or-focus`
+  only when you want to inspect the existing live instance
+- [ ] Use OCR only when the accessibility tree is not enough to verify visible text
 
 ## One-account flow
 - [ ] App opens cleanly with a single account configured
@@ -15,7 +22,7 @@ Use this checklist in a live GTK session.
 - [ ] `Sync` and `New` appear above `All Inboxes`
 - [ ] Search lives in the middle column and spans the row area visually
 - [ ] Sidebar width remains fixed
-- [ ] Reading pane keeps the locked white email surface
+- [ ] Reading pane uses the adaptive but conservative email surface hint
 - [ ] Attachments display correctly and `Load images` applies live
 - [ ] Compose opens inline in the reading pane
 - [ ] Dirty compose navigation prompt appears on folder/message/window changes
@@ -25,7 +32,14 @@ Use this checklist in a live GTK session.
 - [ ] App opens cleanly with multiple accounts configured
 - [ ] `All Inboxes` selection is correct on startup
 - [ ] Account expansion and per-account folder navigation work
+- [ ] Startup status shows warning or error states when a backend falls back or fails
+- [ ] Add Account tiles open the expected flow for Gmail and manual IMAP/SMTP
+- [ ] Account alias, accent color, and hidden/enabled state persist correctly
+- [ ] Removing an account clears its local record and keyring-backed credentials
 - [ ] Unread counts refresh without cross-folder pollution
+- [ ] Unread-only toolbar mode hides read mail and shows friendly empty states
+- [ ] Startup unread counts do not flash a cached estimate before reconciliation
+- [ ] Startup status stays open when an account reports a warning or error and can be dismissed manually
 - [ ] Trash and spam counts stay dim and separate from inbox counts
 - [ ] Snapshot invalidation works when the account set changes
 - [ ] Manual sync updates all relevant accounts
@@ -40,6 +54,9 @@ Use this checklist in a live GTK session.
 - [ ] Disk cache reuse works on reopen
 - [ ] Attachment bar visibility is correct
 - [ ] Inline images render when images are allowed
+- [ ] Same-day message times show local `HH:MM`
+- [ ] Older-than-today message times use abbreviated month/day/time
+- [ ] Older-than-a-year message times use numeric date/time
 - [ ] Hover styling is visually weaker than actual selected-row styling
 - [ ] Clicking a message leaves that message visibly selected in the middle column
 - [ ] Keyboard selection movement keeps visible selected-row state in sync with the reader
@@ -49,15 +66,20 @@ Use this checklist in a live GTK session.
 - [ ] Thread drawer closes and reopens cleanly while shrinking content instead of overlaying it
 - [ ] Thread open/close does not corrupt sender/account info shown in the reader header
 - [ ] Thread bubbles expose an Original button that opens that message’s source
+- [ ] Email links open through the desktop default handler
 
 ## Compose and send flow
 - [ ] New compose, reply, and reply-all open in the reading pane
 - [ ] Sender switching works
 - [ ] BCC toggle works inline
-- [ ] Save draft writes a local draft
-- [ ] Discard clears the dirty draft
+- [ ] Close prompt offers keep-editing or discard only
+- [ ] Discard clears the dirty compose buffer
 - [ ] Plain-text send works
 - [ ] Rich-text send preserves visible formatting
+
+## Startup flow
+- [ ] Startup status screen closes on its own after boot
+- [ ] Sidebar unread counts appear only after the startup screen closes
 
 ## Result log
 - Date:

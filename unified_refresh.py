@@ -10,6 +10,7 @@ _UNIFIED_MAX_WORKERS = 4
 
 @dataclass(frozen=True)
 class UnifiedFetchSpec:
+    identity: str
     label: str
     fetch: object
 
@@ -47,6 +48,7 @@ def collect_unified_messages(
     transient_error_fn,
     network_ready_fn,
     error_logger=None,
+    progress_callback=None,
     max_workers=_UNIFIED_MAX_WORKERS,
     limit=100,
 ):
@@ -56,7 +58,22 @@ def collect_unified_messages(
             'messages': [],
             'had_transient_error': False,
         }
-    results = run_bounded_calls([spec.fetch for spec in specs], max_workers=max_workers)
+    def _wrap(spec):
+        def call():
+            if callable(progress_callback):
+                progress_callback(spec, 'checking')
+            try:
+                messages = spec.fetch()
+            except Exception as exc:
+                if callable(progress_callback):
+                    progress_callback(spec, 'error', error=exc)
+                raise
+            if callable(progress_callback):
+                progress_callback(spec, 'ready', count=len(messages or []))
+            return messages
+        return call
+
+    results = run_bounded_calls([_wrap(spec) for spec in specs], max_workers=max_workers)
     all_messages = []
     had_transient_error = False
     for spec, (messages, exc) in zip(specs, results):

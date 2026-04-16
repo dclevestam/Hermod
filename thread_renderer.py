@@ -1,11 +1,7 @@
 """HTML builder for the threaded chat-bubble reading pane."""
 
 import html as html_lib
-import json
-
-import gi
-gi.require_version('Adw', '1')
-from gi.repository import Adw
+import urllib.parse
 
 try:
     from .utils import (
@@ -19,6 +15,15 @@ except ImportError:
     )
 
 
+def _avatar_text_color(r, g, b):
+    """Return '#ffffff' or '#1a1a1a' depending on which gives better contrast on rgb(r,g,b)."""
+    def _linear(c):
+        s = c / 255.0
+        return s / 12.92 if s <= 0.04045 else ((s + 0.055) / 1.055) ** 2.4
+    lum = 0.2126 * _linear(r) + 0.7152 * _linear(g) + 0.0722 * _linear(b)
+    return '#1a1a1a' if lum > 0.22 else '#ffffff'
+
+
 def build_thread_html(selected_msg, subject, first_date, last_date, records, attachments, is_self_fn):
     """Return a complete HTML string for the thread bubble view.
 
@@ -29,10 +34,9 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
         attachments: Collected attachments for the whole thread.
         is_self_fn: Callable(msg) -> bool — True if the message sender is the current account.
     """
-    is_dark = Adw.StyleManager.get_default().get_dark()
-    page_bg = '#161616' if is_dark else '#f4f2ef'
-    text = '#f0f0f0' if is_dark else '#202124'
-    subtext = '#c4c4c4' if is_dark else '#5f6368'
+    page_bg = '#0b0f0d'
+    text = '#f2efe8'
+    subtext = '#b7beb8'
     ordered_records = list(records)
     bubbles = []
     last_day = None
@@ -48,8 +52,8 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
         body_text = html_lib.escape(record.get('body_text') or '(no content)')
         is_self = is_self_fn(msg)
         r, g, b = record.get('sender_color') or _thread_palette(sender_email or sender_name)
-        bubble_bg = f'rgba({r}, {g}, {b}, 0.14)' if not is_dark else f'rgba({r}, {g}, {b}, 0.22)'
-        bubble_border = f'rgba({r}, {g}, {b}, 0.30)' if not is_dark else f'rgba({r}, {g}, {b}, 0.38)'
+        bubble_bg = f'rgba({r}, {g}, {b}, 0.18)'
+        bubble_border = f'rgba({r}, {g}, {b}, 0.28)'
         bubble_text = f'rgb({r}, {g}, {b})'
         align_class = 'self' if is_self else 'other'
         if record.get('selected'):
@@ -103,13 +107,13 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
         has_original = bool(record.get('html') or record.get('text'))
         original_button = ''
         if has_original:
-            js_payload = (
-                "(function(u){ const evt = arguments[0] || window.event; evt && evt.stopPropagation(); "
-                "window.larkOriginalBridge && window.larkOriginalBridge({action:'original',uid:u}); })"
-            )
             original_button = (
-                f'<button type="button" class="bubble-original" onclick="{js_payload}({json.dumps(uid_raw)});">Original</button>'
+                f'<a class="bubble-original" href="hermod://original?uid={urllib.parse.quote(uid_raw, safe="")}" '
+                f'title="View original" role="button">'
+                f'&#x2197;'
+                f'</a>'
             )
+        avatar_fg = _avatar_text_color(r, g, b)
         bubbles.append(
             f'''
             {day_separator}
@@ -118,6 +122,7 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
                 --bubble-border: {bubble_border};
                 --bubble-text: {text};
                 --bubble-accent: {bubble_text};
+                --avatar-fg: {avatar_fg};
                 --sender-lane: {lane};
             ">
                 <div class="bubble-head">
@@ -148,10 +153,10 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
                 padding: 0;
                 background: {page_bg};
                 color: {text};
-                font-family: -apple-system, system-ui, sans-serif;
+                font-family: "DejaVu Sans", -apple-system, system-ui, sans-serif;
             }}
             body {{
-                padding: 18px 18px 28px;
+                padding: 20px 18px 28px;
             }}
             .thread-shell {{
                 width: 100%;
@@ -159,29 +164,31 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
                 margin: 0 auto;
             }}
             .bubble {{
-                max-width: 100%;
+                max-width: 78%;
                 border-radius: 20px;
                 border: 1px solid var(--bubble-border);
                 background: var(--bubble-bg);
                 color: var(--bubble-text);
                 padding: 12px 13px 11px;
                 margin: 0 0 12px;
-                box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+                box-shadow: 0 1px 2px rgba(0,0,0,0.10);
             }}
             .bubble.self {{
+                max-width: 74%;
                 margin-left: auto;
-                margin-right: 8px;
-                border-top-right-radius: 8px;
-                border-bottom-right-radius: 8px;
+                margin-right: 4px;
+                border-top-right-radius: 6px;
+                border-bottom-right-radius: 6px;
             }}
             .bubble.other {{
+                max-width: 78%;
                 margin-right: auto;
-                margin-left: calc(8px + (var(--sender-lane, 0) * 11px));
-                border-top-left-radius: 8px;
-                border-bottom-left-radius: 8px;
+                margin-left: calc(4px + (var(--sender-lane, 0) * 10px));
+                border-top-left-radius: 6px;
+                border-bottom-left-radius: 6px;
             }}
             .bubble.selected {{
-                box-shadow: 0 0 0 2px rgba(30, 136, 229, 0.30), 0 1px 2px rgba(0,0,0,0.08);
+                box-shadow: 0 0 0 1px rgba(116, 164, 141, 0.36), 0 0 0 5px rgba(116, 164, 141, 0.10);
             }}
             .bubble-head {{
                 display: flex;
@@ -216,7 +223,7 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
                 min-height: 26px;
                 border-radius: 999px;
                 background: var(--bubble-accent);
-                color: #ffffff;
+                color: var(--avatar-fg, #ffffff);
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
@@ -251,7 +258,7 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
                 margin: 0 0 9px;
                 padding: 4px 10px;
                 border-radius: 999px;
-                background: rgba(255,255,255,0.10);
+                background: rgba(223, 228, 222, 0.06);
                 color: {subtext};
                 font-size: 0.78rem;
                 font-weight: 600;
@@ -274,8 +281,8 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
                 margin: 0;
                 border-radius: 14px;
                 overflow: hidden;
-                background: rgba(255,255,255,0.08);
-                border: 1px solid rgba(127,127,127,0.18);
+                background: rgba(223, 228, 222, 0.04);
+                border: 1px solid rgba(223, 228, 222, 0.10);
                 min-height: 92px;
                 max-height: 230px;
             }}
@@ -300,7 +307,7 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
                 gap: 6px;
                 padding: 4px 8px;
                 border-radius: 999px;
-                background: rgba(255,255,255,0.10);
+                background: rgba(223, 228, 222, 0.06);
                 color: {subtext};
                 font-size: 0.74rem;
                 font-weight: 700;
@@ -311,7 +318,7 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
                 gap: 8px;
                 margin-top: 10px;
                 padding-top: 10px;
-                border-top: 1px solid rgba(127,127,127,0.22);
+                border-top: 1px solid rgba(223, 228, 222, 0.10);
                 color: {subtext};
                 font-size: 0.82rem;
             }}
@@ -333,14 +340,17 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
                 justify-content: center;
                 padding: 4px 12px;
                 border-radius: 999px;
-                background-color: rgba(255,255,255,0.12);
+                background-color: rgba(223, 228, 222, 0.06);
                 color: {subtext};
                 font-size: 0.78rem;
                 font-weight: 700;
             }}
             .bubble-original {{
-                border: 1px solid rgba(255, 255, 255, 0.25);
-                background: rgba(255, 255, 255, 0.08);
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                border: 1px solid rgba(223, 228, 222, 0.14);
+                background: rgba(223, 228, 222, 0.06);
                 color: var(--bubble-text);
                 border-radius: 999px;
                 padding: 2px 12px;
@@ -349,20 +359,15 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
                 letter-spacing: 0.05em;
                 cursor: pointer;
                 transition: background 120ms ease;
+                text-decoration: none;
             }}
             .bubble-original:hover {{
-                background: rgba(255, 255, 255, 0.22);
+                background: rgba(223, 228, 222, 0.12);
             }}
             a {{
                 color: inherit;
             }}
         </style>
-        <script>
-        (function(window) {{
-            const handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.lark;
-            window.larkOriginalBridge = handler ? ((payload) => handler.postMessage(JSON.stringify(payload))) : null;
-        }})(window);
-        </script>
     </head>
     <body>
         <div class="thread-shell">

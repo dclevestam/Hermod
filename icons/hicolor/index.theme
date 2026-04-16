@@ -1,0 +1,9 @@
+[Icon Theme]
+Name=Hermod
+Comment=Hermod local icon theme
+Directories=scalable/apps
+
+[scalable/apps]
+Size=256
+Type=Scalable
+Context=Applications

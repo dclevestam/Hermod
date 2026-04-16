@@ -36,7 +36,7 @@ class ThreadRenderingTests(unittest.TestCase):
         return bytes(data)
 
     def test_thread_subject_prefers_original_message_subject(self):
-        win = window_module.LarkWindow.__new__(window_module.LarkWindow)
+        win = window_module.HermodWindow.__new__(window_module.HermodWindow)
 
         subject = win._thread_subject_for_messages([
             _message('1', subject='Original subject'),
@@ -155,15 +155,16 @@ class ThreadRenderingTests(unittest.TestCase):
         )
 
         self.assertIn('bubble-original', html)
-        self.assertIn('window.larkOriginalBridge', html)
+        self.assertIn('hermod://original?uid=1', html)
+        self.assertNotIn('window.hermodOriginalBridge', html)
 
     def test_wrap_email_html_frame_wraps_body_contents(self):
         raw_html = '<html><body><table><tr><td>Hello</td></tr></table></body></html>'
 
         wrapped = window_module._wrap_email_html_frame(raw_html)
 
-        self.assertIn('lark-message-shell', wrapped)
-        self.assertIn('lark-message-frame', wrapped)
+        self.assertIn('hermod-message-shell', wrapped)
+        self.assertIn('hermod-message-frame', wrapped)
         self.assertIn('<table>', wrapped)
 
 

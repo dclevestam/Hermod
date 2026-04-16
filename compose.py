@@ -1,6 +1,4 @@
 import threading
-from pathlib import Path
-from datetime import datetime
 from html import escape as _html_escape
 import gi
 gi.require_version('Gtk', '4.0')
@@ -13,27 +11,28 @@ try:
 except ImportError:
     from styles import build_compose_account_css, account_class_for_index
 
-
-_CONFIG_DIR = Path.home() / '.config' / 'lark'
-_DRAFTS_DIR = _CONFIG_DIR / 'drafts'
-
 DEFAULT_FONT_SIZE_POINTS = 14
 FONT_SIZE_OPTIONS = [12, 14, 16, 18, 24]
 
 COMPOSE_CSS = """
 .compose-shell {
-    background-color: alpha(@window_fg_color, 0.02);
-    border-radius: 14px 14px 14px 14px;
+    background:
+        radial-gradient(circle at 50% 0%, alpha(#74a48d, 0.04), transparent 30%),
+        linear-gradient(180deg, alpha(white, 0.015), alpha(white, 0.00)),
+        alpha(#101312, 0.96);
+    border-radius: 18px;
 }
 .compose-header-meta {
-    padding: 8px 16px 7px;
-    border-bottom: 1px solid alpha(@borders, 0.22);
-    background: alpha(@window_bg_color, 0.55);
+    padding: 10px 16px 8px;
+    border-bottom: 1px solid alpha(#dfe4de, 0.08);
+    background:
+        linear-gradient(180deg, alpha(white, 0.02), alpha(white, 0.00)),
+        alpha(#121715, 0.94);
 }
 .compose-header-summary {
     font-size: 0.84em;
     line-height: 1.0;
-    color: alpha(@window_fg_color, 0.84);
+    color: alpha(#b7beb8, 0.82);
     min-height: 18px;
     padding-top: 0px;
     padding-bottom: 0px;
@@ -46,15 +45,16 @@ COMPOSE_CSS = """
 }
 .compose-field-label {
     font-size: 0.70em;
-    letter-spacing: 0.045em;
-    color: alpha(@window_fg_color, 0.54);
-    margin-bottom: 3px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: alpha(#b7beb8, 0.66);
+    margin-bottom: 4px;
 }
 .compose-field-line {
     min-height: 30px;
 }
 .compose-row-entry {
-    padding: 5px 9px;
+    padding: 5px 10px;
     min-height: 30px;
 }
 .compose-from-surface {
@@ -66,17 +66,19 @@ COMPOSE_CSS = """
     min-width: 84px;
     font-size: 0.82em;
     letter-spacing: 0.04em;
-    color: alpha(@window_fg_color, 0.56);
+    color: alpha(#b7beb8, 0.60);
 }
 .compose-from-value {
     font-size: 0.9em;
-    color: alpha(@window_fg_color, 0.92);
-    font-weight: 400;
+    color: #f2efe8;
+    font-weight: 500;
 }
 .compose-operator-bar {
-    padding: 5px 10px 6px;
-    background: alpha(@window_bg_color, 0.98);
-    border-top: 1px solid alpha(@borders, 0.18);
+    padding: 8px 10px 9px;
+    background:
+        linear-gradient(180deg, alpha(white, 0.02), alpha(white, 0.00)),
+        alpha(#121715, 0.96);
+    border-top: 1px solid alpha(#dfe4de, 0.08);
 }
 .compose-style-dropdown {
     min-width: 86px;
@@ -89,13 +91,15 @@ COMPOSE_CSS = """
     font-weight: 600;
 }
 .compose-send-btn {
-    min-height: 30px;
-    min-width: 94px;
-    font-weight: 700;
+    min-height: 32px;
+    min-width: 92px;
+    font-weight: 800;
     padding: 0px 12px;
 }
 .compose-body-shell {
-    background-color: alpha(@window_bg_color, 0.92);
+    background:
+        radial-gradient(circle at 50% 0%, alpha(#74a48d, 0.03), transparent 32%),
+        alpha(#0f1311, 0.96);
 }
 .compose-bcc-toggle {
     min-height: 24px;
@@ -103,51 +107,45 @@ COMPOSE_CSS = """
 .compose-from-button {
     min-height: 30px;
     padding: 0;
-    min-width: 254px;
+    min-width: 240px;
 }
 .compose-from-button > box {
     min-height: 30px;
 }
 .compose-operator-action {
-    min-height: 30px;
-    min-width: 30px;
-    border-radius: 7px;
+    min-height: 32px;
+    min-width: 32px;
+    border-radius: 8px;
     padding: 0;
-    background: alpha(@window_fg_color, 0.04);
-    color: alpha(@window_fg_color, 0.88);
+    background: alpha(#121715, 0.90);
+    color: alpha(#f2efe8, 0.84);
+    border: 1px solid alpha(#dfe4de, 0.08);
 }
 .compose-operator-action:hover {
-    background: alpha(@window_fg_color, 0.08);
+    background: alpha(#18211d, 0.96);
 }
 .compose-discard {
-    background: rgba(229, 57, 53, 0.10);
-    color: rgba(244, 132, 126, 0.98);
+    background: rgba(218, 110, 99, 0.14);
+    color: rgba(242, 239, 232, 0.96);
 }
 .compose-discard:hover {
-    background: rgba(229, 57, 53, 0.18);
-}
-.compose-draft {
-    background: rgba(241, 196, 15, 0.10);
-    color: rgba(246, 224, 110, 0.98);
-}
-.compose-draft:hover {
-    background: rgba(241, 196, 15, 0.18);
+    background: rgba(218, 110, 99, 0.22);
 }
 .compose-attach-strip {
-    padding: 4px 12px;
-    min-height: 32px;
+    padding: 5px 12px;
+    min-height: 34px;
 }
 .compose-attach-chip {
-    border-radius: 6px;
-    padding: 2px 6px;
-    background: alpha(@window_fg_color, 0.06);
+    border-radius: 999px;
+    padding: 3px 8px;
+    background: alpha(#dfe4de, 0.06);
     font-size: 0.85em;
 }
 .compose-attach-chip-remove {
     min-width: 18px;
     min-height: 18px;
     padding: 0;
-    border-radius: 4px;
+    border-radius: 999px;
     background: none;
     border: none;
 }
@@ -415,15 +413,13 @@ class ComposeView(Gtk.Box):
             return
 
         dialog = Adw.AlertDialog(
-            heading='Discard draft?',
-            body='You have unsaved compose changes. Save a draft, discard them, or keep editing.',
+            heading='Discard changes?',
+            body='You have unsaved compose changes. Discard them or keep editing.',
         )
         dialog.add_response('cancel', 'Keep Editing')
-        dialog.add_response('draft', 'Save Draft')
         dialog.add_response('discard', 'Discard')
         dialog.set_default_response('cancel')
         dialog.set_close_response('cancel')
-        dialog.set_response_appearance('draft', Adw.ResponseAppearance.SUGGESTED)
         dialog.set_response_appearance('discard', Adw.ResponseAppearance.DESTRUCTIVE)
 
         def _on_choice(_dialog, result, data=None):
@@ -432,12 +428,6 @@ class ComposeView(Gtk.Box):
                 self._finish_close()
                 if on_done:
                     on_done(True)
-            elif response == 'draft':
-                saved = self._save_draft()
-                if saved:
-                    self._finish_close()
-                if on_done:
-                    on_done(saved)
             else:
                 if on_done:
                     on_done(False)
@@ -490,18 +480,6 @@ class ComposeView(Gtk.Box):
         discard_btn.set_valign(Gtk.Align.CENTER)
         bar.append(discard_btn)
 
-        draft_btn = self._make_tool_button(
-            ['document-save-symbolic', 'document-save-as-symbolic'],
-            'Save Draft',
-            self._on_save_draft,
-            '◰',
-        )
-        draft_btn.add_css_class('compose-operator-action')
-        draft_btn.add_css_class('compose-draft')
-        draft_btn.set_size_request(30, 30)
-        draft_btn.set_valign(Gtk.Align.CENTER)
-        bar.append(draft_btn)
-
         attach_btn = self._make_tool_button(
             ['mail-attachment-symbolic', 'document-open-symbolic'],
             'Attach file',
@@ -542,7 +520,9 @@ class ComposeView(Gtk.Box):
             inner.add_css_class(self._selected_backend_class)
             inner.set_margin_top(1)
             inner.set_margin_bottom(1)
-            self._from_label = Gtk.Label(label=self._backends[self._selected_backend_index].identity, xalign=0)
+            selected_backend = self._backends[self._selected_backend_index]
+            selected_label = getattr(selected_backend, 'presentation_name', '') or selected_backend.identity
+            self._from_label = Gtk.Label(label=selected_label, xalign=0)
             self._from_label.set_hexpand(True)
             self._from_label.set_wrap(False)
             self._from_label.set_ellipsize(1)
@@ -551,10 +531,12 @@ class ComposeView(Gtk.Box):
             arrow = Gtk.Image(icon_name='pan-down-symbolic', pixel_size=12)
             inner.append(arrow)
             self._from_button.set_child(inner)
-            self._from_button.set_tooltip_text(self._backends[self._selected_backend_index].identity)
+            self._from_button.set_tooltip_text(selected_label)
             self._from_pill = inner
 
-            identities = Gtk.StringList.new([b.identity for b in self._backends])
+            identities = Gtk.StringList.new([
+                getattr(b, 'presentation_name', '') or b.identity for b in self._backends
+            ])
             self._from_popover = Gtk.Popover()
             self._from_popover.add_css_class('compose-account-popover')
             self._from_popover.set_position(Gtk.PositionType.TOP)
@@ -588,7 +570,11 @@ class ComposeView(Gtk.Box):
             row.append(self._from_button)
             return row
 
-        from_value = Gtk.Label(label=backend.identity, halign=Gtk.Align.START, xalign=0)
+        from_value = Gtk.Label(
+            label=getattr(backend, 'presentation_name', '') or backend.identity,
+            halign=Gtk.Align.START,
+            xalign=0,
+        )
         from_value.set_selectable(True)
         from_value.set_wrap(False)
         from_value.set_ellipsize(1)
@@ -654,7 +640,7 @@ class ComposeView(Gtk.Box):
         return self._backends[self._selected_backend_index]
 
     def _apply_account_css(self):
-        return build_compose_account_css()
+        return build_compose_account_css(self._backends)
 
     def _apply_css(self):
         display = self.get_display() or self._parent.get_display()
@@ -663,6 +649,16 @@ class ComposeView(Gtk.Box):
         provider = Gtk.CssProvider()
         provider.load_from_string(COMPOSE_CSS + self._apply_account_css())
         Gtk.StyleContext.add_provider_for_display(display, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+    def refresh_account_labels(self):
+        if hasattr(self, '_from_label') and self._backends:
+            selected_backend = self._backends[self._selected_backend_index]
+            selected_label = getattr(selected_backend, 'presentation_name', '') or selected_backend.identity
+            self._from_label.set_label(selected_label)
+        if hasattr(self, '_from_button') and self._backends:
+            selected_backend = self._backends[self._selected_backend_index]
+            selected_label = getattr(selected_backend, 'presentation_name', '') or selected_backend.identity
+            self._from_button.set_tooltip_text(selected_label)
 
     def _current_backend_identity(self):
         return self._get_selected_backend().identity
@@ -965,12 +961,15 @@ class ComposeView(Gtk.Box):
         self._selected_backend_index = idx
         self._selected_backend_class = account_class_for_index(idx)
         if hasattr(self, '_from_label'):
-            self._from_label.set_label(self._backends[idx].identity)
+            selected_backend = self._backends[idx]
+            selected_label = getattr(selected_backend, 'presentation_name', '') or selected_backend.identity
+            self._from_label.set_label(selected_label)
         if hasattr(self, '_from_pill'):
             self._from_pill.remove_css_class(old_class)
             self._from_pill.add_css_class(self._selected_backend_class)
         if hasattr(self, '_from_button'):
-            self._from_button.set_tooltip_text(self._backends[idx].identity)
+            selected_backend = self._backends[idx]
+            self._from_button.set_tooltip_text(getattr(selected_backend, 'presentation_name', '') or selected_backend.identity)
         listbox.select_row(row)
         self._note_compose_change()
 
@@ -1217,34 +1216,6 @@ class ComposeView(Gtk.Box):
                 GLib.idle_add(self._on_send_error, str(e))
 
         threading.Thread(target=send, daemon=True).start()
-
-    def _on_save_draft(self, _):
-        if self._save_draft():
-            self._finish_close()
-
-    def _save_draft(self):
-        _DRAFTS_DIR.mkdir(parents=True, exist_ok=True)
-        backend = self._get_selected_backend()
-        draft = {
-            'backend': backend.identity,
-            'to': self.to_entry.get_text(),
-            'subject': self.subject_entry.get_text(),
-            'body': self._buffer_to_plain_text(),
-            'html': self._buffer_to_html(),
-            'bcc_me': self._bcc_switch.get_active(),
-            'saved_at': datetime.utcnow().isoformat() + 'Z',
-        }
-        path = _DRAFTS_DIR / f'draft-{datetime.utcnow().strftime("%Y%m%d%H%M%S")}.json'
-        try:
-            import json
-            path.write_text(json.dumps(draft, indent=2))
-            if hasattr(self._parent, '_show_toast'):
-                GLib.idle_add(self._parent._show_toast, f'Saved draft {path.name}')
-            self.mark_clean()
-            return True
-        except Exception as e:
-            self._on_send_error(f'Could not save draft: {e}')
-            return False
 
     def _on_send_success(self):
         self.mark_clean()

@@ -1,4 +1,4 @@
-"""Pure module-level helpers shared across the Lark window layer."""
+"""Pure module-level helpers shared across the Hermod window layer."""
 
 import base64
 import hashlib
@@ -7,7 +7,7 @@ import re
 import sys
 import time
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import gi
@@ -21,6 +21,7 @@ try:
         record_perf as _diag_record_perf,
         should_print_debug_tracebacks,
     )
+    from .styles import ACCOUNT_PALETTE
     from .settings import get_settings, get_disk_cache_budget_limit_mb
 except ImportError:
     from diagnostics.logger import (
@@ -28,6 +29,7 @@ except ImportError:
         record_perf as _diag_record_perf,
         should_print_debug_tracebacks,
     )
+    from styles import ACCOUNT_PALETTE
     from settings import get_settings, get_disk_cache_budget_limit_mb
 
 
@@ -39,40 +41,36 @@ _UNIFIED_SPAM  = '__unified_spam__'
 
 # ── Disk-cache paths ──────────────────────────────────────────────────────────
 
-_DISK_BODY_CACHE_DIR  = Path(GLib.get_user_cache_dir()) / 'lark' / 'body-cache'
-_SNAPSHOT_CACHE_DIR   = Path(GLib.get_user_cache_dir()) / 'lark' / 'message-snapshots'
+_DISK_BODY_CACHE_DIR  = Path(GLib.get_user_cache_dir()) / 'hermod' / 'body-cache'
+_SNAPSHOT_CACHE_DIR   = Path(GLib.get_user_cache_dir()) / 'hermod' / 'message-snapshots'
 
 
 # ── Date / time formatting ────────────────────────────────────────────────────
 
-def _format_date(dt):
-    if dt is None:
-        return ''
-    now = datetime.now(timezone.utc)
-    try:
-        diff = now - dt.astimezone(timezone.utc)
-    except Exception:
-        return ''
-    if diff.days == 0:
-        return dt.strftime('%H:%M')
-    if diff.days == 1:
-        return 'Yesterday'
-    if diff.days < 7:
-        return dt.strftime('%A')
-    return dt.strftime('%-d %b')
-
-
-def _format_received_date(dt):
+def _format_local_timestamp(dt):
     if dt is None:
         return ''
     try:
         local_dt = dt.astimezone()
     except Exception:
-        local_dt = dt
+        return ''
+    now = datetime.now().astimezone()
     try:
-        return f'{local_dt.strftime("%H:%M")} - {local_dt.strftime("%B")} {local_dt.day} [{local_dt.strftime("%x")}]'
+        if local_dt.date() == now.date():
+            return local_dt.strftime('%H:%M')
+        if now - local_dt > timedelta(days=365):
+            return local_dt.strftime('%m/%d/%y - %H:%M')
+        return local_dt.strftime('%b %-d %H:%M')
     except Exception:
-        return _format_date(dt)
+        return ''
+
+
+def _format_date(dt):
+    return _format_local_timestamp(dt)
+
+
+def _format_received_date(dt):
+    return _format_local_timestamp(dt)
 
 
 def _thread_day_label(dt):
@@ -405,31 +403,17 @@ def _sender_initials(name, email):
 
 
 def _thread_palette(seed_text):
-    palette = [
-        (0xE5, 0x39, 0x35),  # red
-        (0xFB, 0x8C, 0x00),  # orange
-        (0x43, 0xA0, 0x47),  # green
-        (0x1E, 0x88, 0xE5),  # blue
-        (0x8E, 0x24, 0xAA),  # purple
-        (0x00, 0x96, 0x88),  # teal
-        (0xD8, 0x1B, 0x60),  # pink
-        (0x6D, 0x4C, 0x41),  # brown
-    ]
+    palette = []
+    for color in ACCOUNT_PALETTE:
+        palette.append(tuple(int(color[offset:offset + 2], 16) for offset in (1, 3, 5)))
     idx = int(hashlib.sha256((seed_text or '').encode('utf-8')).hexdigest(), 16) % len(palette)
     return palette[idx]
 
 
 def _thread_color_map(thread_seed, sender_keys):
-    palette = [
-        (0xE5, 0x39, 0x35),
-        (0xFB, 0x8C, 0x00),
-        (0x43, 0xA0, 0x47),
-        (0x1E, 0x88, 0xE5),
-        (0x8E, 0x24, 0xAA),
-        (0x00, 0x96, 0x88),
-        (0xD8, 0x1B, 0x60),
-        (0x6D, 0x4C, 0x41),
-    ]
+    palette = []
+    for color in ACCOUNT_PALETTE:
+        palette.append(tuple(int(color[offset:offset + 2], 16) for offset in (1, 3, 5)))
     digest = hashlib.sha256((thread_seed or 'thread').encode('utf-8')).digest()
     order = list(range(len(palette)))
     order.sort(key=lambda idx: digest[idx % len(digest)])
@@ -466,6 +450,67 @@ def _email_background_hint(html, text, fallback_rgb):
     return fallback_rgb
 
 
+def _email_surface_hint(html, text):
+    sources = [html or '', text or '']
+    patterns = [
+        r'(?i)background(?:-color)?\s*:\s*(#[0-9a-f]{3,8}|rgb\([^)]+\)|rgba\([^)]+\))',
+        r'(?i)bgcolor\s*=\s*["\']?(#[0-9a-f]{3,8}|[a-z]+)',
+        r'(?i)background\s*=\s*["\']?(#[0-9a-f]{3,8}|[a-z]+)',
+    ]
+    text_patterns = [
+        r'(?i)(?:^|[\s;{])color\s*:\s*(#[0-9a-f]{3,8}|rgb\([^)]+\)|rgba\([^)]+\))',
+        r'(?i)fgcolor\s*=\s*["\']?(#[0-9a-f]{3,8}|[a-z]+)',
+    ]
+
+    def _linear(c):
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+    def _contrast_fg(rgb):
+        r, g, b = rgb
+        sr = r / 255.0
+        sg = g / 255.0
+        sb = b / 255.0
+        luminance = 0.2126 * _linear(sr) + 0.7152 * _linear(sg) + 0.0722 * _linear(sb)
+        return (17, 17, 17) if luminance > 0.55 else (255, 255, 255)
+
+    def _parse_rgb(color):
+        rgba = Gdk.RGBA()
+        if not rgba.parse(color):
+            return None
+        r = int(round(rgba.red * 255))
+        g = int(round(rgba.green * 255))
+        b = int(round(rgba.blue * 255))
+        sr = r / 255.0
+        sg = g / 255.0
+        sb = b / 255.0
+        luminance = 0.2126 * _linear(sr) + 0.7152 * _linear(sg) + 0.0722 * _linear(sb)
+        return (r, g, b, luminance)
+
+    for source in sources:
+        bg_candidates = []
+        fg_candidates = []
+        for pattern in patterns:
+            for match in re.finditer(pattern, source):
+                parsed = _parse_rgb(match.group(1))
+                if parsed is not None:
+                    bg_candidates.append(parsed)
+        for pattern in text_patterns:
+            for match in re.finditer(pattern, source):
+                parsed = _parse_rgb(match.group(1))
+                if parsed is not None:
+                    fg_candidates.append(parsed)
+
+        for r, g, b, luminance in bg_candidates:
+            if luminance >= 0.90 or luminance <= 0.12:
+                return {'background_rgb': (r, g, b), 'foreground_rgb': _contrast_fg((r, g, b))}
+            for fr, fg, fb, fg_luminance in fg_candidates:
+                if luminance >= 0.80 and fg_luminance >= 0.88:
+                    return {'background_rgb': (r, g, b), 'foreground_rgb': _contrast_fg((r, g, b))}
+                if luminance <= 0.20 and fg_luminance <= 0.18:
+                    return {'background_rgb': (r, g, b), 'foreground_rgb': _contrast_fg((r, g, b))}
+    return None
+
+
 # ── Backend lookup ────────────────────────────────────────────────────────────
 
 def _backend_for_identity(backends, identity):
@@ -484,7 +529,7 @@ def _backend_for_message(backends, msg):
 
 # ── Demo fixture (debug helper) ───────────────────────────────────────────────
 
-def _demo_thread_fixture(identity='lark-demo@local'):
+def _demo_thread_fixture(identity='hermod-demo@local'):
     base = datetime.now(timezone.utc).replace(hour=9, minute=10, second=0, microsecond=0)
     senders = [
         ('David Clevestam', identity),
@@ -504,18 +549,18 @@ def _demo_thread_fixture(identity='lark-demo@local'):
         'Perfect. Send the final version and we can call this ready.',
     ]
     subjects = [
-        'Lark thread UI test',
-        'Lark thread UI test',
-        'Lark thread UI test',
-        'Re: Lark thread UI test',
-        'Re: Lark thread UI test',
-        'Re: Lark thread UI test',
-        'Re: Lark thread UI test',
-        'Updated: Lark thread UI test',
-        'Updated: Lark thread UI test',
-        'Updated: Lark thread UI test',
+        'Hermod thread UI test',
+        'Hermod thread UI test',
+        'Hermod thread UI test',
+        'Re: Hermod thread UI test',
+        'Re: Hermod thread UI test',
+        'Re: Hermod thread UI test',
+        'Re: Hermod thread UI test',
+        'Updated: Hermod thread UI test',
+        'Updated: Hermod thread UI test',
+        'Updated: Hermod thread UI test',
     ]
-    thread_id = 'lark-demo-thread-10'
+    thread_id = 'hermod-demo-thread-10'
     members = []
     for index in range(10):
         sender_name, sender_email = senders[index % len(senders)]
@@ -524,18 +569,18 @@ def _demo_thread_fixture(identity='lark-demo@local'):
         has_attachments = False
         if index in {4, 8}:
             attachments = [{
-                'name': f'lark-design-{index + 1}.png',
+                'name': f'hermod-design-{index + 1}.png',
                 'size': 182344 + index * 2048,
                 'content_type': 'image/png',
                 'disposition': 'attachment',
             }]
             has_attachments = True
         msg = {
-            'uid': f'lark-demo-{index + 1}',
+            'uid': f'hermod-demo-{index + 1}',
             'subject': subjects[index],
             'sender_name': sender_name,
             'sender_email': sender_email,
-            'to_addrs': [{'name': 'Lark Demo', 'email': identity}],
+            'to_addrs': [{'name': 'Hermod Demo', 'email': identity}],
             'cc_addrs': [],
             'date': date,
             'is_read': True,
@@ -547,7 +592,7 @@ def _demo_thread_fixture(identity='lark-demo@local'):
             'backend_obj': None,
             'thread_id': thread_id,
             'thread_source': 'demo',
-            'message_id': f'<lark-demo-{index + 1}@local>',
+            'message_id': f'<hermod-demo-{index + 1}@local>',
             'thread_count': 10,
             'thread_key': (identity, 'demo', thread_id),
             'attachments': attachments,

@@ -1,36 +1,76 @@
 CSS = """
+@keyframes hermod-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+@keyframes hermod-status-pulse {
+    0% { opacity: 0.50; }
+    50% { opacity: 1.00; }
+    100% { opacity: 0.50; }
+}
+
+@keyframes hermod-welcome-breathe {
+    0% { opacity: 0.18; }
+    50% { opacity: 0.42; }
+    100% { opacity: 0.18; }
+}
+
+@keyframes hermod-aurora-drift {
+    0%   { transform: translate3d(0, 0, 0) rotate(0deg) scale(1.00); }
+    50%  { transform: translate3d(24px, -18px, 0) rotate(6deg) scale(1.05); }
+    100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1.00); }
+}
+
 .unread-dot {
     background-color: @accent_color;
-    border-radius: 50%;
-    min-width: 8px;
-    min-height: 8px;
+    border-radius: 0 999px 999px 0;
+    min-width: 4px;
+    min-height: 24px;
+    margin-left: -12px;
+    margin-right: 8px;
+}
+.unread-dot.hidden {
+    opacity: 0;
 }
 .email-row {
-    border-bottom: 1px solid alpha(@borders, 0.5);
+    border-bottom: 1px solid alpha(@borders, 0.4);
+    transition: background-color 0.2s ease;
 }
-.message-list-view row:hover .email-row {
-    background-color: alpha(@window_fg_color, 0.03);
+/* Suppress GTK4/Adwaita native row-level hover and selection — we style the child instead. */
+.message-list-view row,
+.message-list-view row:hover,
+.message-list-view row:selected,
+.message-list-view row:selected:hover {
+    background: none;
     box-shadow: none;
 }
-.message-list-view row:selected:hover .email-row,
-.message-list-view row:selected .email-row,
-.email-row:selected,
-.email-row.selected {
-    border-bottom: 1px solid alpha(@accent_color, 0.18);
-    background-color: alpha(@accent_color, 0.28);
-    box-shadow: inset 6px 0 0 0 alpha(@accent_color, 1.0), 0 6px 12px rgba(0,0,0,0.12);
+/* Hover: barely-there background shift, only on unselected rows */
+.message-list-view row:hover .email-row:not(.selected) {
+    background-color: alpha(#dfe4de, 0.03);
+}
+/* Selected: left accent bar + subtle tinted background */
+.message-list-view .email-row.selected {
+    background-image: none;
+    background-color: rgba(116, 164, 141, 0.12);
+    box-shadow: inset 3px 0 0 0 #74a48d;
+    border-bottom-color: rgba(116, 164, 141, 0.18);
+}
+.message-list-view row:hover .email-row.selected {
+    background-image: none;
+    background-color: rgba(116, 164, 141, 0.16);
 }
 .thread-indicator {
-    background-color: alpha(@window_fg_color, 0.07);
+    background-color: alpha(#dfe4de, 0.06);
     border-radius: 999px;
     padding: 0px 6px;
     min-height: 18px;
 }
 .thread-indicator image {
-    color: alpha(@window_fg_color, 0.68);
+    color: alpha(#b7beb8, 0.74);
 }
 .thread-badge {
-    color: alpha(@window_fg_color, 0.74);
+    color: alpha(#b7beb8, 0.80);
     font-size: 0.68em;
     font-weight: 700;
     margin-left: 2px;
@@ -39,65 +79,99 @@ CSS = """
     color: @accent_fg_color;
 }
 .folder-count {
-    background-color: alpha(@window_fg_color, 0.10);
-    color: alpha(@window_fg_color, 0.86);
-    border-radius: 9px;
-    padding: 0px 5px;
-    font-size: 0.64em;
-    font-weight: 700;
-    min-width: 16px;
+    color: alpha(@window_fg_color, 0.45);
+    font-size: 0.72em;
+    font-weight: 600;
+    min-width: 10px;
+    font-variant-numeric: tabular-nums;
+    margin-right: 4px;
 }
 .folder-count-dim {
-    background-color: alpha(@window_fg_color, 0.04);
-    color: alpha(@window_fg_color, 0.42);
+    color: alpha(#b7beb8, 0.26);
+}
+.all-inboxes-row {
+    background-color: alpha(#dfe4de, 0.04);
+    border-radius: 8px;
+    font-weight: 700;
+}
+.all-inboxes-row .folder-count {
+    color: alpha(#b7beb8, 0.74);
+    font-weight: 800;
 }
 .navigation-sidebar row:selected .folder-count {
-    background-color: alpha(@accent_fg_color, 0.16);
     color: @accent_fg_color;
 }
 .navigation-sidebar row:selected .folder-count-dim {
-    background-color: alpha(@accent_fg_color, 0.08);
     color: alpha(@accent_fg_color, 0.70);
 }
 .account-header {
-    font-size: 0.86em;
-    font-weight: 600;
-    letter-spacing: 0.01em;
-    color: alpha(@window_fg_color, 0.72);
+    font-size: 0.84em;
+    font-weight: 500;
+    letter-spacing: 0.00em;
+    color: alpha(@window_fg_color, 0.68);
+}
+.account-health-icon {
+    color: alpha(@warning_color, 0.94);
+    margin-right: 2px;
+}
+.account-health-icon.state-error {
+    color: alpha(@error_color, 0.95);
 }
 .more-folders-label {
-    font-size: 0.85em;
+    font-size: 0.84em;
     color: alpha(@window_fg_color, 0.55);
 }
-.email-actions {
-    background: linear-gradient(to right,
-        alpha(@window_bg_color, 0),
-        alpha(@window_bg_color, 0.92) 20px,
-        @window_bg_color 34px);
-    padding-left: 14px;
+.folder-row {
+    min-height: 34px;
 }
-.message-list-view row:selected .email-row .email-actions,
-.message-list-view row:selected:hover .email-row .email-actions,
-.email-row:selected .email-actions,
-.email-row.selected .email-actions {
-    background: linear-gradient(to right,
-        alpha(@accent_bg_color, 0),
-        alpha(@accent_bg_color, 0.92) 20px,
-        @accent_bg_color 34px);
+.account-header-row {
+    min-height: 40px;
+}
+.folder-connector,
+.folder-connector-last {
+    min-width: 14px;
+    min-height: 1px;
+    margin-top: -1px;
+    margin-bottom: -1px;
+}
+.email-actions {
+    margin-left: 14px;
+    background-color: #e53935;
+    border-radius: 12px 0 0 12px;
+    padding: 0 6px 0 10px;
+    min-height: 38px;
+    box-shadow: -2px 0 8px alpha(black, 0.12);
+    opacity: 0;
+    transition: opacity 0.18s ease;
+}
+.email-actions button {
+    color: white;
+}
+.email-row.selected .email-actions,
+.message-list-view row:hover .email-actions {
+    opacity: 1;
 }
 .load-more-row {
-    border-top: 1px solid alpha(@borders, 0.18);
-    border-bottom: 1px solid alpha(@borders, 0.18);
-    background-color: alpha(@window_fg_color, 0.018);
+    background-color: transparent;
     padding: 6px 0px 8px;
 }
 .load-more-row.selected {
-    background-color: alpha(@accent_color, 0.06);
+    background-color: transparent;
 }
 .load-more-row button {
-    min-height: 38px;
-    min-width: 168px;
+    min-height: 26px;
+    font-size: 0.78em;
     font-weight: 600;
+    padding: 3px 16px;
+    border-radius: 999px;
+    color: alpha(#b7beb8, 0.78);
+    background-color: alpha(#121715, 0.88);
+    border: 1px solid alpha(#dfe4de, 0.10);
+}
+.load-more-row button:hover {
+    background-color: alpha(#18211d, 0.96);
+    color: #f2efe8;
+    border-color: alpha(#dfe4de, 0.18);
 }
 .account-accent-strip {
     border-radius: 999px;
@@ -105,20 +179,475 @@ CSS = """
     min-height: 18px;
 }
 .account-accent-label {
-    font-weight: 600;
+    font-size: 0.88em;
+    font-weight: 500;
+}
+/* Suppress Adwaita's native sidebar row selected/hover backgrounds */
+.navigation-sidebar row:selected,
+.navigation-sidebar row:selected:hover {
+    background: none;
+    box-shadow: none;
+}
+.navigation-sidebar row:hover {
+    background-color: alpha(@window_fg_color, 0.04);
 }
 .search-bar-box {
-    border-bottom: 1px solid alpha(@borders, 0.32);
-    padding: 4px 6px 4px;
+    border-bottom: 1px solid alpha(#dfe4de, 0.08);
+    padding: 6px 8px 6px;
 }
 .search-entry-shell {
-    background-color: alpha(@window_fg_color, 0.065);
-    border: 1px solid alpha(@borders, 0.12);
-    border-radius: 11px;
+    background:
+        linear-gradient(180deg, alpha(white, 0.03), alpha(white, 0.01)),
+        alpha(#121715, 0.92);
+    border: 1px solid alpha(#dfe4de, 0.10);
+    border-radius: 13px;
+    min-height: 34px;
+}
+.sorting-toolbar {
+    padding: 4px 8px 8px;
+    border-bottom: 1px solid alpha(#dfe4de, 0.08);
+}
+.sorting-toggle {
+    min-width: 26px;
+    min-height: 26px;
+    padding: 3px;
+    border-radius: 8px;
+    color: alpha(#b7beb8, 0.80);
+    background-color: alpha(#121715, 0.90);
+    border: 1px solid alpha(#dfe4de, 0.06);
+}
+.sorting-toggle image {
+    color: inherit;
+}
+.sorting-toggle:hover {
+    background-color: alpha(#18211d, 0.96);
+    color: #f2efe8;
+}
+.sorting-toggle.active {
+    background-color: alpha(#1b2621, 0.98);
+    color: #f2efe8;
+    border-color: alpha(#74a48d, 0.26);
+}
+.load-older-toolbar {
+    min-height: 26px;
+    padding: 0px 10px;
+    border-radius: 999px;
+    color: alpha(#b7beb8, 0.82);
+    background-color: alpha(#121715, 0.88);
+    border: 1px solid alpha(#dfe4de, 0.10);
+    font-size: 0.82em;
+    font-weight: 700;
+}
+.load-older-toolbar:hover {
+    background-color: alpha(#18211d, 0.96);
+    color: #f2efe8;
+    border-color: alpha(#dfe4de, 0.18);
+}
+.load-older-toolbar:disabled {
+    opacity: 0.88;
+}
+.startup-status-panel {
+    background: radial-gradient(circle at top left, alpha(#74a48d, 0.12), transparent 34%),
+                radial-gradient(circle at top right, alpha(#a8d1c0, 0.06), transparent 28%),
+                linear-gradient(180deg, alpha(#ffffff, 0.01), alpha(#000000, 0.00));
+}
+.startup-status-card {
+    border-radius: 28px;
+    border: 1px solid alpha(#dfe4de, 0.08);
+    background:
+        linear-gradient(180deg, alpha(white, 0.03), alpha(white, 0.01)),
+        alpha(#121715, 0.94);
+    box-shadow: 0 18px 34px alpha(@window_fg_color, 0.12);
+}
+.startup-status-hero {
+    padding: 22px 22px 16px;
+    border-bottom: 1px solid alpha(#dfe4de, 0.08);
+}
+.startup-status-orb {
+    min-width: 78px;
+    min-height: 78px;
+    border-radius: 26px;
+    background-image: linear-gradient(180deg, alpha(@accent_color, 0.22), alpha(@accent_color, 0.08));
+    box-shadow: inset 0 0 0 1px alpha(@accent_color, 0.24);
+}
+.startup-status-orb image {
+    color: @accent_color;
+}
+.startup-status-heading {
+    font-size: 1.38em;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+}
+.startup-status-subtitle {
+    color: alpha(#b7beb8, 0.80);
+    font-size: 0.90em;
+    line-height: 1.35;
+}
+.startup-status-mood {
+    color: alpha(#b7beb8, 0.70);
+    font-size: 0.83em;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+.startup-status-progress {
+    min-height: 10px;
+    margin-top: 4px;
+}
+.startup-status-progress trough {
+    border-radius: 999px;
+    background-color: alpha(#dfe4de, 0.08);
+}
+.startup-status-progress progress {
+    border-radius: 999px;
+    background-image: linear-gradient(90deg, alpha(#74a48d, 0.95), alpha(#24362d, 0.82));
+}
+.startup-status-summary {
+    color: #f2efe8;
+    font-size: 0.82em;
+    font-weight: 800;
+    padding: 5px 11px;
+    border-radius: 999px;
+    background-color: alpha(#121715, 0.92);
+    border: 1px solid alpha(#dfe4de, 0.08);
+}
+.startup-status-list {
+    background: transparent;
+    padding: 8px 4px 4px;
+}
+.startup-status-issues {
+    padding: 4px 8px 2px;
+}
+.startup-status-issues-title {
+    color: alpha(#b7beb8, 0.68);
+    font-size: 0.72em;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+.startup-status-issue-row {
+    padding: 8px 10px;
+    border-radius: 14px;
+    background-color: alpha(#121715, 0.88);
+    border: 1px solid alpha(#dfe4de, 0.08);
+}
+.startup-status-issue-icon {
+    margin-top: 2px;
+}
+.startup-status-issue-title {
+    font-size: 0.82em;
+    font-weight: 800;
+}
+.startup-status-issue-detail {
+    color: alpha(#b7beb8, 0.78);
+    font-size: 0.78em;
+    line-height: 1.25;
+}
+.startup-status-issue-row.state-warning .startup-status-issue-icon,
+.startup-status-issue-row.state-warning .startup-status-issue-title {
+    color: alpha(@warning_color, 0.98);
+}
+.startup-status-issue-row.state-warning .startup-status-issue-detail {
+    color: alpha(#e0b66f, 0.84);
+}
+.startup-status-issue-row.state-warning .startup-status-strip {
+    background-color: alpha(@warning_color, 0.92);
+}
+.startup-status-issue-row.state-error .startup-status-issue-icon,
+.startup-status-issue-row.state-error .startup-status-issue-title {
+    color: alpha(@error_color, 0.98);
+}
+.startup-status-issue-row.state-error .startup-status-issue-detail {
+    color: alpha(#da6e63, 0.84);
+}
+.startup-status-issue-row.state-error .startup-status-strip {
+    background-color: alpha(@error_color, 0.92);
+}
+.startup-status-close {
+    padding: 0px 12px;
+    border-radius: 999px;
+    min-height: 28px;
+    font-weight: 700;
+}
+.startup-status-row.state-pending .startup-status-strip {
+    background-color: alpha(#b7beb8, 0.18);
+}
+.startup-status-row.state-checking .startup-status-strip {
+    background-color: alpha(#74a48d, 0.86);
+}
+.startup-status-row.state-ready .startup-status-strip {
+    background-color: alpha(#6f9b73, 0.92);
+}
+.startup-status-row.state-warning .startup-status-strip {
+    background-color: alpha(#e0b66f, 0.92);
+}
+.startup-status-row.state-error .startup-status-strip {
+    background-color: alpha(#da6e63, 0.92);
+}
+.startup-status-row.state-warning .startup-status-title,
+.startup-status-row.state-warning .startup-status-detail,
+.startup-status-row.state-warning .startup-status-indicator,
+.startup-status-row.state-warning .startup-status-indicator image {
+    color: alpha(#e0b66f, 0.98);
+}
+.startup-status-row.state-error .startup-status-title,
+.startup-status-row.state-error .startup-status-detail,
+.startup-status-row.state-error .startup-status-indicator,
+.startup-status-row.state-error .startup-status-indicator image {
+    color: alpha(#da6e63, 0.98);
+}
+.welcome-screen,
+.welcome-settings-shell {
+    background-color: #0b0f0d;
+    background:
+        radial-gradient(circle at 16% 14%, alpha(#2b5f4e, 0.20), transparent 34%),
+        radial-gradient(circle at 84% 10%, alpha(#476a61, 0.14), transparent 28%),
+        linear-gradient(180deg, #090c0b 0%, #0d1110 56%, #0a0d0c 100%);
+}
+.welcome-scene {
+    background: transparent;
+    opacity: 0.64;
+}
+.welcome-window-close {
+    min-width: 32px;
     min-height: 32px;
+    margin-top: 1px;
+    border-radius: 999px;
+    color: #ffffff;
+    background: transparent;
+    background-color: transparent;
+    border: 1px solid transparent;
+    box-shadow: none;
+}
+.welcome-window-close:hover {
+    color: #ffffff;
+    background: transparent;
+    background-color: transparent;
+    border-color: transparent;
+}
+.welcome-wash {
+    background:
+        radial-gradient(circle at 52% 14%, alpha(#2b5f4e, 0.18), transparent 36%),
+        radial-gradient(circle at 18% 22%, alpha(#4d6f63, 0.10), transparent 30%),
+        linear-gradient(180deg, alpha(#020302, 0.12), alpha(#050706, 0.60) 68%, alpha(#060908, 0.94));
+}
+.welcome-firefly {
+    min-width: 4px;
+    min-height: 4px;
+    border-radius: 999px;
+    background-color: alpha(#f2efe8, 0.92);
+    box-shadow: 0 0 10px alpha(#f2efe8, 0.20), 0 0 20px alpha(#74a48d, 0.12);
+    animation: hermod-firefly-twinkle 6.5s ease-in-out infinite;
+}
+.welcome-firefly.firefly-a { opacity: 0.90; }
+.welcome-firefly.firefly-b { animation-delay: -1.4s; }
+.welcome-firefly.firefly-b { opacity: 0.70; }
+.welcome-firefly.firefly-c { animation-delay: -2.8s; }
+.welcome-firefly.firefly-c { opacity: 0.80; }
+.welcome-firefly.firefly-d { animation-delay: -4.1s; }
+.welcome-firefly.firefly-d { opacity: 0.60; }
+.welcome-firefly.firefly-e { animation-delay: -0.7s; }
+.welcome-firefly.firefly-e { opacity: 0.70; }
+@keyframes hermod-firefly-twinkle {
+    0% { transform: scale(0.82); opacity: 0.24; }
+    45% { transform: scale(1.00); opacity: 0.88; }
+    100% { transform: scale(0.82); opacity: 0.24; }
+}
+.welcome-stage {
+    min-height: 0;
+}
+.welcome-hero {
+    min-height: 0;
+}
+.welcome-mark {
+    min-width: 248px;
+    min-height: 248px;
+    opacity: 1.0;
+    box-shadow: 0 22px 56px alpha(black, 0.22);
+}
+.welcome-tagline {
+    font-size: 0.72em;
+    font-weight: 800;
+    letter-spacing: 0.32em;
+    color: alpha(#b7beb8, 0.88);
+    margin-top: 8px;
+    font-family: "DejaVu Sans", sans-serif;
+}
+.welcome-summary {
+    font-size: 1.05em;
+    line-height: 1.54;
+    margin-top: 32px;
+    font-weight: 400;
+    color: alpha(#b7beb8, 0.82);
+    font-family: serif, "Times New Roman", FreeSerif, serif;
+}
+.welcome-divider-box {
+    margin-top: 24px;
+    min-width: 380px;
+}
+.welcome-divider-line {
+    opacity: 0.18;
+    margin-top: 1px;
+}
+.welcome-divider-mark {
+    font-size: 0.72em;
+    color: alpha(#b7beb8, 0.32);
+    font-weight: 300;
+}
+.onboarding-provider-grid {
+    margin-top: 28px;
+}
+.provider-tile {
+    min-width: 84px;
+    min-height: 84px;
+    border-radius: 18px;
+    border: 1px solid transparent;
+    background: transparent;
+    box-shadow: none;
+    padding: 0;
+    color: #ffffff;
+    transition: background-color 0.22s ease, border-color 0.22s ease, transform 0.22s ease;
+}
+.provider-tile:focus,
+.provider-tile:focus-within {
+    box-shadow: none;
+    outline: none;
+}
+.provider-tile:hover {
+    background-color: alpha(#ffffff, 0.06);
+    border-color: alpha(#dfe4de, 0.12);
+    transform: scale(1.04);
+}
+.provider-tile-gmail:hover { background-color: alpha(#ea4335, 0.10); border-color: alpha(#ea4335, 0.20); }
+.provider-tile-proton:hover { background-color: alpha(#7c4dff, 0.10); border-color: alpha(#7c4dff, 0.20); }
+.provider-tile-microsoft:hover { background-color: alpha(#0078d4, 0.10); border-color: alpha(#0078d4, 0.20); }
+.provider-tile-imap-smtp:hover { background-color: alpha(#ff6a3d, 0.10); border-color: alpha(#ff6a3d, 0.20); }
+.provider-tile-icon {
+    min-width: 28px;
+    min-height: 28px;
+    color: currentColor;
+}
+.onboarding-account-bullet {
+    min-width: 14px;
+    min-height: 14px;
+    color: #ffffff;
+}
+.provider-logo-badge {
+    min-width: 28px;
+    min-height: 28px;
+    border-radius: 10px;
+    background: transparent;
+    border: none;
+    color: currentColor;
+}
+.provider-logo-badge-text {
+    font-size: 0.84em;
+    font-weight: 800;
+}
+.welcome-close-icon,
+.onboarding-open-icon {
+    min-width: 18px;
+    min-height: 18px;
+    color: #ffffff;
+}
+.onboarding-accounts {
+    margin-top: 10px;
+}
+.onboarding-section-title {
+    font-size: 0.74em;
+    font-weight: 800;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: alpha(#b7beb8, 0.72);
+}
+.onboarding-accounts-list {
+    padding: 2px 0 0;
+}
+.onboarding-accounts-empty {
+    color: alpha(#b7beb8, 0.68);
+    font-size: 0.92em;
+}
+.onboarding-account-row {
+    padding: 4px 0;
+    border-radius: 0;
+    background: transparent;
+    border: none;
+}
+.onboarding-account-bullet {
+    min-width: 14px;
+    min-height: 14px;
+    color: #ffffff;
+}
+.onboarding-account-accent {
+    min-width: 4px;
+    min-height: 30px;
+    border-radius: 999px;
+}
+.onboarding-account-title {
+    font-size: 0.90em;
+    font-weight: 700;
+}
+.onboarding-account-subtitle {
+    font-size: 0.74em;
+    color: alpha(#b7beb8, 0.72);
+}
+.onboarding-open-btn {
+    margin-top: 22px;
+    min-height: 36px;
+    min-width: 196px;
+    border-radius: 999px;
+    font-weight: 800;
+}
+.onboarding-modal-content {
+    background: transparent;
+}
+.onboarding-modal-header {
+    margin-bottom: 2px;
+}
+.onboarding-modal-title {
+    font-size: 1.28em;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: #f2efe8;
+}
+.onboarding-modal-subtitle {
+    font-size: 0.92em;
+    color: alpha(#b7beb8, 0.76);
+}
+.onboarding-modal-frame {
+    border-radius: 24px;
+    border: 1px solid alpha(#dfe4de, 0.10);
+    background:
+        linear-gradient(180deg, alpha(white, 0.04), alpha(white, 0.01)),
+        alpha(#111614, 0.96);
+    box-shadow: 0 18px 46px alpha(black, 0.20);
+}
+.onboarding-modal-scroller,
+.onboarding-modal-scroller viewport {
+    background: transparent;
+}
+.welcome-settings-stage {
+    min-height: 760px;
+}
+.welcome-settings-header {
+    min-height: 68px;
+}
+.welcome-settings-back {
+    margin-top: 8px;
+}
+.welcome-settings-title {
+    font-size: 1.54em;
+    font-weight: 860;
+    letter-spacing: -0.04em;
+    color: #f2efe8;
+    font-family: Georgia, "Times New Roman", serif;
+}
+.welcome-settings-subtitle {
+    font-size: 0.94em;
+    line-height: 1.38;
+    color: alpha(#b7beb8, 0.78);
 }
 .search-entry-shell:focus-within {
-    border-color: alpha(@borders, 0.12);
+    border-color: alpha(#74a48d, 0.22);
     box-shadow: none;
 }
 .search-entry-tab {
@@ -136,11 +665,11 @@ CSS = """
     outline: none;
 }
 .search-entry-icon {
-    color: alpha(@window_fg_color, 0.52);
+    color: alpha(#b7beb8, 0.58);
 }
 .sidebar-actions {
-    padding: 3px 10px 5px;
-    border-bottom: 1px solid alpha(@borders, 0.22);
+    padding: 4px 10px 8px;
+    border-bottom: 1px solid alpha(#dfe4de, 0.10);
 }
 .sidebar-action-btn {
     padding-top: 0px;
@@ -153,13 +682,15 @@ CSS = """
     background-color: alpha(@accent_color, 0.12);
 }
 .sidebar-compose-label {
-    font-weight: 600;
+    font-size: 0.76em;
+    font-weight: 800;
+    letter-spacing: 0.06em;
 }
 .sync-control {
     padding: 0px;
     border-radius: 10px;
-    border: 1px solid alpha(@borders, 0.16);
-    background-color: alpha(@window_fg_color, 0.04);
+    border: 1px solid alpha(#dfe4de, 0.10);
+    background-color: alpha(#121715, 0.88);
 }
 .sync-control box,
 .sync-control label,
@@ -168,12 +699,12 @@ CSS = """
     background: transparent;
 }
 .sync-control.sync-online {
-    background-color: rgba(46, 204, 113, 0.10);
-    color: rgba(214, 255, 229, 0.96);
+    background-color: rgba(111, 155, 115, 0.16);
+    color: rgba(242, 239, 232, 0.96);
 }
 .sync-control.sync-offline {
-    background-color: rgba(229, 57, 53, 0.12);
-    color: rgba(255, 213, 210, 0.96);
+    background-color: rgba(218, 110, 99, 0.16);
+    color: rgba(242, 239, 232, 0.96);
 }
 .sync-left-side {
     padding: 0px;
@@ -186,30 +717,31 @@ CSS = """
 .sync-divider {
     min-width: 1px;
     min-height: 30px;
-    background-color: alpha(@borders, 0.72);
+    background-color: alpha(#dfe4de, 0.28);
     border-radius: 999px;
 }
 .sync-auto-label {
     font-size: 0.60em;
     font-weight: 700;
     letter-spacing: 0.07em;
-    color: alpha(@window_fg_color, 0.60);
-}
-.sync-control.sync-online .sync-auto-label {
-    color: rgba(49, 187, 112, 0.94);
-}
-.sync-control.sync-offline .sync-auto-label {
-    color: rgba(255, 160, 155, 0.94);
+    color: alpha(#b7beb8, 0.62);
 }
 .sync-auto-value {
-    font-size: 0.74em;
-    font-weight: 700;
+    font-size: 0.76em;
+    font-weight: 800;
+    letter-spacing: 0.06em;
 }
 .sync-control.sync-online .sync-auto-value {
-    color: rgba(49, 187, 112, 0.96);
+    color: rgba(159, 201, 166, 0.96);
 }
 .sync-control.sync-offline .sync-auto-value {
-    color: rgba(255, 213, 210, 0.98);
+    color: rgba(242, 239, 232, 0.98);
+}
+.sync-control.sync-syncing .sync-auto-value {
+    color: rgba(159, 201, 166, 0.86);
+}
+.sync-control.sync-syncing .sync-online-icon {
+    animation: hermod-spin 1s linear infinite;
 }
 .sync-control.sync-online .sync-divider {
     background-color: alpha(@borders, 0.52);
@@ -218,11 +750,11 @@ CSS = """
     background-color: alpha(@borders, 0.52);
 }
 .sync-online-icon {
-    color: rgba(49, 187, 112, 0.98);
+    color: rgba(159, 201, 166, 0.98);
     padding: 0;
 }
 .sync-control.sync-offline .sync-online-icon {
-    color: rgba(229, 57, 53, 0.98);
+    color: rgba(218, 110, 99, 0.98);
 }
 .sync-offline-label {
     font-weight: 700;
@@ -239,19 +771,23 @@ CSS = """
     margin: 2px;
 }
 .attachment-bar {
-    border-top: 1px solid alpha(@borders, 0.24);
-    background-color: alpha(@window_fg_color, 0.03);
+    border-top: 1px solid alpha(#dfe4de, 0.08);
+    background:
+        linear-gradient(180deg, alpha(white, 0.02), alpha(white, 0.00)),
+        alpha(#121715, 0.94);
     padding: 6px 10px 8px;
 }
 .thread-reply-bar {
-    border-top: 1px solid alpha(@borders, 0.24);
-    background-color: alpha(@window_bg_color, 0.92);
+    border-top: 1px solid alpha(#dfe4de, 0.08);
+    background:
+        linear-gradient(180deg, alpha(white, 0.02), alpha(white, 0.00)),
+        alpha(#101312, 0.96);
     padding: 8px 10px 10px;
 }
 .thread-reply-editor {
     min-height: 62px;
-    background-color: alpha(@window_fg_color, 0.03);
-    border: 1px solid alpha(@borders, 0.18);
+    background-color: alpha(#121715, 0.92);
+    border: 1px solid alpha(#dfe4de, 0.10);
     border-radius: 12px;
     padding: 8px 10px;
 }
@@ -261,8 +797,10 @@ CSS = """
     font-weight: 700;
 }
 .message-info-bar {
-    border-bottom: 1px solid alpha(@borders, 0.22);
-    background-color: alpha(@window_bg_color, 0.62);
+    border-bottom: 1px solid alpha(#dfe4de, 0.08);
+    background:
+        linear-gradient(180deg, alpha(white, 0.02), alpha(white, 0.00)),
+        alpha(#101312, 0.96);
     padding: 8px 12px 7px;
     min-height: 58px;
 }
@@ -280,83 +818,112 @@ CSS = """
     padding: 0px 10px;
     font-size: 0.82em;
     font-weight: 700;
+    border-radius: 999px;
+    background-color: alpha(#121715, 0.90);
+    border: 1px solid alpha(#dfe4de, 0.10);
+    color: alpha(#f2efe8, 0.82);
 }
 .thread-tab {
-    border-radius: 999px 0px 0px 999px;
-    padding: 0px 12px 0px 14px;
-    min-height: 30px;
+    border-radius: 999px;
+    padding: 0px 14px;
+    min-height: 28px;
+    background-color: alpha(#121715, 0.90);
+    border: 1px solid alpha(#dfe4de, 0.10);
+    transition: all 120ms ease;
+}
+.thread-tab:hover {
+    background-color: alpha(#18211d, 0.96);
+    border-color: alpha(#dfe4de, 0.18);
+}
+.thread-msg-count {
+    font-size: 0.76em;
+    font-weight: 800;
+    opacity: 0.90;
+    font-variant-numeric: tabular-nums;
 }
 .thread-info-button.active {
-    background-color: alpha(@accent_color, 0.14);
-    color: @accent_fg_color;
-    box-shadow: inset 0 0 0 1px alpha(@accent_color, 0.24);
+    background-color: rgba(116, 164, 141, 0.18);
+    color: #f2efe8;
+    border-color: rgba(116, 164, 141, 0.28);
+    box-shadow: none;
 }
 .thread-info-senders {
     margin-top: 5px;
 }
 .message-info-sender-line {
-    color: alpha(@window_fg_color, 0.80);
+    color: alpha(#b7beb8, 0.82);
 }
 .message-info-subject {
     font-size: 0.92em;
     font-weight: 700;
-    color: alpha(@window_fg_color, 0.94);
+    color: #f2efe8;
     letter-spacing: 0.01em;
     min-height: 18px;
     line-height: 1.2;
+    font-family: Georgia, "Times New Roman", serif;
 }
 .message-info-sender {
     font-size: 0.80em;
     font-weight: 400;
-    color: alpha(@window_fg_color, 0.80);
+    color: alpha(#b7beb8, 0.84);
     line-height: 1.10;
+}
+.message-info-accent {
+    min-width: 4px;
+    min-height: 24px;
+    border-radius: 999px;
 }
 .message-info-date {
     font-size: 0.80em;
     font-weight: 400;
-    color: alpha(@window_fg_color, 0.80);
+    color: alpha(#b7beb8, 0.80);
     line-height: 1.10;
 }
 .message-info-title {
     font-size: 0.88em;
     font-weight: 700;
-    color: alpha(@window_fg_color, 0.94);
+    color: #f2efe8;
     letter-spacing: 0.01em;
 }
 .message-info-meta {
     font-size: 0.78em;
-    color: alpha(@window_fg_color, 0.68);
+    color: alpha(#b7beb8, 0.72);
 }
 .reading-pane-shell {
-    background-color: alpha(@window_bg_color, 0.90);
+    background:
+        radial-gradient(circle at 50% 0%, alpha(#74a48d, 0.03), transparent 34%),
+        linear-gradient(180deg, alpha(white, 0.01), alpha(white, 0.00)),
+        alpha(#0f1311, 0.96);
     border: none;
     border-radius: 0;
 }
 .thread-sidebar-dim {
-    background-color: alpha(@window_bg_color, 0.10);
+    background-color: alpha(#0f1311, 0.10);
 }
 .thread-sidebar {
-    border-left: 1px solid alpha(@borders, 0.18);
-    background-color: alpha(@window_bg_color, 0.96);
+    border-left: 1px solid alpha(#dfe4de, 0.08);
+    background:
+        linear-gradient(180deg, alpha(white, 0.02), alpha(white, 0.00)),
+        alpha(#0f1311, 0.98);
     min-width: 330px;
 }
 .thread-sidebar-list {
-    padding: 8px 0px 10px;
+    padding: 6px 0px 8px;
 }
 .thread-sidebar-row {
     border-radius: 12px;
-    margin: 4px 10px;
-    padding: 8px 10px;
+    margin: 3px 10px;
+    padding: 7px 10px;
 }
 .thread-sidebar-row:selected {
-    background-color: alpha(@accent_color, 0.11);
+    background-color: rgba(116, 164, 141, 0.14);
 }
 .thread-sidebar-row:hover {
-    background-color: alpha(@window_fg_color, 0.04);
+    background-color: alpha(#dfe4de, 0.04);
 }
 .thread-sidebar-avatar {
-    min-width: 30px;
-    min-height: 30px;
+    min-width: 28px;
+    min-height: 28px;
     border-radius: 999px;
     color: #ffffff;
     font-size: 0.70em;
@@ -364,20 +931,20 @@ CSS = """
     letter-spacing: 0.02em;
 }
 .thread-sidebar-avatar.generic {
-    background-color: alpha(@window_fg_color, 0.22);
-    color: alpha(@window_fg_color, 0.86);
+    background-color: alpha(#dfe4de, 0.10);
+    color: alpha(#f2efe8, 0.84);
 }
 .thread-sidebar-sender {
-    font-size: 0.86em;
+    font-size: 0.84em;
     font-weight: 700;
 }
 .thread-sidebar-snippet {
-    font-size: 0.76em;
-    color: alpha(@window_fg_color, 0.68);
+    font-size: 0.75em;
+    color: alpha(#b7beb8, 0.72);
 }
 .thread-sidebar-time {
-    font-size: 0.74em;
-    color: alpha(@window_fg_color, 0.70);
+    font-size: 0.72em;
+    color: alpha(#b7beb8, 0.72);
 }
 .thread-sidebar-strip {
     min-width: 4px;
@@ -409,54 +976,129 @@ CSS = """
     box-shadow: none;
 }
 .message-column {
-    background-color: alpha(@window_fg_color, 0.028);
-    border-radius: 14px;
+    background:
+        linear-gradient(180deg, alpha(white, 0.015), alpha(white, 0.00)),
+        alpha(#101312, 0.96);
+    border-radius: 16px;
+    border: 1px solid alpha(#dfe4de, 0.08);
 }
 .attachment-chip {
     border-radius: 8px;
-    border: 1px solid alpha(@borders, 0.24);
+    border: 1px solid alpha(#dfe4de, 0.10);
 }
 .countdown-lbl {
     font-family: monospace;
     font-variant-numeric: tabular-nums;
     font-size: 0.72em;
-    color: alpha(@window_fg_color, 0.45);
+    color: alpha(#b7beb8, 0.48);
     min-width: 54px;
 }
 .countdown-hint {
     font-size: 0.62em;
-    color: alpha(@window_fg_color, 0.42);
+    color: alpha(#b7beb8, 0.42);
     line-height: 1.0;
 }
 """
 
-ACCOUNT_PALETTE = [
-    '#4c7fff',
-    '#16a085',
-    '#e67e22',
-    '#c05dff',
-    '#e74c3c',
-    '#2ecc71',
-    '#f1c40f',
-    '#3498db',
+ACCOUNT_SAFE_PALETTE = [
+    "#6f7f79",
+    "#4f6b65",
+    "#55735a",
+    "#6b7f93",
+    "#85745f",
+    "#7c675f",
+    "#586b62",
+    "#6d7784",
 ]
+
+ACCOUNT_PALETTE = ACCOUNT_SAFE_PALETTE
 
 
 def account_class_for_index(idx):
-    return f'account-accent-{idx % len(ACCOUNT_PALETTE)}'
+    return f"account-accent-{idx % len(ACCOUNT_PALETTE)}"
+
+
+def _hex_rgb_tuple(hex_color, fallback=(120, 120, 120)):
+    value = str(hex_color or "").strip().lstrip("#")
+    if len(value) != 6:
+        return fallback
+    try:
+        return tuple(int(value[i : i + 2], 16) for i in (0, 2, 4))
+    except Exception:
+        return fallback
+
+
+def nearest_account_palette_index(hex_color, fallback_index=0):
+    target = _hex_rgb_tuple(hex_color)
+    best_index = fallback_index % len(ACCOUNT_PALETTE)
+    best_distance = None
+    for index, color in enumerate(ACCOUNT_PALETTE):
+        candidate = _hex_rgb_tuple(color)
+        distance = sum((target[i] - candidate[i]) ** 2 for i in range(3))
+        if best_distance is None or distance < best_distance:
+            best_index = index
+            best_distance = distance
+    return best_index
+
+
+def account_class_for_color(hex_color, fallback_index=0):
+    return account_class_for_index(
+        nearest_account_palette_index(hex_color, fallback_index)
+    )
+
+
+def apply_accent_css_class(
+    widget,
+    hex_color="",
+    fallback_index=0,
+    *,
+    attr_name="_hermod_accent_css_class",
+):
+    css_class = account_class_for_color(hex_color, fallback_index)
+    current = getattr(widget, attr_name, "")
+    if current and current != css_class:
+        try:
+            widget.remove_css_class(current)
+        except Exception:
+            pass
+    if css_class and current != css_class:
+        try:
+            widget.add_css_class(css_class)
+        except Exception:
+            pass
+    setattr(widget, attr_name, css_class)
+    return css_class
 
 
 def _hex_to_rgba(hex_color, alpha=1.0):
-    hex_color = hex_color.lstrip('#')
+    hex_color = hex_color.lstrip("#")
     if len(hex_color) != 6:
-        return f'rgba(120,120,120,{alpha})'
+        return f"rgba(120,120,120,{alpha})"
     r = int(hex_color[0:2], 16)
     g = int(hex_color[2:4], 16)
     b = int(hex_color[4:6], 16)
-    return f'rgba({r},{g},{b},{alpha})'
+    return f"rgba({r},{g},{b},{alpha})"
 
 
-def build_compose_account_css():
+def contrasting_foreground(hex_color, light="#ffffff", dark="#111111"):
+    hex_color = str(hex_color or "").strip().lstrip("#")
+    if len(hex_color) != 6:
+        return dark
+    try:
+        r = int(hex_color[0:2], 16) / 255.0
+        g = int(hex_color[2:4], 16) / 255.0
+        b = int(hex_color[4:6], 16) / 255.0
+    except Exception:
+        return dark
+
+    def _linear(c):
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+    luminance = 0.2126 * _linear(r) + 0.7152 * _linear(g) + 0.0722 * _linear(b)
+    return dark if luminance > 0.46 else light
+
+
+def build_compose_account_css(backends=None):
     parts = []
     parts.append(
         """
@@ -511,40 +1153,112 @@ def build_compose_account_css():
 }}
 """
         )
-    return ''.join(parts)
+    return "".join(parts)
 
 
-def build_window_account_css():
+def build_window_account_css(backends=None):
     parts = []
     for i, color in enumerate(ACCOUNT_PALETTE):
         cls = account_class_for_index(i)
         glow = _hex_to_rgba(color, 0.14)
-        glow_selected = _hex_to_rgba(color, 0.22)
-        strip = _hex_to_rgba(color, 0.95)
-        label = _hex_to_rgba(color, 0.88)
+        label = contrasting_foreground(color)
+        connector = _hex_to_rgba(color, 0.22)
+        acct_bg = _hex_to_rgba(color, 0.09)
         parts.append(
             f"""
 .email-row.{cls} {{
     background-image: linear-gradient(to left, {glow}, rgba(0,0,0,0));
 }}
-.email-row.{cls}:selected,
-.email-row.{cls}.selected {{
-    background-image: linear-gradient(to left, {glow_selected}, rgba(0,0,0,0));
-}}
-.navigation-sidebar row.{cls} .account-accent-strip {{
-    background-color: {strip};
-}}
 .navigation-sidebar row.{cls} .account-accent-label {{
     color: {label};
+}}
+.navigation-sidebar row.{cls}.account-section-header {{
+    background-color: {acct_bg};
+    border-radius: 7px;
+}}
+.navigation-sidebar row.{cls}.account-section-header .account-accent-label {{
+    color: {label};
+}}
+.navigation-sidebar row.{cls}.account-section-header .folder-count {{
+    color: {label};
+}}
+.navigation-sidebar row.{cls}.account-section-header .account-health-icon {{
+    color: alpha({label}, 0.92);
+}}
+.navigation-sidebar row.{cls}.account-section-header .folder-count-dim {{
+    color: {label};
+    opacity: 0.72;
+}}
+.navigation-sidebar row.{cls} .folder-connector {{
+    background-image: linear-gradient({connector}, {connector}), linear-gradient({connector}, {connector});
+    background-size: 1px 100%, 10px 1px;
+    background-position: 0 0, 0 50%;
+    background-repeat: no-repeat;
+}}
+.navigation-sidebar row.{cls} .folder-connector-last {{
+    background-image: linear-gradient({connector}, {connector}), linear-gradient({connector}, {connector});
+    background-size: 1px 50%, 10px 1px;
+    background-position: 0 0, 0 50%;
+    background-repeat: no-repeat;
 }}
 """
         )
     parts.append(
         """
 .navigation-sidebar row .folder-count.folder-count-dim {
-    background-color: alpha(@window_fg_color, 0.04);
     color: alpha(@window_fg_color, 0.42);
+}
+/* Selected state overrides per-account gradient — must come last */
+.message-list-view .email-row.selected {
+    background-image: none;
+    background-color: alpha(@accent_color, 0.08);
+    box-shadow: inset 3px 0 0 0 @accent_color;
+}
+.message-list-view row:hover .email-row.selected {
+    background-color: alpha(@accent_color, 0.12);
 }
 """
     )
-    return ''.join(parts)
+    return "".join(parts)
+
+
+def _build_shared_account_accent_css():
+    parts = []
+    for i, color in enumerate(ACCOUNT_PALETTE):
+        cls = account_class_for_index(i)
+        fg = contrasting_foreground(color)
+        muted = _hex_to_rgba(color, 0.74)
+        strong = _hex_to_rgba(color, 0.92)
+        parts.append(
+            f"""
+.account-color-preview.{cls},
+.account-color-chip.{cls},
+.onboarding-account-row.{cls} .onboarding-account-accent,
+.message-info-accent.{cls},
+.thread-sidebar-row.{cls} .thread-sidebar-strip {{
+    background-color: {strong};
+}}
+.account-color-chip.{cls},
+.thread-sidebar-row.{cls} .thread-sidebar-avatar {{
+    color: {fg};
+}}
+.thread-sidebar-row.{cls} .thread-sidebar-avatar {{
+    background-color: {strong};
+}}
+.onboarding-account-row.{cls} .onboarding-account-title,
+.thread-sidebar-row.{cls} .thread-sidebar-sender,
+.message-info-sender.{cls} {{
+    color: {strong};
+}}
+.onboarding-account-row.{cls} .onboarding-account-subtitle {{
+    color: {muted};
+}}
+.account-color-chip.{cls} label {{
+    color: {fg};
+}}
+"""
+        )
+    return "".join(parts)
+
+
+CSS += _build_shared_account_accent_css()

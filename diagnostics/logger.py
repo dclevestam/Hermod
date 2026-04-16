@@ -21,7 +21,7 @@ except ImportError:
     from diagnostics.redact import redact_text, redact_value
 
 
-_DIAGNOSTICS_DIR = Path(GLib.get_user_cache_dir()) / 'lark' / 'diagnostics'
+_DIAGNOSTICS_DIR = Path(GLib.get_user_cache_dir()) / 'hermod' / 'diagnostics'
 _EVENTS_FILE = _DIAGNOSTICS_DIR / 'events.jsonl'
 _MAX_EVENT_BYTES = 256 * 1024
 _MAX_EVENT_LINES = 400
@@ -146,7 +146,10 @@ def log_startup_summary(backends):
         'startup',
         level='info',
         message='Application started',
-        context={'backend_count': len(backends or []), 'providers': provider_counts},
+        context={
+            'backend_count': len(backends or []),
+            'providers': provider_counts,
+        },
         persist=True,
     )
 

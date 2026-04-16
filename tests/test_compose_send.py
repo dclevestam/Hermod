@@ -92,6 +92,37 @@ class ComposeSendTests(unittest.TestCase):
         view.mark_clean.assert_called_once_with()
         view._finish_close.assert_called_once_with()
 
+    def test_on_send_supports_bcc_string_recipients(self):
+        view = ComposeView.__new__(ComposeView)
+        backend = mock.Mock()
+        parent = mock.Mock()
+        app = mock.Mock()
+        parent.get_application.return_value = app
+        view._parent = parent
+        view._reply_to_msg = None
+        view._attachments = []
+        view.to_entry = _DummyEntry('alice@example.com')
+        view.subject_entry = _DummyEntry('Subject')
+        view.send_btn = _DummyButton()
+        view._bcc_switch = SimpleNamespace(get_active=lambda: True)
+        view._get_selected_backend = lambda: backend
+        view._current_backend_identity = lambda: 'sender@example.com'
+        view._buffer_to_plain_text = lambda: 'hello'
+        view._buffer_to_html = lambda: '<p>hello</p>'
+        view.mark_clean = mock.Mock()
+        view._finish_close = mock.Mock()
+
+        with mock.patch.object(compose_module.GLib, 'idle_add', side_effect=lambda fn, *args: fn(*args)):
+            with mock.patch.object(compose_module.threading, 'Thread', _ImmediateThread):
+                view._on_send(None)
+
+        backend.send_message.assert_called_once()
+        args, kwargs = backend.send_message.call_args
+        self.assertEqual(kwargs.get('bcc'), ['sender@example.com'])
+        self.assertEqual(args[0], 'alice@example.com')
+        self.assertEqual(args[1], 'Subject')
+        self.assertEqual(args[2], 'hello')
+
 
 if __name__ == '__main__':
     unittest.main()

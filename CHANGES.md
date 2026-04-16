@@ -1,22 +1,72 @@
-# Lark — Fixed Behaviours (do not revert)
+# Hermod — Fixed Behaviours (do not revert)
 
-## Email reading pane (window.py `_get_email_css`)
+## Account settings and startup refresh (`settings.py`, `window.py`, `accounts/*`)
 
-**Email content always renders on white background.**
-- `body { background-color: #ffffff }` — always white, never dark
-- No `* { color: !important }` overrides — emails specify their own colors
-- No `a { color: !important }` override
-- The dark frame *around* the email area comes from `webview.set_background_color()` in `_update_webview_bg()`
-- **Why:** emails are designed for white backgrounds. Forcing dark bg + light text breaks emails that specify dark text without an explicit background (dark-on-dark). Forcing light text breaks emails with explicit light backgrounds like white cards (light-on-light, e.g. Anthropic receipts).
+**Hermod now has a first-class account management section in Settings and can refresh account chrome live.**
+- The top of Settings now starts with an Add Account area with service tiles for Gmail and manual IMAP/SMTP setup
+- Existing accounts are listed underneath with settings and trash actions
+- Alias and accent color are stored locally and flow through the sidebar, compose sender picker, and account chrome
+- Manual IMAP/SMTP accounts are persisted locally with secure keyring password storage
+- Account add/remove/save now triggers a backend reload so the live UI updates without a full app restart
+- **Why:** the app should know which accounts exist, let you manage them in one place, and reflect account presentation changes immediately
 
-## Gmail localized folder names (backends.py `GmailBackend`)
+## Email reading pane (window.py `ReaderMixin`)
 
-**Folder names are resolved via `_detect_special_folders` + `_resolve_folder`.**
-- `_detect_special_folders(imap)` called on every new IMAP connection (inside `_get_imap`)
-- Parses `\Sent`, `\Drafts`, `\Trash`, `\Junk` flags from `imap.list()` → maps to actual IMAP names
-- `_resolve_folder(folder)` translates e.g. `[Gmail]/Trash` → `[Gmail]/Papperskorgen` for Swedish accounts
-- All imap operations use `_resolve_folder`: `fetch_messages`, `fetch_body`, `mark_as_read`, `mark_as_unread`, `delete_message`, `get_unread_count`
-- **Why:** Swedish (and other localized) Gmail accounts use localized folder names. Hardcoded English names like `[Gmail]/Sent Mail` cause `EXAMINE` to fail with "illegal state AUTH".
+**Email content uses an adaptive but conservative surface hint.**
+- Obvious near-white or near-black HTML surfaces are adjusted so the reader remains readable
+- The reader still leaves ambiguous or intentionally designed mail alone
+- The app theme still controls the outer chrome; only the message surface adapts when the HTML clearly needs help
+- **Why:** many HTML emails assume either a white or dark surface and become unreadable when the opposite contrast is used
+
+**The reader webview no longer executes page JavaScript for message HTML.**
+- JavaScript is disabled on the mail reading surface
+- Per-message "Original" actions now use a native Hermod URI handled by WebKit policy interception
+- The original-message dialog still opens for the selected bubble without exposing a script bridge to message HTML
+- **Why:** arbitrary email HTML should not get a script execution path just to open Hermod UI
+
+**Thread bodies open in two stages instead of waiting for every message body serially.**
+- The selected message body renders first
+- The rest of the thread bodies fetch in bounded parallel and then fill in
+- **Why:** the reader should show something useful quickly on large or slow threads instead of sitting on a long serial fetch loop
+
+**Startup unread counts now stay hidden until the boot screen closes.**
+- The startup status screen gets a short graceful close before the left-column counts appear
+- Counts are collected during boot, then rendered once the startup screen is dismissed
+- **Why:** cold start should feel deliberate, and the unread numbers should not pop in half-way through boot
+
+**Startup warnings now stay honest about fallback paths and provider errors.**
+- The boot card can show warning or error states per account instead of only a generic "ready" message
+- Gmail API failures that fall back to IMAP now surface as a warning instead of pretending everything is normal
+- Startup unread counts no longer flash a cached estimate before provider reconciliation finishes
+- **Why:** if Hermod is using a fallback or if a provider is unhealthy, the user should see that immediately
+
+**Unread-only mode now lives beside sort controls.**
+- A separate unread toggle shows only unread messages in the current view
+- Empty unread views use friendly copy like "No unread messages" and "All caught up"
+- **Why:** unread filtering should be quick to scan without turning the toolbar into a control panel
+
+**Email links now open through the native WebKit policy hook.**
+- Hermod custom `hermod://original` links still open the original-message dialog
+- Normal links are launched through the desktop default handler
+- **Why:** email content should be clickable without giving arbitrary HTML a JavaScript bridge
+
+## Gmail folder names (`providers/gmail.py`)
+
+**Gmail is API-first in the live path, with IMAP handling left as legacy compatibility.**
+- Folder browsing, thread/body fetches, flag changes, deletes, and unread counts now prefer the Gmail API
+- Labels API drives folder discovery and localized standard folder names when possible
+- IMAP helper code still exists for compatibility and edge-case fallback, but the common path no longer depends on it
+- **Why:** the Gmail backend is now intended to run without IMAP in normal use, which keeps startup and message reads noticeably faster
+
+## Native accounts and startup reconciliation (`settings.py`, `accounts/*`, `backends.py`)
+
+**Hermod now supports native Gmail and manual IMAP/SMTP accounts and reconciles account state on startup.**
+- The Settings page has a top-level Add Account section with tiles for Gmail and manual IMAP/SMTP
+- Native IMAP/SMTP accounts are stored locally with keyring-backed passwords
+- Alias, accent color, and enabled/hidden state are stored separately from credentials
+- Startup prunes stale sync state and stale local account prefs when local account inventory changes
+- Provider instances are created lazily so unopened accounts do not cost startup time
+- **Why:** the app should know which accounts exist, keep their UI metadata consistent, and avoid paying provider setup cost for accounts the user never touches
 
 ## Body cache (window.py)
 
@@ -57,10 +107,11 @@
 **Compose lives in the reading pane, not a detached top-level window.**
 - New compose, reply, and reply-all now render inside the reading-pane stack
 - Leaving compose through folder/message/settings/window navigation prompts to
-  keep editing, save a draft, or discard changes when the draft is dirty
+  keep editing or discard changes when the compose buffer is dirty
 - Compose rich text supports bold, italic, quote, list, text color, and font size
+- Manual draft saving is removed for now until there is a restore flow
 - **Why:** compose should share the same main surface and navigation model as
-  settings, while protecting draft state when the user clicks elsewhere.
+  settings, while protecting unsaved compose state when the user clicks elsewhere.
 
 ## Sidebar width and badges (window.py)
 
@@ -71,3 +122,89 @@
 - The middle message list can still be dragged wider than before
 - **Why:** the sidebar should feel stable and predictable instead of changing
   label width whenever counts change.
+
+## Live verification path (`__main__.py`)
+
+**Hermod can render its own GTK window to a PNG for Wayland verification.**
+- `python3 hermod.py --dump-ui /tmp/hermod-dump-ui.png` waits for the live surface, then writes the rendered window to a PNG and quits
+- `--dump-ui-delay-ms` and `--dump-ui-max-attempts` control the capture timing and retry budget
+- The shared Wayland tooling includes a terminal preview helper for these captures
+- **Why:** GNOME Wayland screenshot capture can be permission-sensitive, so the app-native dump path gives a reliable visual artifact for verification and debugging
+
+## Cached folder loads (providers/gmail.py, providers/imap_smtp.py)
+
+**Cached folder state now shows immediately when the incremental sync index is missing, and the backend bootstrap continues in the background.**
+- Gmail returns the stored folder cache when history metadata is not yet available
+- IMAP/SMTP returns provider cache before the live refresh path finishes
+- Both providers still reconcile shortly after the fast path renders
+- **Why:** first-paint mailbox loads should prefer already persisted provider cache over forcing a full remote scan before the UI can render
+
+## Gmail API-first message ops (`providers/gmail.py`)
+
+**Gmail thread fetches, body fetches, flag changes, deletes, and unread counts now prefer Gmail API when the backend can resolve the message safely.**
+- Cached sync rows are used to resolve legacy IMAP UIDs to Gmail API message ids
+- Gmail API thread reads, body reads, read/unread toggles, trash moves, and unread counts run before falling back to IMAP
+- IMAP remains in place as a compatibility fallback for messages that are not yet present in local sync state
+- **Why:** this trims the hottest Gmail read/write paths without forcing a big-bang migration away from the hybrid backend
+
+## Gmail API message listing (`providers/gmail.py`)
+
+**Gmail folder reads now prefer Gmail API list and metadata fetches before falling back to IMAP mailbox scans.**
+- `messages.list` drives the folder view when the backend can resolve the label
+- Per-message metadata fetches build the same row shape the UI already expects
+- The fetched rows are persisted into the existing folder cache so later body and flag operations can resolve the same messages
+- **Why:** this removes the last heavy IMAP list scan from the common Gmail folder open path while keeping the old path available as a fallback
+
+## Gmail folder discovery (`providers/gmail.py`)
+
+**The "more folders" drawer now prefers Gmail labels API before consulting IMAP folder listings.**
+- Gmail user labels are returned directly from the labels API and formatted for the existing folder drawer
+- IMAP `LIST` is now a fallback for the small number of cases where the labels API cannot be used
+- **Why:** folder browsing no longer needs IMAP just to discover user labels on a healthy Gmail account
+
+## Gmail special-folder seeding (`providers/gmail.py`)
+
+**Gmail system folder mappings are now seeded from the labels API when labels are loaded.**
+- The provider records localized actual folder names from the labels API for INBOX, Sent, Drafts, Trash, and Spam
+- IMAP folder discovery is still available as a fallback, but the common API path no longer depends on it
+- **Why:** API-first Gmail flows should not need an IMAP folder round-trip just to resolve the standard mailbox names
+
+## Gmail cached refresh backfill (`providers/gmail.py`)
+
+**Background refresh and top-up now stay on the Gmail API side before falling back to IMAP scans.**
+- Cache refreshes reuse the cached row UID and Gmail message id directly instead of looking the UID up again through IMAP
+- Cache top-up tries Gmail API listing first, then only falls back to IMAP if the API path is unavailable
+- **Why:** the remaining IMAP usage in Gmail should be fallback-only, not part of the normal refresh path
+
+## Gmail API-only live paths (`providers/gmail.py`)
+
+**The normal Gmail browse and message action paths are now API-only.**
+- folder listing uses Gmail labels API
+- message list uses Gmail messages API
+- thread fetch uses Gmail threads API
+- body fetch, read/unread, delete, and unread counts use Gmail API
+- IMAP helper code remains in the file as legacy support, but the live flow no longer depends on it
+- **Why:** the Gmail backend now boots and runs without needing IMAP as part of the standard user-facing path
+
+## Lazy backend construction (`accounts/registry.py`)
+
+**Accounts are now wrapped in lazy provider proxies so the real backend is created only when the account is actually used.**
+- Startup still sees the current account list and can render the sidebar immediately
+- Provider instances are deferred until the UI or poll loop first calls into that account
+- **Why:** Hermod should not pay provider construction cost for accounts that never get touched in a session
+
+## Lazy polling (`__main__.py`)
+
+**Unopened accounts are no longer polled just because they exist in the account registry.**
+- The background poll loop skips lazy backends that have not been instantiated yet
+- The currently active account still polls normally once the user uses it
+- **Why:** startup and background work should stay focused on accounts the user is actually interacting with
+
+## Sort toggle (`window.py`, `styles.py`)
+
+**The message list sort control is now a single icon toggle.**
+- The toolbar shows one clickable icon instead of two text buttons
+- `Newest first` uses the descending sort icon
+- `Oldest first` uses the ascending sort icon
+- The tooltip follows the active order
+- **Why:** the control is smaller, clearer, and easier to hit in the header bar

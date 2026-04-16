@@ -1,0 +1,1098 @@
+{
+  "project": {
+    "name": "Hermod",
+    "root": "/home/david/Projects/Hermod",
+    "generated_by": "tools/generate_architecture.py",
+    "query_tool": "tools/query_architecture.py",
+    "context_file": ".codex/project_context.json",
+    "purpose": "AI-readable dependency and ownership map for safe development"
+  },
+  "settings": {
+    "light_poll_interval_minutes": 1,
+    "full_reconcile_interval_minutes": 10,
+    "source_of_truth": "provider-backed counts and cached provider state"
+  },
+  "sources_of_truth": [
+    {
+      "name": "Gmail API",
+      "owned_by": "providers/gmail.py",
+      "truth": [
+        "message list",
+        "thread refresh",
+        "unread counts while primary route is healthy"
+      ],
+      "fallback": "IMAP",
+      "reconcile": "Gmail history refresh plus IMAP unread recount",
+      "counting": "Gmail API unread label count while healthy, IMAP UNSEEN while degraded"
+    },
+    {
+      "name": "IMAP/SMTP",
+      "owned_by": "providers/imap_smtp.py",
+      "truth": [
+        "message list",
+        "message read state",
+        "unread counts via UNSEEN"
+      ],
+      "fallback": "cached rows plus retry",
+      "reconcile": "IMAP folder refresh plus server-side unread recount",
+      "counting": "IMAP UNSEEN as the count source"
+    }
+  ],
+  "sync_policies": [
+    {
+      "provider": "gmail",
+      "primary": "Gmail API history and message fetch",
+      "fallback": "IMAP fallback with timed API recovery",
+      "reconcile": "Gmail history refresh plus IMAP unread recount",
+      "counting": "API label count while healthy; IMAP UNSEEN while degraded"
+    },
+    {
+      "provider": "imap",
+      "primary": "IMAP fetch and UNSEEN recount",
+      "fallback": "Cached rows plus retry on IMAP or SMTP errors",
+      "reconcile": "IMAP folder refresh plus server-side unread recount",
+      "counting": "IMAP UNSEEN"
+    }
+  ],
+  "contracts": [
+    {
+      "name": "providers_are_ui_free",
+      "scope": [
+        "providers.*"
+      ],
+      "deny": [
+        "__main__",
+        "compose",
+        "settings",
+        "widgets",
+        "window",
+        "window_*",
+        "styles"
+      ],
+      "purpose": "Provider code should not depend on UI entrypoints or presentation modules."
+    },
+    {
+      "name": "core_is_ui_free",
+      "scope": [
+        "backends",
+        "unified_refresh",
+        "sync_state",
+        "body_cache",
+        "snapshot_cache",
+        "diagnostics.*",
+        "utils",
+        "accounts.*"
+      ],
+      "deny": [
+        "__main__",
+        "compose",
+        "widgets",
+        "window",
+        "window_*",
+        "styles"
+      ],
+      "purpose": "Core/account logic should not depend on presentation modules."
+    },
+    {
+      "name": "ui_uses_concrete_providers_through_backends",
+      "scope": [
+        "compose",
+        "settings",
+        "widgets",
+        "window",
+        "window_*"
+      ],
+      "deny": [
+        "providers.common",
+        "providers.gmail",
+        "providers.imap_smtp"
+      ],
+      "purpose": "UI modules should speak to provider state through orchestration layers, not provider internals."
+    }
+  ],
+  "module_index": [
+    {
+      "name": "__main__",
+      "path": "__main__.py",
+      "package": false
+    },
+    {
+      "name": "accounts",
+      "path": "accounts/__init__.py",
+      "package": true
+    },
+    {
+      "name": "accounts.account_prefs",
+      "path": "accounts/account_prefs.py",
+      "package": false
+    },
+    {
+      "name": "accounts.auth",
+      "path": "accounts/auth/__init__.py",
+      "package": true
+    },
+    {
+      "name": "accounts.descriptors",
+      "path": "accounts/descriptors.py",
+      "package": false
+    },
+    {
+      "name": "accounts.native_store",
+      "path": "accounts/native_store.py",
+      "package": false
+    },
+    {
+      "name": "accounts.registry",
+      "path": "accounts/registry.py",
+      "package": false
+    },
+    {
+      "name": "accounts.sources",
+      "path": "accounts/sources/__init__.py",
+      "package": true
+    },
+    {
+      "name": "backends",
+      "path": "backends.py",
+      "package": false
+    },
+    {
+      "name": "body_cache",
+      "path": "body_cache.py",
+      "package": false
+    },
+    {
+      "name": "compose",
+      "path": "compose.py",
+      "package": false
+    },
+    {
+      "name": "diagnostics",
+      "path": "diagnostics/__init__.py",
+      "package": true
+    },
+    {
+      "name": "diagnostics.export",
+      "path": "diagnostics/export.py",
+      "package": false
+    },
+    {
+      "name": "diagnostics.health",
+      "path": "diagnostics/health.py",
+      "package": false
+    },
+    {
+      "name": "diagnostics.logger",
+      "path": "diagnostics/logger.py",
+      "package": false
+    },
+    {
+      "name": "diagnostics.redact",
+      "path": "diagnostics/redact.py",
+      "package": false
+    },
+    {
+      "name": "hermod",
+      "path": "hermod.py",
+      "package": false
+    },
+    {
+      "name": "providers",
+      "path": "providers/__init__.py",
+      "package": true
+    },
+    {
+      "name": "providers.base",
+      "path": "providers/base.py",
+      "package": false
+    },
+    {
+      "name": "providers.common",
+      "path": "providers/common.py",
+      "package": false
+    },
+    {
+      "name": "providers.gmail",
+      "path": "providers/gmail.py",
+      "package": false
+    },
+    {
+      "name": "providers.imap_smtp",
+      "path": "providers/imap_smtp.py",
+      "package": false
+    },
+    {
+      "name": "providers.sync_rows",
+      "path": "providers/sync_rows.py",
+      "package": false
+    },
+    {
+      "name": "settings",
+      "path": "settings.py",
+      "package": false
+    },
+    {
+      "name": "settings_accounts",
+      "path": "settings_accounts.py",
+      "package": false
+    },
+    {
+      "name": "snapshot_cache",
+      "path": "snapshot_cache.py",
+      "package": false
+    },
+    {
+      "name": "styles",
+      "path": "styles.py",
+      "package": false
+    },
+    {
+      "name": "sync_state",
+      "path": "sync_state.py",
+      "package": false
+    },
+    {
+      "name": "thread_renderer",
+      "path": "thread_renderer.py",
+      "package": false
+    },
+    {
+      "name": "unified_refresh",
+      "path": "unified_refresh.py",
+      "package": false
+    },
+    {
+      "name": "utils",
+      "path": "utils.py",
+      "package": false
+    },
+    {
+      "name": "widgets",
+      "path": "widgets.py",
+      "package": false
+    },
+    {
+      "name": "window",
+      "path": "window.py",
+      "package": false
+    },
+    {
+      "name": "window_constants",
+      "path": "window_constants.py",
+      "package": false
+    },
+    {
+      "name": "window_mailbox_controller",
+      "path": "window_mailbox_controller.py",
+      "package": false
+    },
+    {
+      "name": "window_message_cache",
+      "path": "window_message_cache.py",
+      "package": false
+    },
+    {
+      "name": "window_message_list",
+      "path": "window_message_list.py",
+      "package": false
+    },
+    {
+      "name": "window_reader",
+      "path": "window_reader.py",
+      "package": false
+    },
+    {
+      "name": "window_reader_controller",
+      "path": "window_reader_controller.py",
+      "package": false
+    },
+    {
+      "name": "window_welcome",
+      "path": "window_welcome.py",
+      "package": false
+    }
+  ],
+  "modules": [
+    {
+      "name": "__main__.py",
+      "role": "Application entrypoint and poll loop",
+      "owns": [
+        "HermodApp",
+        "background polling cadence",
+        "poll fan-out"
+      ]
+    },
+    {
+      "name": "window.py",
+      "role": "Main window orchestration and layout",
+      "owns": [
+        "window state machine",
+        "folder navigation",
+        "account chrome"
+      ]
+    },
+    {
+      "name": "window_mailbox_controller.py",
+      "role": "Mailbox orchestration and provider reconciliation",
+      "owns": [
+        "background update handling",
+        "mailbox load orchestration",
+        "unread count reconciliation",
+        "provider health rendering"
+      ]
+    },
+    {
+      "name": "window_message_cache.py",
+      "role": "Message list snapshot and prefetch controller",
+      "owns": [
+        "snapshot load/apply",
+        "snapshot save",
+        "body prefetch warmup",
+        "message list cache context"
+      ]
+    },
+    {
+      "name": "window_message_list.py",
+      "role": "Message list view and selection",
+      "owns": [
+        "message rows",
+        "selection state",
+        "paging",
+        "local read/unread/delete actions"
+      ]
+    },
+    {
+      "name": "window_reader_controller.py",
+      "role": "Reader fetch and cache controller",
+      "owns": [
+        "body fetch orchestration",
+        "thread fetch orchestration",
+        "reader body cache"
+      ]
+    },
+    {
+      "name": "window_reader.py",
+      "role": "Reader pane and message body rendering",
+      "owns": [
+        "thread view rendering",
+        "reader display state",
+        "original message display"
+      ]
+    },
+    {
+      "name": "compose.py",
+      "role": "Inline compose editor",
+      "owns": [
+        "draft composition",
+        "send flow",
+        "reply/reply-all behavior"
+      ]
+    },
+    {
+      "name": "settings_accounts.py",
+      "role": "Account settings controller",
+      "owns": [
+        "account add/remove",
+        "native Gmail OAuth UI",
+        "manual IMAP/SMTP editor"
+      ]
+    },
+    {
+      "name": "settings.py",
+      "role": "Settings model and preferences UI",
+      "owns": [
+        "poll cadence",
+        "reconcile cadence",
+        "debug toggles",
+        "settings page composition"
+      ]
+    },
+    {
+      "name": "backends.py",
+      "role": "Provider registry and backend construction",
+      "owns": [
+        "provider creation",
+        "startup reconciliation",
+        "sync policy description"
+      ]
+    },
+    {
+      "name": "providers/gmail.py",
+      "role": "Gmail provider",
+      "owns": [
+        "primary Gmail API sync",
+        "IMAP fallback",
+        "timed primary recovery"
+      ]
+    },
+    {
+      "name": "providers/imap_smtp.py",
+      "role": "Native IMAP/SMTP provider",
+      "owns": [
+        "server fetch",
+        "UNSEEN counts",
+        "message state mutation"
+      ]
+    },
+    {
+      "name": "providers/common.py",
+      "role": "Shared provider helpers",
+      "owns": [
+        "diagnostic objects",
+        "health state",
+        "retry helpers",
+        "sync policy builder"
+      ]
+    },
+    {
+      "name": "unified_refresh.py",
+      "role": "Bounded parallel message collection",
+      "owns": [
+        "unified inbox fan-out",
+        "progress callback",
+        "parallel fetch aggregation"
+      ]
+    },
+    {
+      "name": "widgets.py",
+      "role": "Reusable GTK widgets",
+      "owns": [
+        "account rows",
+        "message rows",
+        "startup status widgets"
+      ]
+    },
+    {
+      "name": "styles.py",
+      "role": "CSS and color generation",
+      "owns": [
+        "account palette",
+        "sidebar classes",
+        "reader styling"
+      ]
+    }
+  ],
+  "settings_keys": [
+    {
+      "key": "poll_interval",
+      "reads": [
+        "__main__.py",
+        "settings.py"
+      ],
+      "writes": [
+        "settings.py"
+      ],
+      "meaning": "light background check cadence"
+    },
+    {
+      "key": "reconcile_interval",
+      "reads": [
+        "__main__.py",
+        "settings.py",
+        "diagnostics/health.py"
+      ],
+      "writes": [
+        "settings.py"
+      ],
+      "meaning": "full unread/count reconciliation cadence"
+    }
+  ],
+  "state_flows": [
+    {
+      "name": "startup_sync",
+      "path": [
+        "__main__.py::_on_activate",
+        "backends.py::get_backends",
+        "window_mailbox_controller.py::_load_messages",
+        "providers/*::check_background_updates",
+        "window_mailbox_controller.py::on_background_update"
+      ]
+    },
+    {
+      "name": "local_read_unread_action",
+      "path": [
+        "window_message_list.py::_commit_email_selection",
+        "window_mailbox_controller.py::_refresh_provider_counts_for_message",
+        "providers/*::get_unread_count",
+        "window_mailbox_controller.py::update_account_counts",
+        "window_mailbox_controller.py::refresh_visible_mail"
+      ]
+    },
+    {
+      "name": "poll_cycle",
+      "path": [
+        "__main__.py::_poll_loop",
+        "providers/*::check_background_updates",
+        "window_mailbox_controller.py::on_background_update"
+      ]
+    }
+  ],
+  "fallbacks": [
+    {
+      "provider": "gmail",
+      "primary": "Gmail API",
+      "fallback": "IMAP",
+      "recovery": "timed primary probe"
+    },
+    {
+      "provider": "imap",
+      "primary": "server fetch",
+      "fallback": "cached rows",
+      "recovery": "next server poll"
+    }
+  ],
+  "edges": [
+    {
+      "from": "__main__.py",
+      "to": "backends.py",
+      "type": "calls"
+    },
+    {
+      "from": "__main__.py",
+      "to": "window.py",
+      "type": "owns"
+    },
+    {
+      "from": "__main__.py",
+      "to": "window_mailbox_controller.py",
+      "type": "polls"
+    },
+    {
+      "from": "window.py",
+      "to": "window_mailbox_controller.py",
+      "type": "mixes"
+    },
+    {
+      "from": "window.py",
+      "to": "window_message_cache.py",
+      "type": "mixes"
+    },
+    {
+      "from": "window.py",
+      "to": "window_message_list.py",
+      "type": "renders"
+    },
+    {
+      "from": "window.py",
+      "to": "window_reader_controller.py",
+      "type": "mixes"
+    },
+    {
+      "from": "window.py",
+      "to": "window_reader.py",
+      "type": "renders"
+    },
+    {
+      "from": "window.py",
+      "to": "compose.py",
+      "type": "opens"
+    },
+    {
+      "from": "settings.py",
+      "to": "settings_accounts.py",
+      "type": "composes"
+    },
+    {
+      "from": "settings.py",
+      "to": "window.py",
+      "type": "writes"
+    },
+    {
+      "from": "settings.py",
+      "to": "backends.py",
+      "type": "writes"
+    },
+    {
+      "from": "backends.py",
+      "to": "providers/gmail.py",
+      "type": "creates"
+    },
+    {
+      "from": "backends.py",
+      "to": "providers/imap_smtp.py",
+      "type": "creates"
+    },
+    {
+      "from": "providers/gmail.py",
+      "to": "providers/common.py",
+      "type": "reads"
+    },
+    {
+      "from": "providers/imap_smtp.py",
+      "to": "providers/common.py",
+      "type": "reads"
+    },
+    {
+      "from": "providers/gmail.py",
+      "to": "window_mailbox_controller.py",
+      "type": "refreshes"
+    },
+    {
+      "from": "providers/imap_smtp.py",
+      "to": "window_mailbox_controller.py",
+      "type": "refreshes"
+    },
+    {
+      "from": "unified_refresh.py",
+      "to": "providers/*",
+      "type": "calls"
+    },
+    {
+      "from": "widgets.py",
+      "to": "styles.py",
+      "type": "reads"
+    },
+    {
+      "from": "window_message_list.py",
+      "to": "widgets.py",
+      "type": "renders"
+    },
+    {
+      "from": "window_reader.py",
+      "to": "widgets.py",
+      "type": "renders"
+    }
+  ],
+  "import_edges": [
+    {
+      "from": "__main__",
+      "to": "backends",
+      "type": "import"
+    },
+    {
+      "from": "__main__",
+      "to": "diagnostics.logger",
+      "type": "import"
+    },
+    {
+      "from": "__main__",
+      "to": "window",
+      "type": "import"
+    },
+    {
+      "from": "__main__",
+      "to": "settings",
+      "type": "import"
+    },
+    {
+      "from": "__main__",
+      "to": "utils",
+      "type": "import"
+    },
+    {
+      "from": "accounts.account_prefs",
+      "to": "accounts.descriptors",
+      "type": "import"
+    },
+    {
+      "from": "accounts.native_store",
+      "to": "accounts.descriptors",
+      "type": "import"
+    },
+    {
+      "from": "accounts.native_store",
+      "to": "accounts.account_prefs",
+      "type": "import"
+    },
+    {
+      "from": "accounts.native_store",
+      "to": "accounts.auth",
+      "type": "import"
+    },
+    {
+      "from": "accounts.registry",
+      "to": "accounts.descriptors",
+      "type": "import"
+    },
+    {
+      "from": "accounts.registry",
+      "to": "providers.base",
+      "type": "import"
+    },
+    {
+      "from": "backends",
+      "to": "accounts.registry",
+      "type": "import"
+    },
+    {
+      "from": "backends",
+      "to": "accounts.account_prefs",
+      "type": "import"
+    },
+    {
+      "from": "backends",
+      "to": "accounts.native_store",
+      "type": "import"
+    },
+    {
+      "from": "backends",
+      "to": "diagnostics.logger",
+      "type": "import"
+    },
+    {
+      "from": "backends",
+      "to": "providers.common",
+      "type": "import"
+    },
+    {
+      "from": "backends",
+      "to": "providers.gmail",
+      "type": "import"
+    },
+    {
+      "from": "backends",
+      "to": "providers.imap_smtp",
+      "type": "import"
+    },
+    {
+      "from": "backends",
+      "to": "sync_state",
+      "type": "import"
+    },
+    {
+      "from": "body_cache",
+      "to": "utils",
+      "type": "import"
+    },
+    {
+      "from": "compose",
+      "to": "styles",
+      "type": "import"
+    },
+    {
+      "from": "diagnostics.export",
+      "to": "diagnostics.health",
+      "type": "import"
+    },
+    {
+      "from": "diagnostics.export",
+      "to": "diagnostics.logger",
+      "type": "import"
+    },
+    {
+      "from": "diagnostics.health",
+      "to": "accounts.native_store",
+      "type": "import"
+    },
+    {
+      "from": "diagnostics.health",
+      "to": "settings",
+      "type": "import"
+    },
+    {
+      "from": "diagnostics.logger",
+      "to": "settings",
+      "type": "import"
+    },
+    {
+      "from": "diagnostics.logger",
+      "to": "diagnostics.redact",
+      "type": "import"
+    },
+    {
+      "from": "providers.common",
+      "to": "accounts.descriptors",
+      "type": "import"
+    },
+    {
+      "from": "providers.gmail",
+      "to": "accounts.auth",
+      "type": "import"
+    },
+    {
+      "from": "providers.gmail",
+      "to": "diagnostics.logger",
+      "type": "import"
+    },
+    {
+      "from": "providers.gmail",
+      "to": "sync_state",
+      "type": "import"
+    },
+    {
+      "from": "providers.gmail",
+      "to": "providers.common",
+      "type": "import"
+    },
+    {
+      "from": "providers.gmail",
+      "to": "providers.sync_rows",
+      "type": "import"
+    },
+    {
+      "from": "providers.imap_smtp",
+      "to": "sync_state",
+      "type": "import"
+    },
+    {
+      "from": "providers.imap_smtp",
+      "to": "providers.common",
+      "type": "import"
+    },
+    {
+      "from": "providers.imap_smtp",
+      "to": "providers.sync_rows",
+      "type": "import"
+    },
+    {
+      "from": "providers.sync_rows",
+      "to": "providers.common",
+      "type": "import"
+    },
+    {
+      "from": "settings",
+      "to": "styles",
+      "type": "import"
+    },
+    {
+      "from": "settings",
+      "to": "settings_accounts",
+      "type": "import"
+    },
+    {
+      "from": "settings",
+      "to": "diagnostics.export",
+      "type": "import"
+    },
+    {
+      "from": "settings_accounts",
+      "to": "styles",
+      "type": "import"
+    },
+    {
+      "from": "settings_accounts",
+      "to": "accounts.account_prefs",
+      "type": "import"
+    },
+    {
+      "from": "settings_accounts",
+      "to": "accounts.native_store",
+      "type": "import"
+    },
+    {
+      "from": "settings_accounts",
+      "to": "accounts.auth",
+      "type": "import"
+    },
+    {
+      "from": "snapshot_cache",
+      "to": "utils",
+      "type": "import"
+    },
+    {
+      "from": "thread_renderer",
+      "to": "utils",
+      "type": "import"
+    },
+    {
+      "from": "utils",
+      "to": "diagnostics.logger",
+      "type": "import"
+    },
+    {
+      "from": "utils",
+      "to": "settings",
+      "type": "import"
+    },
+    {
+      "from": "widgets",
+      "to": "utils",
+      "type": "import"
+    },
+    {
+      "from": "window",
+      "to": "backends",
+      "type": "import"
+    },
+    {
+      "from": "window",
+      "to": "styles",
+      "type": "import"
+    },
+    {
+      "from": "window",
+      "to": "settings",
+      "type": "import"
+    },
+    {
+      "from": "window",
+      "to": "window_mailbox_controller",
+      "type": "import"
+    },
+    {
+      "from": "window",
+      "to": "window_message_cache",
+      "type": "import"
+    },
+    {
+      "from": "window",
+      "to": "window_constants",
+      "type": "import"
+    },
+    {
+      "from": "window",
+      "to": "window_message_list",
+      "type": "import"
+    },
+    {
+      "from": "window",
+      "to": "window_reader_controller",
+      "type": "import"
+    },
+    {
+      "from": "window",
+      "to": "window_reader",
+      "type": "import"
+    },
+    {
+      "from": "window",
+      "to": "window_welcome",
+      "type": "import"
+    },
+    {
+      "from": "window",
+      "to": "widgets",
+      "type": "import"
+    },
+    {
+      "from": "window",
+      "to": "thread_renderer",
+      "type": "import"
+    },
+    {
+      "from": "window",
+      "to": "body_cache",
+      "type": "import"
+    },
+    {
+      "from": "window",
+      "to": "snapshot_cache",
+      "type": "import"
+    },
+    {
+      "from": "window",
+      "to": "utils",
+      "type": "import"
+    },
+    {
+      "from": "window_mailbox_controller",
+      "to": "backends",
+      "type": "import"
+    },
+    {
+      "from": "window_mailbox_controller",
+      "to": "unified_refresh",
+      "type": "import"
+    },
+    {
+      "from": "window_mailbox_controller",
+      "to": "utils",
+      "type": "import"
+    },
+    {
+      "from": "window_message_cache",
+      "to": "settings",
+      "type": "import"
+    },
+    {
+      "from": "window_message_cache",
+      "to": "snapshot_cache",
+      "type": "import"
+    },
+    {
+      "from": "window_message_cache",
+      "to": "utils",
+      "type": "import"
+    },
+    {
+      "from": "window_message_cache",
+      "to": "window_constants",
+      "type": "import"
+    },
+    {
+      "from": "window_message_list",
+      "to": "backends",
+      "type": "import"
+    },
+    {
+      "from": "window_message_list",
+      "to": "compose",
+      "type": "import"
+    },
+    {
+      "from": "window_message_list",
+      "to": "settings",
+      "type": "import"
+    },
+    {
+      "from": "window_message_list",
+      "to": "widgets",
+      "type": "import"
+    },
+    {
+      "from": "window_message_list",
+      "to": "snapshot_cache",
+      "type": "import"
+    },
+    {
+      "from": "window_message_list",
+      "to": "utils",
+      "type": "import"
+    },
+    {
+      "from": "window_message_list",
+      "to": "window_constants",
+      "type": "import"
+    },
+    {
+      "from": "window_reader",
+      "to": "settings",
+      "type": "import"
+    },
+    {
+      "from": "window_reader",
+      "to": "thread_renderer",
+      "type": "import"
+    },
+    {
+      "from": "window_reader",
+      "to": "utils",
+      "type": "import"
+    },
+    {
+      "from": "window_reader",
+      "to": "window_constants",
+      "type": "import"
+    },
+    {
+      "from": "window_reader_controller",
+      "to": "backends",
+      "type": "import"
+    },
+    {
+      "from": "window_reader_controller",
+      "to": "body_cache",
+      "type": "import"
+    },
+    {
+      "from": "window_reader_controller",
+      "to": "settings",
+      "type": "import"
+    },
+    {
+      "from": "window_reader_controller",
+      "to": "utils",
+      "type": "import"
+    },
+    {
+      "from": "window_reader_controller",
+      "to": "window_constants",
+      "type": "import"
+    }
+  ],
+  "notes": [
+    "Keep this graph coarse and semantic.",
+    "Prefer provider ownership over UI inference.",
+    "Refresh this file when modules or sync ownership change."
+  ]
+}

@@ -12,15 +12,16 @@ gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw
 
 try:
-    from ..accounts.sources.goa import get_goa_account_descriptors
+    from ..accounts.native_store import get_native_account_descriptors
     from ..settings import get_settings
 except ImportError:
-    from accounts.sources.goa import get_goa_account_descriptors
+    from accounts.native_store import get_native_account_descriptors
     from settings import get_settings
 
 
 _EXPORTABLE_SETTINGS = (
     'poll_interval',
+    'reconcile_interval',
     'load_images',
     'mark_read_on_open',
     'close_minimizes',
@@ -35,8 +36,8 @@ def build_health_snapshot():
     settings = get_settings()
     account_summary = {}
     try:
-        for descriptor in get_goa_account_descriptors():
-            key = f'{descriptor.source}:{descriptor.provider_kind}'
+        for descriptor in get_native_account_descriptors():
+            key = f'native:{descriptor.provider_kind}'
             account_summary[key] = account_summary.get(key, 0) + 1
     except Exception:
         account_summary = {}

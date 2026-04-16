@@ -65,8 +65,8 @@ class UnifiedRefreshTests(unittest.TestCase):
 
     def test_collect_unified_messages_keeps_partial_transient_success(self):
         specs = [
-            UnifiedFetchSpec(label='ok', fetch=lambda: [_message('a', 1)]),
-            UnifiedFetchSpec(label='transient', fetch=lambda: (_ for _ in ()).throw(_TransientError('offline'))),
+            UnifiedFetchSpec(identity='ok@example.com', label='ok', fetch=lambda: [_message('a', 1)]),
+            UnifiedFetchSpec(identity='transient@example.com', label='transient', fetch=lambda: (_ for _ in ()).throw(_TransientError('offline'))),
         ]
         logged = []
 
@@ -92,9 +92,9 @@ class UnifiedRefreshTests(unittest.TestCase):
             return run
 
         specs = [
-            UnifiedFetchSpec(label='first', fetch=fetch('first', 0.03)),
-            UnifiedFetchSpec(label='second', fetch=fetch('second', 0.01)),
-            UnifiedFetchSpec(label='third', fetch=fetch('third', 0.0)),
+            UnifiedFetchSpec(identity='first@example.com', label='first', fetch=fetch('first', 0.03)),
+            UnifiedFetchSpec(identity='second@example.com', label='second', fetch=fetch('second', 0.01)),
+            UnifiedFetchSpec(identity='third@example.com', label='third', fetch=fetch('third', 0.0)),
         ]
 
         result = collect_unified_messages(
@@ -105,6 +105,29 @@ class UnifiedRefreshTests(unittest.TestCase):
         )
 
         self.assertEqual([msg['uid'] for msg in result['messages']], ['first', 'second', 'third'])
+
+    def test_collect_unified_messages_reports_progress_callbacks(self):
+        events = []
+
+        def fetch():
+            return [_message('a')]
+
+        specs = [
+            UnifiedFetchSpec(identity='acct@example.com', label='account', fetch=fetch),
+        ]
+
+        result = collect_unified_messages(
+            specs,
+            transient_error_fn=lambda exc: False,
+            network_ready_fn=lambda: True,
+            progress_callback=lambda spec, phase, **kwargs: events.append((spec.identity, phase, kwargs)),
+            limit=10,
+        )
+
+        self.assertEqual([msg['uid'] for msg in result['messages']], ['a'])
+        self.assertEqual(events[0][0], 'acct@example.com')
+        self.assertEqual(events[0][1], 'checking')
+        self.assertEqual(events[-1][1], 'ready')
 
 
 if __name__ == '__main__':

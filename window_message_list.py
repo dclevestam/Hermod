@@ -1,4 +1,4 @@
-"""Mailbox list, selection, loading, and sidebar behavior for LarkWindow."""
+"""Message-list view, selection, and paging behavior for HermodWindow."""
 
 import collections
 import threading
@@ -16,23 +16,13 @@ try:
         EmailRow, AccountHeaderRow, FolderRow, LoadMoreListItem, LoadMoreRow,
         MessageListItem, MoreFoldersRow, UnifiedRow,
     )
-    from .snapshot_cache import (
-        build_snapshot_payload,
-        load_snapshot_payload,
-        snapshot_result_applicable,
-    )
-    from .unified_refresh import UnifiedFetchSpec, collect_unified_messages
+    from .snapshot_cache import snapshot_result_applicable
     from .utils import (
         _UNIFIED, _UNIFIED_TRASH, _UNIFIED_SPAM,
-        _DISK_BODY_CACHE_DIR,
-        _body_cache_key,
-        _snapshot_scope, _snapshot_path,
-        _backend_for_identity, _backend_for_message,
-        _log_exception, _perf_counter, _log_perf,
+        _perf_counter, _log_perf,
     )
     from .window_constants import (
-        BODY_CACHE_LIMIT, MESSAGE_LIST_MAX_WIDTH, MESSAGE_LIST_MIN_WIDTH,
-        MESSAGE_PAGE_STEP, PREFETCH_WARMUP_LIMIT,
+        MESSAGE_LIST_MAX_WIDTH, MESSAGE_LIST_MIN_WIDTH, MESSAGE_PAGE_STEP,
     )
 except ImportError:
     from backends import network_ready, is_transient_network_error
@@ -42,23 +32,13 @@ except ImportError:
         EmailRow, AccountHeaderRow, FolderRow, LoadMoreListItem, LoadMoreRow,
         MessageListItem, MoreFoldersRow, UnifiedRow,
     )
-    from snapshot_cache import (
-        build_snapshot_payload,
-        load_snapshot_payload,
-        snapshot_result_applicable,
-    )
-    from unified_refresh import UnifiedFetchSpec, collect_unified_messages
+    from snapshot_cache import snapshot_result_applicable
     from utils import (
         _UNIFIED, _UNIFIED_TRASH, _UNIFIED_SPAM,
-        _DISK_BODY_CACHE_DIR,
-        _body_cache_key,
-        _snapshot_scope, _snapshot_path,
-        _backend_for_identity, _backend_for_message,
-        _log_exception, _perf_counter, _log_perf,
+        _perf_counter, _log_perf,
     )
     from window_constants import (
-        BODY_CACHE_LIMIT, MESSAGE_LIST_MAX_WIDTH, MESSAGE_LIST_MIN_WIDTH,
-        MESSAGE_PAGE_STEP, PREFETCH_WARMUP_LIMIT,
+        MESSAGE_LIST_MAX_WIDTH, MESSAGE_LIST_MIN_WIDTH, MESSAGE_PAGE_STEP,
     )
 
 
@@ -144,6 +124,19 @@ class MessageListMixin:
     def _message_fetch_limit(self):
         return max(1, int(self._message_page_limit)) + 1
 
+    def _set_message_loading(self, loading, generation=None):
+        if loading:
+            self._message_loading = True
+            if generation is not None:
+                self._message_loading_generation = generation
+        else:
+            current_generation = getattr(self, '_message_loading_generation', None)
+            if generation is not None and current_generation not in (None, generation):
+                return
+            self._message_loading = False
+            self._message_loading_generation = None
+        self._sync_message_toolbar_controls()
+
     def _paged_messages(self, msgs):
         page_limit = max(1, int(self._message_page_limit))
         ordered = list(msgs or [])
@@ -157,11 +150,20 @@ class MessageListMixin:
     def _on_load_more_requested(self):
         if not self.current_folder:
             return
+        if getattr(self, '_message_loading', False):
+            return
         if getattr(self, '_email_scroll', None) is not None:
             adj = self._email_scroll.get_vadjustment()
             if adj is not None:
                 self._pending_list_scroll_value = adj.get_value()
+        self._set_message_loading(True)
         self._message_page_limit += MESSAGE_PAGE_STEP
+        self.refresh_visible_mail(force=True, preserve_selected=True)
+
+    def _on_sort_changed(self, order):
+        if self._sort_order == order:
+            return
+        self._sort_order = order
         self.refresh_visible_mail(force=True, preserve_selected=True)
 
     def _populate_sidebar(self):
@@ -174,12 +176,15 @@ class MessageListMixin:
         for backend in self.backends:
             accent_class = self._account_class_for(backend.identity)
             header_row = AccountHeaderRow(backend.identity, accent_class=accent_class)
+            header_row.set_label(getattr(backend, 'presentation_name', '') or backend.identity)
             header_row.backend = backend
             self.folder_list.append(header_row)
 
             folder_rows = []
-            for folder_id, name, icon in backend.FOLDERS:
-                row = FolderRow(folder_id, name, icon, indent=True, accent_class=accent_class)
+            folders_list = list(backend.FOLDERS)
+            for i, (folder_id, name, icon) in enumerate(folders_list):
+                is_last = (i == len(folders_list) - 1)
+                row = FolderRow(folder_id, name, icon, indent=True, accent_class=accent_class, is_last=is_last)
                 row.backend = backend
                 row.set_visible(False)
                 self._folder_rows[(backend.identity, folder_id)] = row
@@ -198,6 +203,7 @@ class MessageListMixin:
                 'extra': [],
                 'expanded': False,
             }
+            self._render_account_health(backend.identity)
 
         if s.get('show_unified_trash') or s.get('show_unified_spam'):
             if s.get('show_unified_trash'):
@@ -215,13 +221,12 @@ class MessageListMixin:
         self.add_controller(key_ctrl)
 
     def _update_sync_status_labels(self):
-        self._countdown_hint_lbl.set_label('Background')
         if self._network_offline:
-            self._countdown_lbl.set_label('Offline')
+            self._countdown_lbl.set_label('OFFLINE')
         elif self._syncing:
-            self._countdown_lbl.set_label('Checking')
+            self._countdown_lbl.set_label('SYNCING')
         else:
-            self._countdown_lbl.set_label('Connected')
+            self._countdown_lbl.set_label('ONLINE')
 
     def set_network_offline(self, offline):
         offline = bool(offline)
@@ -252,47 +257,33 @@ class MessageListMixin:
             self._update_sync_status_labels()
             return
         self._syncing = bool(syncing)
+        if self._syncing:
+            if hasattr(self, '_spin_finishing_id') and self._spin_finishing_id:
+                GLib.source_remove(self._spin_finishing_id)
+                self._spin_finishing_id = None
+            self._sync_btn.add_css_class('sync-syncing')
+        else:
+            # Let the current rotation cycle finish rather than snapping back to 0°.
+            # Wait one full animation cycle (1 s) then remove the spinning class.
+            if hasattr(self, '_spin_finishing_id') and self._spin_finishing_id:
+                GLib.source_remove(self._spin_finishing_id)
+            def _clear_syncing():
+                self._sync_btn.remove_css_class('sync-syncing')
+                self._spin_finishing_id = None
+                return False
+            self._spin_finishing_id = GLib.timeout_add(1000, _clear_syncing)
         self._update_sync_status_labels()
 
     def _finish_sync(self, total_new=0):
         self.set_syncing(False)
         self._sync_in_flight = False
-        if total_new > 0:
+        if getattr(self, '_startup_status_active', False):
+            self._startup_visible_ready = True
+            self._schedule_startup_status_completion(total_new=total_new)
+        elif total_new > 0:
             self.show_sync_badge(total_new)
             self.refresh_visible_mail(force=True)
-
-    def _background_result_affects_current_view(self, result):
-        changed_folders = set((result or {}).get('changed_folders') or ())
-        if not changed_folders or self.current_folder is None:
-            return False
-        if self.current_folder == _UNIFIED:
-            return any(self._count_bucket_for_folder(folder) == 'inbox' for folder in changed_folders)
-        if self.current_folder == _UNIFIED_TRASH:
-            return any(self._count_bucket_for_folder(folder) == 'trash' for folder in changed_folders)
-        if self.current_folder == _UNIFIED_SPAM:
-            return any(self._count_bucket_for_folder(folder) == 'spam' for folder in changed_folders)
-        if not self.current_backend:
-            return False
-        return (
-            (result or {}).get('account') == self.current_backend.identity
-            and self.current_folder in changed_folders
-        )
-
-    def on_background_update(self, results, total_new=0):
-        self.set_syncing(False)
-        refresh_needed = False
-        for result in results or []:
-            counts = dict((result or {}).get('counts') or {})
-            self.update_account_counts(
-                (result or {}).get('account', ''),
-                inbox_count=counts.get('inbox'),
-                trash_count=counts.get('trash'),
-                spam_count=counts.get('spam'),
-            )
-            refresh_needed = refresh_needed or self._background_result_affects_current_view(result)
-        if total_new > 0:
-            self.show_sync_badge(total_new)
-        if refresh_needed:
+        else:
             self.refresh_visible_mail(force=True)
 
     def _on_content_paned_position_changed(self, paned, _pspec):
@@ -339,10 +330,7 @@ class MessageListMixin:
 
             threading.Thread(target=fetch, daemon=True).start()
             return
-        more_row.expanded = not more_row.expanded
-        more_row.chevron.set_from_icon_name(
-            'pan-down-symbolic' if more_row.expanded else 'pan-end-symbolic'
-        )
+        more_row.set_expanded(not more_row.expanded)
         for row in state['extra']:
             row.set_visible(more_row.expanded)
 
@@ -354,13 +342,16 @@ class MessageListMixin:
             more_row.set_visible(False)
             return
         more_row.loaded = True
-        more_row.expanded = True
-        more_row.chevron.set_from_icon_name('pan-down-symbolic')
+        more_row.set_expanded(True)
         insert_pos = more_row.get_index() + 1
         new_rows = []
-        for folder_id, name, icon in folders:
-            row = FolderRow(folder_id, name, icon, indent=True)
+        folders_list = list(folders)
+        accent_class = self._account_class_for(more_row.backend.identity)
+        for i, (folder_id, name, icon) in enumerate(folders_list):
+            is_last = (i == len(folders_list) - 1)
+            row = FolderRow(folder_id, name, icon, indent=True, is_last=is_last, accent_class=accent_class)
             row.backend = more_row.backend
+            row.set_visible(more_row.expanded)
             self._folder_rows[(identity, folder_id)] = row
             self.folder_list.insert(row, insert_pos)
             insert_pos += 1
@@ -388,7 +379,10 @@ class MessageListMixin:
         if hasattr(item, 'bind_widget'):
             item.bind_widget(child)
         if hasattr(child, 'set_selected'):
-            child.set_selected(list_item.get_selected())
+            # Use our application-level selection state, not GTK's, to avoid
+            # losing visual selection when focus moves to the reading pane.
+            is_active = (getattr(self, '_active_email_row', None) is item)
+            child.set_selected(is_active)
 
     def _unbind_email_list_item(self, _factory, list_item):
         item = list_item.get_item()
@@ -463,11 +457,26 @@ class MessageListMixin:
 
     def _commit_email_selection(self, row):
         self._startup_autoselect_pending = False
+        prev = getattr(self, '_active_email_row', None)
+        if prev is not None and prev is not row and prev.widget is not None:
+            prev.widget.set_selected(False)
         self._active_email_row = row
+        if row.widget is not None:
+            row.widget.set_selected(True)
+        else:
+            # Widget may not be bound yet if list view is still laying out;
+            # retry on next idle tick.
+            def _apply_selected():
+                if row.widget is not None:
+                    row.widget.set_selected(True)
+                return False
+            GLib.idle_add(_apply_selected)
         mark_on_open = get_settings().get('mark_read_on_open')
         was_unread = not row.msg.get('is_read', True)
         self._show_mail_view()
         self._body_load_generation += 1
+        if hasattr(self, '_info_actions') and self._info_actions:
+            self._info_actions.set_visible(True)
         if row.msg.get('thread_count', 1) > 1:
             self._load_thread_view(row.msg, self._body_load_generation)
         else:
@@ -476,7 +485,13 @@ class MessageListMixin:
             row.mark_read()
         if was_unread and mark_on_open:
             self._sync_backend_cached_read_state(row.msg, True)
-            self._adjust_unread_count_for_message(row.msg, -1)
+            if hasattr(self, '_message_filter'):
+                self._message_filter.changed(Gtk.FilterChange.DIFFERENT)
+            self._update_message_empty_state()
+            self._refresh_provider_counts_for_message(
+                row.msg,
+                row.msg.get('backend_obj') or getattr(self, 'current_backend', None),
+            )
 
     def _restore_folder_selection(self):
         self._suppress_folder_selection = True
@@ -493,6 +508,7 @@ class MessageListMixin:
         if self._network_offline or not network_ready():
             self.set_network_offline(True)
             return
+        self._force_primary_probes()
         self._sync_in_flight = True
         self.set_syncing(True)
         self._offline_refresh_pending = False
@@ -572,6 +588,11 @@ class MessageListMixin:
             self.title_widget.set_subtitle('No Network Connection' if self._network_offline else self._content_subtitle)
 
     def _show_settings_view(self):
+        if hasattr(self, '_has_accounts') and not self._has_accounts():
+            if hasattr(self, '_show_welcome_settings_view'):
+                self._show_welcome_settings_view()
+            return
+
         def _show():
             self._viewer_stack.set_visible_child_name('settings')
             self._settings_btn.set_icon_name('go-previous-symbolic')
@@ -585,7 +606,15 @@ class MessageListMixin:
         _show()
 
     def _show_mail_view(self):
-        self._viewer_stack.set_visible_child_name('viewer')
+        if hasattr(self, '_has_accounts') and not self._has_accounts():
+            if hasattr(self, '_show_welcome_mode'):
+                self._show_welcome_mode()
+            return
+        if getattr(self, '_startup_status_active', False):
+            self._show_startup_status_view()
+        else:
+            self._clear_startup_status_view()
+            self._viewer_stack.set_visible_child_name('viewer')
         self._settings_btn.set_icon_name('open-menu-symbolic')
         self._settings_btn.set_tooltip_text('Settings')
         self.title_widget.set_title(self._content_title)
@@ -615,7 +644,11 @@ class MessageListMixin:
         def delete():
             try:
                 backend.delete_message(msg['uid'], msg.get('folder'))
+                self._refresh_provider_counts_for_message(msg, backend)
                 GLib.idle_add(self._show_toast, 'Message deleted')
+                if hasattr(self, '_message_filter'):
+                    GLib.idle_add(self._message_filter.changed, Gtk.FilterChange.DIFFERENT)
+                GLib.idle_add(self._update_message_empty_state)
             except Exception as e:
                 GLib.idle_add(self._show_toast, f'Delete failed: {e}')
 
@@ -634,11 +667,14 @@ class MessageListMixin:
         row.mark_unread()
         msg['is_read'] = False
         self._sync_backend_cached_read_state(msg, False)
-        self._adjust_unread_count_for_message(msg, 1)
+        if hasattr(self, '_message_filter'):
+            self._message_filter.changed(Gtk.FilterChange.DIFFERENT)
+        self._update_message_empty_state()
 
         def do_mark():
             try:
                 backend.mark_as_unread(msg['uid'], msg.get('folder'))
+                self._refresh_provider_counts_for_message(msg, backend)
             except Exception as e:
                 GLib.idle_add(self._show_toast, f'Failed: {e}')
 
@@ -647,13 +683,19 @@ class MessageListMixin:
     def _on_search_changed(self, entry):
         self._search_text = entry.get_text().lower()
         self._message_filter.changed(Gtk.FilterChange.DIFFERENT)
+        self._update_message_empty_state()
 
     def _email_filter(self, item, *_args):
         if not isinstance(item, MessageListItem):
             return True
+        msg = item.msg
+        if getattr(self, '_show_unread_only', False) and msg.get('is_read', True):
+            return False
+        return self._message_matches_search(msg)
+
+    def _message_matches_search(self, msg):
         if not self._search_text:
             return True
-        msg = item.msg
         return (
             self._search_text in msg.get('sender_name', '').lower()
             or self._search_text in msg.get('sender_email', '').lower()
@@ -728,45 +770,74 @@ class MessageListMixin:
         self._prefetch_generation += 1
         return self._message_load_generation
 
-    def _refresh_current_message_list(self, force=False, preserve_selected=True):
-        if not network_ready():
-            return False
-        focused = self.get_focus()
-        preserve_key = None
-        if preserve_selected and self._active_email_row is not None:
-            active_msg = self._active_email_row.msg
-            preserve_key = (
-                active_msg.get('account', ''),
-                active_msg.get('folder', ''),
-                active_msg.get('uid', ''),
-            )
-        if (force or self._offline_refresh_pending) and self.current_folder:
-            self._offline_refresh_pending = False
-            if self.current_folder == _UNIFIED:
-                self._load_unified_inbox(preserve_selected_key=preserve_key)
-            elif self.current_folder == _UNIFIED_TRASH:
-                self._load_unified_folder('Trash', preserve_selected_key=preserve_key)
-            elif self.current_folder == _UNIFIED_SPAM:
-                self._load_unified_folder('Spam', preserve_selected_key=preserve_key)
-            elif self.current_backend:
-                self._load_messages(preserve_selected_key=preserve_key)
-        if focused is not None and focused.get_root() is self:
-            GLib.idle_add(self._restore_focus_widget, focused)
-        return False
+    def _toggle_unread_only(self, active):
+        active = bool(active)
+        if getattr(self, '_show_unread_only', False) == active:
+            return
+        self._show_unread_only = active
+        if active:
+            self._unread_filter_had_results = False
+        self._sync_unread_toggle_button()
+        self._message_filter.changed(Gtk.FilterChange.DIFFERENT)
+        self._update_message_empty_state()
 
-    def refresh_visible_mail(self, force=False, preserve_selected=True):
-        self._refresh_current_message_list(force=force, preserve_selected=preserve_selected)
-        if self._viewer_stack.get_visible_child_name() != 'viewer':
-            return False
-        if self._offline_body_pending and self._active_email_row is not None:
-            self._offline_body_pending = False
-            self._body_load_generation += 1
-            active_msg = self._active_email_row.msg
-            if active_msg.get('thread_count', 1) > 1:
-                self._load_thread_view(active_msg, self._body_load_generation)
+    def _sync_unread_toggle_button(self):
+        button = getattr(self, '_unread_toggle_btn', None)
+        if button is None:
+            return
+        button.set_active(bool(getattr(self, '_show_unread_only', False)))
+        button.set_tooltip_text('Show all mail' if getattr(self, '_show_unread_only', False) else 'Unread only')
+        if getattr(self, '_show_unread_only', False):
+            button.add_css_class('active')
+        else:
+            button.remove_css_class('active')
+
+    def _unread_view_count(self):
+        count = 0
+        for index in range(self._message_store.get_n_items()):
+            item = self._message_store.get_item(index)
+            if not isinstance(item, MessageListItem):
+                continue
+            msg = item.msg
+            if msg.get('is_read', True):
+                continue
+            if not self._message_matches_search(msg):
+                continue
+            count += 1
+        return count
+
+    def _update_message_empty_state(self):
+        if not hasattr(self, '_filtered_message_model') or not hasattr(self, '_empty_page') or not hasattr(self, '_list_stack') or not hasattr(self, '_message_store'):
+            return
+        if getattr(self, '_show_unread_only', False):
+            unread_count = self._unread_view_count()
+            if unread_count > 0:
+                self._unread_filter_had_results = True
+                self._list_stack.set_visible_child_name('list')
+                return
+            elif self._search_text:
+                title = 'No matching unread messages'
+                desc = 'Try a different search.'
+            elif self._unread_filter_had_results:
+                title = 'All caught up'
+                desc = 'Nice work. You cleared every unread message.'
             else:
-                self._load_body(active_msg, self._body_load_generation)
-        return False
+                title = 'No unread messages'
+                desc = 'You are already caught up.'
+        else:
+            visible_count = self._filtered_message_model.get_n_items()
+            if visible_count > 0:
+                self._list_stack.set_visible_child_name('list')
+                return
+            if self._search_text:
+                title = 'No matches'
+                desc = 'Try a different search.'
+            else:
+                title = 'No messages'
+                desc = None
+        self._empty_page.set_title(title)
+        self._empty_page.set_description(desc)
+        self._list_stack.set_visible_child_name('empty')
 
     def _restore_focus_widget(self, widget):
         try:
@@ -776,141 +847,17 @@ class MessageListMixin:
             pass
         return False
 
-    def _load_messages(self, preserve_selected_key=None, sync_complete_callback=None):
-        generation = self._begin_message_load()
-        request_key = self._message_list_context_key()
-        self._queue_message_snapshot_load(generation, preserve_selected_key, request_key=request_key)
-        if not network_ready():
-            self._offline_refresh_pending = True
-            if self._displayed_message_list_key != request_key or self._list_stack.get_visible_child_name() != 'list':
-                self._list_stack.set_visible_child_name('loading')
-            if sync_complete_callback is not None:
-                GLib.idle_add(sync_complete_callback, 0)
-            return
-        self._offline_refresh_pending = False
-        if self._displayed_message_list_key != request_key or self._list_stack.get_visible_child_name() != 'list':
-            self._list_stack.set_visible_child_name('loading')
-        backend = self.current_backend
-        folder = self.current_folder
-        op = self._start_background_op(
-            'load messages',
-            f'{backend.identity}/{folder}',
-            'backend fetch_messages, auth, or IMAP latency',
-        )
-        fetch_limit = self._message_fetch_limit()
-
-        def fetch():
-            try:
-                msgs = backend.fetch_messages(folder, limit=fetch_limit)
-            except Exception as e:
-                if is_transient_network_error(e) or not network_ready():
-                    self._offline_refresh_pending = True
-                else:
-                    _log_exception(f'Load messages failed ({backend.identity}, {folder})', e)
-                    GLib.idle_add(self._set_error, str(e), generation)
-                if sync_complete_callback is not None:
-                    GLib.idle_add(sync_complete_callback, 0)
-                return
-            finally:
-                GLib.idle_add(self._end_background_op, op)
-            page_msgs, has_more = self._paged_messages(msgs)
-            GLib.idle_add(self._set_messages, page_msgs, generation, preserve_selected_key, 'live', True, True, has_more)
-            if sync_complete_callback is not None:
-                GLib.idle_add(sync_complete_callback, 0)
-
-        threading.Thread(target=fetch, daemon=True).start()
-
-    def _build_unified_fetch_specs(self, folder_name=None, fetch_limit=50):
-        specs = []
-        for backend in list(self.backends):
-            folder_id = None
-            if folder_name is None:
-                if backend.FOLDERS:
-                    folder_id = backend.FOLDERS[0][0]
-                error_label = f'Unified inbox error ({backend.identity})'
-            else:
-                folder_id = next((folder_id for folder_id, name, _icon in backend.FOLDERS if name == folder_name), None)
-                error_label = f'Unified {folder_name} error ({backend.identity})'
-            if not folder_id:
-                continue
-            specs.append(
-                UnifiedFetchSpec(
-                    label=error_label,
-                    fetch=lambda backend=backend, folder_id=folder_id, fetch_limit=fetch_limit: backend.fetch_messages(folder_id, limit=fetch_limit),
-                )
-            )
-        return specs
-
-    def _load_unified_messages(self, folder_name=None, preserve_selected_key=None, sync_complete_callback=None):
-        generation = self._begin_message_load()
-        request_key = self._message_list_context_key()
-        self._queue_message_snapshot_load(generation, preserve_selected_key, request_key=request_key)
-        if not network_ready():
-            self._offline_refresh_pending = True
-            if self._displayed_message_list_key != request_key or self._list_stack.get_visible_child_name() != 'list':
-                self._list_stack.set_visible_child_name('loading')
-            if sync_complete_callback is not None:
-                GLib.idle_add(sync_complete_callback, 0)
-            return
-        self._offline_refresh_pending = False
-        if self._displayed_message_list_key != request_key or self._list_stack.get_visible_child_name() != 'list':
-            self._list_stack.set_visible_child_name('loading')
-        fetch_limit = self._message_fetch_limit()
-        fetch_specs = self._build_unified_fetch_specs(folder_name, fetch_limit=fetch_limit)
-        op_kind = 'load unified inbox' if folder_name is None else f'load unified {folder_name.lower()}'
-        op = self._start_background_op(
-            op_kind,
-            'all accounts',
-            'one backend may be slow or blocked; check auth/network',
-        )
-
-        def fetch():
-            try:
-                result = collect_unified_messages(
-                    fetch_specs,
-                    transient_error_fn=is_transient_network_error,
-                    network_ready_fn=network_ready,
-                    error_logger=_log_exception,
-                    limit=fetch_limit,
-                )
-            finally:
-                GLib.idle_add(self._end_background_op, op)
-            if result.get('had_transient_error'):
-                self._offline_refresh_pending = True
-            if result.get('had_transient_error') and not result.get('messages'):
-                if sync_complete_callback is not None:
-                    GLib.idle_add(sync_complete_callback, 0)
-                return
-            page_msgs, has_more = self._paged_messages(result.get('messages', []))
-            GLib.idle_add(self._set_messages, page_msgs, generation, preserve_selected_key, 'live', True, True, has_more)
-            if sync_complete_callback is not None:
-                GLib.idle_add(sync_complete_callback, 0)
-
-        threading.Thread(target=fetch, daemon=True).start()
-
-    def _load_unified_inbox(self, preserve_selected_key=None, sync_complete_callback=None):
-        self._load_unified_messages(
-            folder_name=None,
-            preserve_selected_key=preserve_selected_key,
-            sync_complete_callback=sync_complete_callback,
-        )
-
-    def _load_unified_folder(self, folder_name, preserve_selected_key=None, sync_complete_callback=None):
-        self._load_unified_messages(
-            folder_name=folder_name,
-            preserve_selected_key=preserve_selected_key,
-            sync_complete_callback=sync_complete_callback,
-        )
-
     def _build_message_items(self, msgs, has_more=False):
         items = []
+        sort_order = getattr(self, '_sort_order', 'newest')
         for msg in msgs:
             accent_class = self._account_class_for(
                 (msg.get('account') or (msg.get('backend_obj').identity if msg.get('backend_obj') else ''))
             )
             items.append(MessageListItem(msg, accent_class=accent_class))
-        if has_more:
-            items.append(LoadMoreListItem())
+        if has_more and sort_order != 'oldest':
+            load_more = LoadMoreListItem()
+            items.append(load_more)
         return items
 
     def _set_messages(
@@ -931,20 +878,22 @@ class MessageListMixin:
             self._message_live_generation,
         ):
             return False
-        if source == 'live' and generation is not None:
+        if source in {'live', 'provider-cache'} and generation is not None:
             self._message_live_generation = max(self._message_live_generation, generation)
         started = _perf_counter()
+        self._set_message_loading(False, generation)
         msgs = [dict(msg) for msg in (msgs or [])]
+        sort_order = getattr(self, '_sort_order', 'newest')
         self._displayed_message_list_key = self._message_list_context_key()
         self._message_has_more = bool(has_more)
+        self._sync_message_toolbar_controls()
         self._message_store.splice(0, self._message_store.get_n_items(), [])
         if not msgs:
             self._thread_groups = {}
             self._prefetch_generation += 1
             self._message_has_more = False
-            self._empty_page.set_title('No messages')
-            self._empty_page.set_description(None)
-            self._list_stack.set_visible_child_name('empty')
+            self._sync_message_toolbar_controls()
+            self._update_message_empty_state()
             _log_perf('set messages', '0 msgs -> empty', started=started)
             return False
         groups = collections.OrderedDict()
@@ -972,12 +921,28 @@ class MessageListMixin:
         ordered_msgs = sorted(
             representatives + singletons,
             key=lambda item: item.get('date') or datetime.min.replace(tzinfo=timezone.utc),
-            reverse=True,
+            reverse=(sort_order != 'oldest'),
         )
         self._prefetch_generation += 1
         items = self._build_message_items(ordered_msgs, has_more=has_more)
         self._message_store.splice(0, 0, items)
         self._list_stack.set_visible_child_name('list')
+        if source == 'live' and getattr(self, '_startup_status_active', False):
+            panel = getattr(self, '_startup_status_panel', None)
+            blocking_attention = False
+            if panel is not None:
+                if hasattr(panel, 'has_blocking_attention'):
+                    blocking_attention = panel.has_blocking_attention()
+                elif hasattr(panel, 'has_attention'):
+                    blocking_attention = panel.has_attention()
+            if not blocking_attention:
+                self._startup_visible_ready = True
+                self._clear_startup_status_view()
+                if hasattr(self, '_refresh_all_unread_counts'):
+                    self._refresh_all_unread_counts()
+                if getattr(self, '_viewer_stack', None) is not None:
+                    self._viewer_stack.set_visible_child_name('viewer')
+                self._show_mail_view()
         if self._pending_list_scroll_value is not None:
             GLib.idle_add(self._restore_pending_list_scroll)
         if persist_snapshot:
@@ -996,7 +961,7 @@ class MessageListMixin:
                     msg.get('folder', ''),
                     msg.get('uid', ''),
                 ) == preserve_selected_key:
-                    self._select_message_item(item, suppress=True, grab_focus=True)
+                    self._select_message_item(item, suppress=True)
                     self._active_email_row = item
                     break
             if self._active_email_row is None:
@@ -1014,14 +979,14 @@ class MessageListMixin:
                         None,
                     )
                     if representative_item is not None:
-                        self._select_message_item(representative_item, suppress=True, grab_focus=True)
+                        self._select_message_item(representative_item, suppress=True)
                         self._active_email_row = representative_item
                         should_commit_selected = True
             if self._active_email_row is None:
                 for index in range(self._filtered_message_model.get_n_items()):
                     item = self._filtered_message_model.get_item(index)
                     if isinstance(item, MessageListItem):
-                        self._set_selected_visible_index(index, suppress=True, grab_focus=True)
+                        self._set_selected_visible_index(index, suppress=True)
                         self._active_email_row = item
                         should_commit_selected = True
                         break
@@ -1046,257 +1011,13 @@ class MessageListMixin:
                 break
         if should_commit_selected and self._active_email_row is not None:
             self._commit_email_selection(self._active_email_row)
+        self._update_message_empty_state()
         _log_perf(
             'set messages',
             f'{len(msgs)} msgs -> {len(ordered_msgs)} rows + {1 if has_more else 0} pager, {len(groups)} thread groups [{source}]',
             started=started,
         )
         return False
-
-    def _prefetch_bodies(self, msgs):
-        if not msgs or not self._should_seed_recent_cache():
-            return
-        generation = self._prefetch_generation
-        budget_mb = get_settings().get('disk_cache_budget_mb')
-        limit = max(1, min(PREFETCH_WARMUP_LIMIT, budget_mb // 16 or 1))
-        ordered = sorted(
-            list(msgs),
-            key=lambda m: m.get('date') or datetime.min.replace(tzinfo=timezone.utc),
-            reverse=True,
-        )[:limit]
-        self._prefetch_bodies_for_messages(ordered, generation)
-
-    def _prefetch_bodies_for_messages(self, msgs, generation=None):
-        if not msgs:
-            return
-        if generation is None:
-            generation = self._prefetch_generation
-
-        def run():
-            for candidate in msgs:
-                if self._prefetch_generation != generation:
-                    return
-                backend = candidate.get('backend_obj')
-                if not backend:
-                    continue
-                uid = candidate.get('uid')
-                folder = candidate.get('folder')
-                if not uid or not folder:
-                    continue
-                cache_key = (backend.identity, folder, uid)
-                with self._cache_lock:
-                    if cache_key in self._body_cache:
-                        continue
-                disk_key = _body_cache_key(backend.identity, folder, uid)
-                if (_DISK_BODY_CACHE_DIR / f'{disk_key}.json.gz').exists():
-                    continue
-                try:
-                    html, text, attachments = backend.fetch_body(uid, folder)
-                    if self._prefetch_generation != generation:
-                        return
-                    with self._cache_lock:
-                        self._body_cache[cache_key] = (html, text, attachments)
-                        self._body_cache.move_to_end(cache_key)
-                        while len(self._body_cache) > BODY_CACHE_LIMIT:
-                            self._body_cache.popitem(last=False)
-                    self._store_disk_body(disk_key, html, text, attachments, candidate.get('date'))
-                except Exception as e:
-                    _log_exception(f'Prefetch failed ({backend.identity}, {folder}, {uid})', e)
-
-        threading.Thread(target=run, daemon=True).start()
-
-    def _should_seed_recent_cache(self):
-        return self.current_folder in (_UNIFIED, 'INBOX', 'inbox')
-
-    def _message_list_context_key(self, backend=None, folder=None):
-        backend = self.current_backend if backend is None else backend
-        folder = self.current_folder if folder is None else folder
-        if folder in (_UNIFIED, _UNIFIED_TRASH, _UNIFIED_SPAM):
-            return ('unified', folder)
-        if backend and folder:
-            return (backend.identity, folder)
-        return None
-
-    def _snapshot_messages_from_payload(self, records, default_folder, backend_context):
-        msgs = []
-        for m in records:
-            try:
-                date_val = m.get('date')
-                date = datetime.fromisoformat(date_val) if date_val else datetime.now(timezone.utc)
-            except Exception:
-                date = datetime.now(timezone.utc)
-            account = m.get('account', '')
-            backend_obj = (
-                backend_context
-                if backend_context and account == backend_context.identity
-                else _backend_for_identity(self.backends, account)
-            )
-            msgs.append({
-                'uid': m.get('uid', ''),
-                'subject': m.get('subject', '(no subject)'),
-                'sender_name': m.get('sender_name', ''),
-                'sender_email': m.get('sender_email', ''),
-                'to_addrs': m.get('to_addrs', []),
-                'cc_addrs': m.get('cc_addrs', []),
-                'date': date,
-                'is_read': m.get('is_read', True),
-                'has_attachments': m.get('has_attachments', False),
-                'snippet': m.get('snippet', ''),
-                'folder': m.get('folder', default_folder),
-                'backend': m.get('backend', ''),
-                'account': account,
-                'thread_id': m.get('thread_id', ''),
-                'thread_source': m.get('thread_source', ''),
-                'backend_obj': backend_obj,
-            })
-        return msgs
-
-    def _queue_message_snapshot_load(self, generation=None, preserve_selected_key=None, request_key=None):
-        scope = _snapshot_scope(self.current_backend, self.current_folder)
-        if not scope:
-            return False
-        path = _snapshot_path(scope)
-        if not path.exists():
-            return False
-        if request_key is not None and self._displayed_message_list_key == request_key and self._list_stack.get_visible_child_name() == 'list':
-            return False
-        accounts = sorted(b.identity for b in self.backends)
-        backend_context = self.current_backend
-        default_folder = self.current_folder
-        op = self._start_background_op(
-            'load snapshot',
-            scope,
-            'gzip/json snapshot read or stale snapshot apply',
-        )
-
-        def load():
-            started = _perf_counter()
-            try:
-                payload = load_snapshot_payload(scope)
-            except Exception as e:
-                _log_exception(f'Snapshot load failed ({scope})', e)
-                return
-            finally:
-                GLib.idle_add(self._end_background_op, op)
-            if not payload:
-                return
-            stored_accounts_raw = payload.get('accounts')
-            if scope == 'unified-inbox' and not stored_accounts_raw:
-                return
-            stored_accounts = sorted(stored_accounts_raw or [])
-            if stored_accounts and stored_accounts != accounts:
-                return
-            records = list(payload.get('messages', []))
-
-            def apply():
-                if not snapshot_result_applicable(
-                    generation,
-                    self._message_load_generation,
-                    self._message_live_generation,
-                ):
-                    return False
-                msgs = self._snapshot_messages_from_payload(records, default_folder, backend_context)
-                self._set_messages(
-                    msgs,
-                    generation,
-                    preserve_selected_key,
-                    'snapshot',
-                    False,
-                    False,
-                )
-                _log_perf('snapshot load', f'{scope} {len(msgs)} msgs', started=started)
-                return False
-
-            GLib.idle_add(apply)
-
-        threading.Thread(target=load, daemon=True).start()
-        return True
-
-    def _store_message_snapshot(self, msgs):
-        scope = _snapshot_scope(self.current_backend, self.current_folder)
-        if not scope:
-            return
-        started = _perf_counter()
-        accounts = [b.identity for b in self.backends]
-        default_folder = self.current_folder
-        queued_msgs = [dict(m) for m in (msgs or [])[:100]]
-        payload = build_snapshot_payload(scope, accounts, queued_msgs, default_folder)
-        self._snapshot_save_queue.enqueue(scope, payload)
-        _log_perf('snapshot save', f'{scope} {len(queued_msgs)} msgs queued', started=started)
-
-    def _count_bucket_for_folder(self, folder):
-        folder = (folder or '').lower()
-        if folder in (_UNIFIED, 'inbox'):
-            return 'inbox'
-        if 'trash' in folder or 'deleteditems' in folder:
-            return 'trash'
-        if 'spam' in folder or 'junk' in folder:
-            return 'spam'
-        return None
-
-    def _adjust_unread_count_for_message(self, msg, delta):
-        backend_identity = msg.get('account') or (msg.get('backend_obj').identity if msg.get('backend_obj') else None)
-        if not backend_identity:
-            return
-        bucket = self._count_bucket_for_folder(msg.get('folder'))
-        if bucket != 'inbox':
-            return
-        counts = self._unread_counts[backend_identity]
-        counts['inbox'] = max(0, counts['inbox'] + delta)
-        self.update_account_counts(backend_identity, inbox_count=counts['inbox'])
-
-    def _folder_id_for_name(self, backend_identity, display_name):
-        state = self._account_state.get(backend_identity)
-        if not state:
-            return None
-        backend = state['header'].backend
-        return next((folder_id for folder_id, name, _icon in backend.FOLDERS if name == display_name), None)
-
-    def update_account_counts(self, backend_identity, inbox_count=None, trash_count=None, spam_count=None):
-        counts = self._unread_counts[backend_identity]
-        if inbox_count is not None:
-            counts['inbox'] = inbox_count
-        if trash_count is not None:
-            counts['trash'] = trash_count
-        if spam_count is not None:
-            counts['spam'] = spam_count
-
-        inbox_row = self._folder_rows.get((backend_identity, self._folder_id_for_name(backend_identity, 'Inbox')))
-        if inbox_row:
-            inbox_row.set_count(counts['inbox'])
-
-        trash_row = self._folder_rows.get((backend_identity, self._folder_id_for_name(backend_identity, 'Trash')))
-        if trash_row:
-            trash_row.set_count(counts['trash'], dim=True)
-
-        spam_row = self._folder_rows.get((backend_identity, self._folder_id_for_name(backend_identity, 'Spam')))
-        if spam_row:
-            spam_row.set_count(counts['spam'], dim=True)
-
-        state = self._account_state.get(backend_identity)
-        if state:
-            state['header'].set_count(counts['inbox'])
-
-        total = sum(account_counts['inbox'] for account_counts in self._unread_counts.values())
-        if self._all_inboxes_row:
-            self._all_inboxes_row.set_count(total)
-
-    def update_folder_count(self, backend_identity, folder_id, count):
-        state = self._account_state.get(backend_identity)
-        if not state:
-            return
-        backend = state['header'].backend
-        folder_name = next((name for fid, name, _icon in backend.FOLDERS if fid == folder_id), None)
-        row = self._folder_rows.get((backend_identity, folder_id))
-        if row:
-            row.set_count(count, dim=folder_name in ('Trash', 'Spam'))
-
-        if folder_name == 'Inbox':
-            self.update_account_counts(backend_identity, inbox_count=count)
-        elif folder_name == 'Trash':
-            self.update_account_counts(backend_identity, trash_count=count)
-        elif folder_name == 'Spam':
-            self.update_account_counts(backend_identity, spam_count=count)
 
     def show_sync_badge(self, n):
         if n > 0:

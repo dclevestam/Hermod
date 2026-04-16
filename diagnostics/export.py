@@ -22,7 +22,7 @@ except ImportError:
 def default_export_path():
     downloads = Path(GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOWNLOAD) or Path.home())
     stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
-    return downloads / f'lark-diagnostics-{stamp}.zip'
+    return downloads / f'hermod-diagnostics-{stamp}.zip'
 
 
 def export_diagnostics_bundle(target_path=None):

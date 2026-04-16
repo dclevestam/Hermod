@@ -12,7 +12,7 @@ gi.require_version('GLib', '2.0')
 from gi.repository import GLib
 
 
-_SYNC_STATE_DIR = Path(GLib.get_user_cache_dir()) / 'lark'
+_SYNC_STATE_DIR = Path(GLib.get_user_cache_dir()) / 'hermod'
 _SYNC_STATE_FILE = _SYNC_STATE_DIR / 'sync-state.json'
 _SYNC_STATE_LOCK = threading.RLock()
 
@@ -79,3 +79,27 @@ def set_account_state(provider, account, state):
             if not bucket:
                 providers.pop(provider, None)
         _store_all(data)
+
+
+def list_account_states(provider):
+    with _SYNC_STATE_LOCK:
+        data = _load_all()
+        provider_state = data.get('providers', {}).get(provider, {})
+        return copy.deepcopy(provider_state)
+
+
+def prune_account_states(provider, active_accounts):
+    active = {str(account or '').strip() for account in (active_accounts or []) if str(account or '').strip()}
+    removed = []
+    with _SYNC_STATE_LOCK:
+        data = _load_all()
+        providers = data.setdefault('providers', {})
+        bucket = providers.get(provider, {})
+        for account in list(bucket.keys()):
+            if account not in active:
+                removed.append(account)
+                bucket.pop(account, None)
+        if not bucket:
+            providers.pop(provider, None)
+        _store_all(data)
+    return removed

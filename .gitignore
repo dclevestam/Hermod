@@ -9,3 +9,6 @@ Thumbs.db
 .idea/
 .vscode/
 *.log
+debug_env.txt
+screen.xwd
+screenshot_tools.txt

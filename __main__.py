@@ -1,4 +1,5 @@
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import sys
 import threading
 import time
@@ -14,20 +15,21 @@ from gi.repository import Gtk, Adw, Notify, GLib, Gio
 try:
     from .backends import get_backends, is_transient_network_error, network_ready
     from .diagnostics.logger import log_network_change, log_startup_summary
-    from .window import LarkWindow
+    from .window import HermodWindow
     from .settings import get_settings
     from .utils import _log_exception, _perf_counter, _log_perf
 except ImportError:
     from backends import get_backends, is_transient_network_error, network_ready
     from diagnostics.logger import log_network_change, log_startup_summary
-    from window import LarkWindow
+    from window import HermodWindow
     from settings import get_settings
     from utils import _log_exception, _perf_counter, _log_perf
 
 
-class LarkApp(Adw.Application):
+class HermodApp(Adw.Application):
     def __init__(self, dump_ui_path=None, dump_ui_delay_ms=1500, dump_ui_max_attempts=20):
-        super().__init__(application_id='io.github.lark.Lark')
+        super().__init__(application_id='io.github.hermod.Hermod')
+        Adw.StyleManager.get_default().set_color_scheme(Adw.ColorScheme.FORCE_DARK)
         self.window = None
         self.backends = []
         self._notif_thread = None
@@ -36,6 +38,7 @@ class LarkApp(Adw.Application):
         self._poll_suspended = False
         self._next_poll_at = 0.0
         self._next_reconcile_at = 0.0
+        self._force_reconcile = True
         self._network_monitor = Gio.NetworkMonitor.get_default()
         self._transient_poll_failures = 0
         self._dump_ui_path = Path(dump_ui_path) if dump_ui_path else None
@@ -49,8 +52,10 @@ class LarkApp(Adw.Application):
     def _folder_id_for_name(self, backend, display_name):
         return next((folder_id for folder_id, name, _icon in backend.FOLDERS if name == display_name), None)
 
-    def wake_background_updates(self):
+    def wake_background_updates(self, reconcile=False):
         self._next_poll_at = min(self._next_poll_at, time.monotonic())
+        if reconcile:
+            self._force_reconcile = True
         self._poll_wake.set()
 
     def _on_activate(self, _):
@@ -59,7 +64,7 @@ class LarkApp(Adw.Application):
             return
         startup_started = _perf_counter()
 
-        Notify.init('Lark')
+        Notify.init('Hermod')
 
         accounts_started = _perf_counter()
         try:
@@ -71,7 +76,7 @@ class LarkApp(Adw.Application):
         _log_perf('activate accounts', f'{len(self.backends)} backends', started=accounts_started)
 
         window_started = _perf_counter()
-        self.window = LarkWindow(self, self.backends)
+        self.window = HermodWindow(self, self.backends)
         self.window.connect('notify::suspended', self._on_window_suspended)
         self._network_monitor.connect('network-changed', self._on_network_changed)
         self.window.set_network_offline(not network_ready())
@@ -121,8 +126,11 @@ class LarkApp(Adw.Application):
 
     def _poll_loop(self):
         settings = get_settings()
-        self._next_poll_at = time.monotonic()
-        self._next_reconcile_at = 0.0
+        reconcile_secs = max(60, settings.get('reconcile_interval') * 60)
+        poll_secs = max(60, settings.get('poll_interval') * 60)
+        startup_grace_secs = min(15, poll_secs)
+        self._next_poll_at = time.monotonic() + startup_grace_secs
+        self._next_reconcile_at = time.monotonic() + reconcile_secs
         while True:
             if self._poll_stop.is_set():
                 return
@@ -144,49 +152,81 @@ class LarkApp(Adw.Application):
                 self._next_poll_at = time.monotonic() + 30
                 continue
 
+            if self.window is not None and getattr(self.window, '_startup_status_active', False):
+                # Startup already performs the first mailbox load, so keep the
+                # background poll from racing it or immediately repeating it.
+                self._next_poll_at = time.monotonic() + startup_grace_secs
+                continue
+
             if self.window is not None and getattr(self.window, '_sync_in_flight', False):
                 self._next_poll_at = time.monotonic() + 5
                 continue
 
             GLib.idle_add(self.window.set_network_offline, False)
             GLib.idle_add(self.window.set_syncing, True)
-            reconcile_due = time.monotonic() >= self._next_reconcile_at
+            reconcile_due = self._force_reconcile or time.monotonic() >= self._next_reconcile_at
             results = []
             total_new = 0
             transient_error = False
             successful_poll = False
+            poll_jobs = []
             for backend in self.backends:
-                try:
-                    tracked_folders = [folder_id for folder_id, _name, _icon in backend.FOLDERS]
-                    if self.window is not None:
-                        current_backend = getattr(self.window, 'current_backend', None)
-                        current_folder = getattr(self.window, 'current_folder', None)
-                        if current_backend is backend and current_folder:
-                            tracked_folders.append(current_folder)
-                    result = backend.check_background_updates(
+                tracked_folders = [folder_id for folder_id, _name, _icon in backend.FOLDERS]
+                if self.window is not None:
+                    current_backend = getattr(self.window, 'current_backend', None)
+                    current_folder = getattr(self.window, 'current_folder', None)
+                    if current_backend is backend and current_folder:
+                        tracked_folders.append(current_folder)
+                poll_jobs.append((backend, tracked_folders))
+            max_workers = max(1, min(4, len(poll_jobs)))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_backend = {
+                    executor.submit(
+                        backend.check_background_updates,
                         tracked_folders=tracked_folders,
                         reconcile_counts=reconcile_due,
-                    )
-                    successful_poll = True
+                    ): backend
+                    for backend, tracked_folders in poll_jobs
+                }
+                for future in as_completed(future_to_backend):
+                    backend = future_to_backend[future]
+                    try:
+                        result = future.result()
+                    except Exception as e:
+                        if is_transient_network_error(e):
+                            transient_error = True
+                        _log_exception(f'Poll error ({backend.identity})', e)
+                        notice = None
+                        if hasattr(backend, 'consume_sync_notice'):
+                            try:
+                                notice = backend.consume_sync_notice()
+                            except Exception:
+                                notice = None
+                        result = {
+                            'account': backend.identity,
+                            'provider': getattr(backend, 'provider', ''),
+                            'changed_folders': set(),
+                            'new_messages': [],
+                            'counts': {},
+                            'notice': notice or {'kind': 'error', 'detail': 'Sync issue'},
+                        }
+                    else:
+                        successful_poll = True
                     results.append(result)
                     new = len(result.get('new_messages', []))
                     if new > 0:
                         total_new += new
                         self._notify(backend.identity, new)
-                except Exception as e:
-                    if is_transient_network_error(e):
-                        transient_error = True
-                    _log_exception(f'Poll error ({backend.identity})', e)
             GLib.idle_add(self.window.on_background_update, results, total_new)
             if successful_poll:
                 self._transient_poll_failures = 0
+                self._force_reconcile = False
                 if reconcile_due:
-                    poll_secs = max(60, settings.get('poll_interval') * 60)
-                    self._next_reconcile_at = time.monotonic() + max(15 * 60, poll_secs * 3)
+                    reconcile_secs = max(60, settings.get('reconcile_interval') * 60)
+                    self._next_reconcile_at = time.monotonic() + reconcile_secs
             elif transient_error:
                 self._transient_poll_failures = min(self._transient_poll_failures + 1, 5)
                 GLib.idle_add(self.window.set_network_offline, not network_ready())
-            poll_secs = max(60, settings.get('poll_interval') * 60)
             if transient_error and not successful_poll:
                 poll_secs = min(poll_secs, 30 * (2 ** self._transient_poll_failures))
             self._next_poll_at = time.monotonic() + poll_secs
@@ -262,7 +302,7 @@ def main():
     parser.add_argument('--dump-ui-delay-ms', type=int, default=1500)
     parser.add_argument('--dump-ui-max-attempts', type=int, default=20)
     args, remaining = parser.parse_known_args(sys.argv[1:])
-    app = LarkApp(
+    app = HermodApp(
         dump_ui_path=args.dump_ui,
         dump_ui_delay_ms=args.dump_ui_delay_ms,
         dump_ui_max_attempts=args.dump_ui_max_attempts,

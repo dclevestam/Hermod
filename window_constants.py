@@ -1,4 +1,4 @@
-"""Shared constants for the Lark window layer."""
+"""Shared constants for the Hermod window layer."""
 
 BODY_CACHE_LIMIT = 8
 PREFETCH_WARMUP_LIMIT = 4

@@ -89,7 +89,7 @@ class DiagnosticsExportTests(unittest.TestCase):
                  mock.patch.object(export_module, 'build_health_snapshot', return_value={
                      'python_version': '3.14.3',
                      'settings': {'diagnostics_enabled': True},
-                     'account_summary': {'goa:gmail': 1},
+                     'account_summary': {'native:gmail': 1},
                  }):
                 logger_module.log_event(
                     'startup',
@@ -105,7 +105,7 @@ class DiagnosticsExportTests(unittest.TestCase):
                 manifest = json.loads(archive.read('manifest.json'))
                 self.assertIn('python_version', manifest)
                 self.assertIn('settings', manifest)
-                self.assertEqual(manifest['account_summary'], {'goa:gmail': 1})
+                self.assertEqual(manifest['account_summary'], {'native:gmail': 1})
                 self.assertNotIn('cache_dir', manifest)
                 self.assertNotIn('config_dir', manifest)
                 perf = json.loads(archive.read('perf.json'))
