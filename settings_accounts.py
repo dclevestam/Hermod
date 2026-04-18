@@ -171,6 +171,10 @@ def _default_google_oauth_client_id():
     return str(os.environ.get("HERMOD_GOOGLE_CLIENT_ID") or "").strip()
 
 
+def _default_google_oauth_client_secret():
+    return str(os.environ.get("HERMOD_GOOGLE_CLIENT_SECRET") or "").strip()
+
+
 def _provider_profile(provider_key):
     provider_key = str(provider_key or "imap-smtp").strip().lower() or "imap-smtp"
     profiles = {
@@ -664,7 +668,14 @@ class AccountSettingsController:
         return lambda message: self._queue_google_status_update(form, message)
 
     def _save_native_google_record(
-        self, account_id, identity_value, alias, color, enabled, client_id
+        self,
+        account_id,
+        identity_value,
+        alias,
+        color,
+        enabled,
+        client_id,
+        client_secret="",
     ):
         record_config = {
             "service_provider": "gmail",
@@ -674,6 +685,9 @@ class AccountSettingsController:
             "api_only": True,
             "send_via_api": True,
         }
+        client_secret = str(client_secret or "").strip()
+        if client_secret:
+            record_config["oauth_client_secret"] = client_secret
         new_record = NativeAccountRecord(
             id=account_id,
             provider_kind="gmail",
@@ -697,6 +711,7 @@ class AccountSettingsController:
         color,
         enabled,
         client_id,
+        client_secret="",
         form,
     ):
         try:
@@ -708,6 +723,7 @@ class AccountSettingsController:
                 color,
                 enabled,
                 client_id,
+                client_secret,
             )
             self._refresh_runtime()
             self._render_accounts()
@@ -761,8 +777,17 @@ class AccountSettingsController:
             client_id = str(
                 context["record"].config.get("oauth_client_id") or ""
             ).strip()
+            client_secret = str(
+                context["record"].config.get("oauth_client_secret") or ""
+            ).strip()
             self._save_native_google_record(
-                account_id, identity_value, alias, color, enabled, client_id
+                account_id,
+                identity_value,
+                alias,
+                color,
+                enabled,
+                client_id,
+                client_secret,
             )
             self._refresh_runtime()
             self._render_accounts()
@@ -778,6 +803,15 @@ class AccountSettingsController:
             or self.settings.get("google_oauth_client_id")
             or _default_google_oauth_client_id()
         ).strip()
+        client_secret = str(
+            (
+                context["record"].config.get("oauth_client_secret")
+                if context["record"] is not None
+                else ""
+            )
+            or self.settings.get("google_oauth_client_secret")
+            or _default_google_oauth_client_secret()
+        ).strip()
         if not client_id:
             self._toast("Google sign-in is not configured yet")
             return
@@ -789,6 +823,7 @@ class AccountSettingsController:
             try:
                 bundle = run_google_native_oauth_authorization(
                     client_id,
+                    client_secret=client_secret,
                     progress_callback=self._google_progress_callback(form),
                 )
                 identity_value = str(bundle.get("identity") or "").strip()
@@ -830,6 +865,7 @@ class AccountSettingsController:
                         color=color,
                         enabled=enabled,
                         client_id=client_id,
+                        client_secret=client_secret,
                         form=form,
                     )
 

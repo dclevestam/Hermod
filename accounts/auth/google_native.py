@@ -63,6 +63,11 @@ def _json_request(url, *, method="GET", data=None, headers=None, timeout=15):
             ).strip()
         except Exception:
             detail = str(exc).strip()
+        if "client_secret is missing" in detail.lower():
+            detail = (
+                "Google OAuth client secret is missing. Add google_oauth_client_secret "
+                "to Hermod settings or use a Google Desktop app OAuth client."
+            )
         raise OAuthTokenAcquisitionError(
             detail or f"Google OAuth request failed with {exc.code}",
             stage="http",
@@ -157,32 +162,42 @@ def _token_bundle_from_response(payload, *, preserve_refresh_token=""):
 
 
 def exchange_google_auth_code(
-    client_id, code, code_verifier, redirect_uri, *, timeout=15
+    client_id, code, code_verifier, redirect_uri, *, client_secret="", timeout=15
 ):
+    payload_data = {
+        "client_id": str(client_id or "").strip(),
+        "code": str(code or "").strip(),
+        "code_verifier": str(code_verifier or "").strip(),
+        "grant_type": "authorization_code",
+        "redirect_uri": str(redirect_uri or "").strip(),
+    }
+    client_secret = str(client_secret or "").strip()
+    if client_secret:
+        payload_data["client_secret"] = client_secret
     payload = _json_request(
         _GOOGLE_TOKEN_URL,
         method="POST",
-        data={
-            "client_id": str(client_id or "").strip(),
-            "code": str(code or "").strip(),
-            "code_verifier": str(code_verifier or "").strip(),
-            "grant_type": "authorization_code",
-            "redirect_uri": str(redirect_uri or "").strip(),
-        },
+        data=payload_data,
         timeout=timeout,
     )
     return _token_bundle_from_response(payload)
 
 
-def refresh_google_access_token(client_id, refresh_token, *, timeout=15):
+def refresh_google_access_token(
+    client_id, refresh_token, *, client_secret="", timeout=15
+):
+    payload_data = {
+        "client_id": str(client_id or "").strip(),
+        "refresh_token": str(refresh_token or "").strip(),
+        "grant_type": "refresh_token",
+    }
+    client_secret = str(client_secret or "").strip()
+    if client_secret:
+        payload_data["client_secret"] = client_secret
     payload = _json_request(
         _GOOGLE_TOKEN_URL,
         method="POST",
-        data={
-            "client_id": str(client_id or "").strip(),
-            "refresh_token": str(refresh_token or "").strip(),
-            "grant_type": "refresh_token",
-        },
+        data=payload_data,
         timeout=timeout,
     )
     return _token_bundle_from_response(payload, preserve_refresh_token=refresh_token)
@@ -209,12 +224,14 @@ def revoke_google_token(token, *, timeout=15):
 def run_google_native_oauth_authorization(
     client_id,
     *,
+    client_secret="",
     login_hint="",
     scopes=None,
     timeout_seconds=_GOOGLE_OAUTH_TIMEOUT_SECS,
     progress_callback=None,
 ):
     client_id = str(client_id or "").strip()
+    client_secret = str(client_secret or "").strip()
     if not client_id:
         raise OAuthTokenAcquisitionError(
             "Google OAuth client ID is required",
@@ -351,9 +368,17 @@ def run_google_native_oauth_authorization(
             source="google",
         )
     _report_progress(progress_callback, "Exchanging Google authorization...")
-    bundle = exchange_google_auth_code(client_id, code, verifier, redirect_uri)
+    bundle = exchange_google_auth_code(
+        client_id,
+        code,
+        verifier,
+        redirect_uri,
+        client_secret=client_secret,
+    )
     _report_progress(progress_callback, "Fetching your Gmail address...")
     bundle["identity"] = _gmail_profile(bundle["access_token"])
     bundle["client_id"] = client_id
+    if client_secret:
+        bundle["client_secret"] = client_secret
     bundle["scopes"] = list(scopes)
     return bundle

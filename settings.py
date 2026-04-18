@@ -41,6 +41,7 @@ DEFAULTS = {
     "debug_logging": True,
     "disk_cache_budget_mb": 64,
     "google_oauth_client_id": "",
+    "google_oauth_client_secret": "",
 }
 
 _MIN_DISK_CACHE_BUDGET_MB = 8

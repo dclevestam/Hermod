@@ -16,9 +16,9 @@ _APP_ICON_PATH = (
 _WELCOME_SCENE_PATH = _ROOT / "assets" / "welcome-scene.svg"
 _PROVIDER_ASSETS = _ROOT / "assets" / "providers"
 _LUCIDE_ASSETS = _ROOT / "assets" / "icons" / "lucide"
-_GMAIL_ICON_PATH = _PROVIDER_ASSETS / "provider-gmail.svg"
+_GMAIL_ICON_PATH = _PROVIDER_ASSETS / "provider-gmail.png"
 _PROTON_ICON_PATH = _PROVIDER_ASSETS / "provider-proton.svg"
-_OUTLOOK_ICON_PATH = _PROVIDER_ASSETS / "provider-microsoft.svg"
+_OUTLOOK_ICON_PATH = _PROVIDER_ASSETS / "provider-microsoft.png"
 _ICLOUD_ICON_PATH = _PROVIDER_ASSETS / "provider-icloud.svg"
 _YAHOO_ICON_PATH = _PROVIDER_ASSETS / "provider-yahoo.svg"
 _FASTMAIL_ICON_PATH = _PROVIDER_ASSETS / "provider-fastmail.svg"
@@ -136,26 +136,7 @@ def _backend_logo_path(backend):
 
 
 def _add_fireflies(overlay):
-    specs = [
-        ("a", Gtk.Align.START, Gtk.Align.START, 118, 154),
-        ("b", Gtk.Align.START, Gtk.Align.START, 312, 120),
-        ("c", Gtk.Align.END, Gtk.Align.START, 188, 172),
-        ("d", Gtk.Align.END, Gtk.Align.START, 420, 104),
-        ("e", Gtk.Align.CENTER, Gtk.Align.START, 0, 78),
-    ]
-    dots = []
-    for css_suffix, halign, valign, margin_start, margin_top in specs:
-        dot = Gtk.Box()
-        dot.add_css_class("welcome-firefly")
-        dot.add_css_class(f"firefly-{css_suffix}")
-        dot.set_halign(halign)
-        dot.set_valign(valign)
-        dot.set_margin_start(margin_start)
-        dot.set_margin_top(margin_top)
-        overlay.add_overlay(dot)
-        overlay.set_measure_overlay(dot, False)
-        dots.append(dot)
-    return dots
+    return []
 
 
 def _build_icon_launcher(path, tooltip, callback):

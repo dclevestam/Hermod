@@ -425,10 +425,7 @@ CSS = """
     border-color: transparent;
 }
 .welcome-wash {
-    background:
-        radial-gradient(circle at 52% 14%, alpha(#2b5f4e, 0.18), transparent 36%),
-        radial-gradient(circle at 18% 22%, alpha(#4d6f63, 0.10), transparent 30%),
-        linear-gradient(180deg, alpha(#020302, 0.12), alpha(#050706, 0.60) 68%, alpha(#060908, 0.94));
+    background: transparent;
 }
 .welcome-firefly {
     min-width: 4px;

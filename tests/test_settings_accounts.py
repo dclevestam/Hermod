@@ -52,7 +52,13 @@ class AccountSettingsControllerTests(unittest.TestCase):
         self.assertFalse(result)
         store_bundle.assert_called_once_with("acct-1", bundle)
         controller._save_native_google_record.assert_called_once_with(
-            "acct-1", "user@gmail.com", "User", "#4c7fff", True, "client-id"
+            "acct-1",
+            "user@gmail.com",
+            "User",
+            "#4c7fff",
+            True,
+            "client-id",
+            "",
         )
         controller._refresh_runtime.assert_called_once()
         controller._render_accounts.assert_called_once()

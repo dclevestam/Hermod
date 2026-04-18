@@ -12,3 +12,7 @@ Thumbs.db
 debug_env.txt
 screen.xwd
 screenshot_tools.txt
+.codex/
+.opencode/
+opencode.json
+tui.json
