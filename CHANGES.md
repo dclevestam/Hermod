@@ -208,3 +208,38 @@
 - `Oldest first` uses the ascending sort icon
 - The tooltip follows the active order
 - **Why:** the control is smaller, clearer, and easier to hit in the header bar
+
+## Design tokens and appearance settings (`styles.py`, `settings.py`)
+
+**Hermod now has a formal design-token layer and a live Appearance section in Settings.**
+- `styles.py` exposes `ACCENT_PALETTE`, `DAY_PALETTES`, `DENSITY_ROW_HEIGHT`, and `build_theme_override_css(theme, day_variant, accent, density)` for dynamic theme application
+- `settings.py` holds the new keys `theme_mode` (`night`/`day`), `day_variant` (`paper`/`mist`/`linen`), `accent` (`teal`/`forest`/`gold`/`stone`), `density` (`comfortable`/`balanced`/`compact`), and `ai_enabled`
+- The Settings page shows an Appearance section with theme/day-variant segments, accent swatches, density segments, and an AI toggle
+- Theme changes call `window.apply_theme()` live; the CSS provider is swapped in place
+- **Why:** the design pass introduced a multi-axis palette the app has to switch between at runtime; without a token layer, theme changes would require restart and CSS would drift from the design file
+
+## Welcome screen layout and chrome (`window_welcome.py`, `styles.py`, `window.py`)
+
+**The welcome screen is a two-column surface that owns its own titlebar.**
+- Left column: flat forest/aurora panel with bottom-left caption (placeholder until real art lands)
+- Right column: scrollable content — H mark, HERMOD eyebrow, hero headline, summary, CONNECT AN ACCOUNT grid, "Show all 8 providers" link, zero-cloud lock pill, accounts list once at least one account exists
+- `WelcomeScreen` is a `Gtk.Box` (vertical) that packs its own `Adw.HeaderBar` with an "H HERMOD" brand widget; the main window's `_header_bar` is hidden in welcome mode
+- Provider tiles use horizontal `.provider-row-tile` rows with a colored letter glyph, name, and subtype text
+- The H mark uses `Gtk.Image.new_from_file` with `set_pixel_size(40)` inside a 64×64 box so the SVG stops rendering at its intrinsic size
+- **Why:** the design calls for a two-column welcome with its own chrome; the default app header lives inside the `app` stack child and does not appear when welcome is visible
+
+## Onboarding modal chrome (`window_welcome.py`, `settings_accounts.py`, `styles.py`)
+
+**Onboarding modal windows use a single custom header — no OS CSD duplicate.**
+- `_strip_dialog_chrome(dialog)` replaces the OS titlebar with an empty `Gtk.Box` so the dialog renders with our internal header only
+- `_build_modal_shell(title, subtitle, on_close)` in `window_welcome.py` builds the shared head: ADD ACCOUNT eyebrow, title, subtitle, close button, divider, then body content
+- The More Providers dialog is a `Gtk.Window` using the modal shell + `ALL_PROVIDERS_ORDER` of `.provider-row-tile` rows + a lock-pill footer
+- The Connect Gmail / Connect <provider> setup dialog uses the same eyebrow + title + subtitle + close pattern
+- **Why:** multiple modals had a doubled titlebar (OS + internal), which broke the coherent modal language in the design
+
+## Banding mitigation (`styles.py`)
+
+**Low-alpha gradients on dark surfaces were flattened because GTK4 CSS does not dither 8-bit gradients.**
+- Flattened: `.welcome-photo`, `.search-entry-shell`, `.startup-status-panel`, `.startup-status-card`, `.attachment-bar`, `.thread-reply-bar`, `.message-info-bar`, `.reading-pane-shell`, `.thread-sidebar`, `.message-column`
+- Where a gradient was intentional (accents, provider glyphs, orb), it stays because the area is small
+- **Why:** broad 0.02→0 or 0.03→0 alpha transitions over hundreds of pixels created visible banding steps; on the modern dark palette the visual delta of these gradients was near zero, so flattening them loses almost nothing

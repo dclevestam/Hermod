@@ -17,22 +17,22 @@ FONT_SIZE_OPTIONS = [12, 14, 16, 18, 24]
 COMPOSE_CSS = """
 .compose-shell {
     background:
-        radial-gradient(circle at 50% 0%, alpha(#74a48d, 0.04), transparent 30%),
+        radial-gradient(circle at 50% 0%, alpha(#2e6a70, 0.04), transparent 30%),
         linear-gradient(180deg, alpha(white, 0.015), alpha(white, 0.00)),
-        alpha(#101312, 0.96);
+        alpha(#0f1417, 0.96);
     border-radius: 18px;
 }
 .compose-header-meta {
     padding: 10px 16px 8px;
-    border-bottom: 1px solid alpha(#dfe4de, 0.08);
+    border-bottom: 1px solid alpha(#f2f1ed, 0.08);
     background:
         linear-gradient(180deg, alpha(white, 0.02), alpha(white, 0.00)),
-        alpha(#121715, 0.94);
+        alpha(#11171b, 0.94);
 }
 .compose-header-summary {
     font-size: 0.84em;
     line-height: 1.0;
-    color: alpha(#b7beb8, 0.82);
+    color: alpha(#a6adb3, 0.82);
     min-height: 18px;
     padding-top: 0px;
     padding-bottom: 0px;
@@ -44,10 +44,12 @@ COMPOSE_CSS = """
     margin-bottom: 6px;
 }
 .compose-field-label {
-    font-size: 0.70em;
-    letter-spacing: 0.08em;
+    font-family: "Geist Mono", monospace;
+    font-size: 0.68em;
+    font-weight: 500;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: alpha(#b7beb8, 0.66);
+    color: alpha(#a6adb3, 0.72);
     margin-bottom: 4px;
 }
 .compose-field-line {
@@ -64,21 +66,24 @@ COMPOSE_CSS = """
 }
 .compose-from-inline-label {
     min-width: 84px;
-    font-size: 0.82em;
-    letter-spacing: 0.04em;
-    color: alpha(#b7beb8, 0.60);
+    font-family: "Geist Mono", monospace;
+    font-size: 0.72em;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: alpha(#a6adb3, 0.72);
 }
 .compose-from-value {
     font-size: 0.9em;
-    color: #f2efe8;
+    color: #f2f1ed;
     font-weight: 500;
 }
 .compose-operator-bar {
     padding: 8px 10px 9px;
     background:
         linear-gradient(180deg, alpha(white, 0.02), alpha(white, 0.00)),
-        alpha(#121715, 0.96);
-    border-top: 1px solid alpha(#dfe4de, 0.08);
+        alpha(#11171b, 0.96);
+    border-top: 1px solid alpha(#f2f1ed, 0.08);
 }
 .compose-style-dropdown {
     min-width: 86px;
@@ -93,13 +98,25 @@ COMPOSE_CSS = """
 .compose-send-btn {
     min-height: 32px;
     min-width: 92px;
-    font-weight: 800;
-    padding: 0px 12px;
+    font-family: "Geist", sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    padding: 0px 14px;
+    border-radius: 10px;
+    background: #2e6a70;
+    color: #f2f1ed;
+    border: 1px solid alpha(#2e6a70, 0.85);
+}
+.compose-send-btn:hover {
+    background: shade(#2e6a70, 1.08);
+}
+.compose-send-btn:active {
+    background: shade(#2e6a70, 0.92);
 }
 .compose-body-shell {
     background:
-        radial-gradient(circle at 50% 0%, alpha(#74a48d, 0.03), transparent 32%),
-        alpha(#0f1311, 0.96);
+        radial-gradient(circle at 50% 0%, alpha(#2e6a70, 0.03), transparent 32%),
+        alpha(#0b0f12, 0.96);
 }
 .compose-bcc-toggle {
     min-height: 24px;
@@ -117,19 +134,19 @@ COMPOSE_CSS = """
     min-width: 32px;
     border-radius: 8px;
     padding: 0;
-    background: alpha(#121715, 0.90);
-    color: alpha(#f2efe8, 0.84);
-    border: 1px solid alpha(#dfe4de, 0.08);
+    background: alpha(#11171b, 0.90);
+    color: alpha(#f2f1ed, 0.84);
+    border: 1px solid alpha(#f2f1ed, 0.08);
 }
 .compose-operator-action:hover {
-    background: alpha(#18211d, 0.96);
+    background: alpha(#141a1e, 0.96);
 }
 .compose-discard {
-    background: rgba(218, 110, 99, 0.14);
+    background: rgba(199, 109, 99, 0.14);
     color: rgba(242, 239, 232, 0.96);
 }
 .compose-discard:hover {
-    background: rgba(218, 110, 99, 0.22);
+    background: rgba(199, 109, 99, 0.22);
 }
 .compose-attach-strip {
     padding: 5px 12px;
@@ -138,7 +155,7 @@ COMPOSE_CSS = """
 .compose-attach-chip {
     border-radius: 999px;
     padding: 3px 8px;
-    background: alpha(#dfe4de, 0.06);
+    background: alpha(#f2f1ed, 0.06);
     font-size: 0.85em;
 }
 .compose-attach-chip-remove {

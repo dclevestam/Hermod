@@ -42,6 +42,22 @@ DEFAULTS = {
     "disk_cache_budget_mb": 64,
     "google_oauth_client_id": "",
     "google_oauth_client_secret": "",
+    "theme_mode": "night",
+    "day_variant": "paper",
+    "accent": "teal",
+    "density": "balanced",
+    "ai_enabled": False,
+}
+
+THEME_MODES = ("night", "day")
+DAY_VARIANTS = ("paper", "mist", "linen")
+ACCENTS = ("teal", "forest", "gold", "stone")
+DENSITIES = ("comfortable", "balanced", "compact")
+ACCENT_COLORS = {
+    "teal": "#2E6A70",
+    "forest": "#3B6B4E",
+    "gold": "#B08A3E",
+    "stone": "#6F7B82",
 }
 
 _MIN_DISK_CACHE_BUDGET_MB = 8
@@ -176,30 +192,30 @@ _SETTINGS_CSS = """
     font-weight: 700;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: alpha(#b7beb8, 0.82);
+    color: alpha(#a6adb3, 0.82);
     margin-bottom: 3px;
 }
 .account-tile {
     min-width: 192px;
     border-radius: 18px;
-    border: 1px solid alpha(#dfe4de, 0.08);
+    border: 1px solid alpha(#f2f1ed, 0.08);
     background:
         linear-gradient(180deg, alpha(white, 0.03), alpha(white, 0.01)),
-        alpha(#121715, 0.92);
+        alpha(#11171b, 0.92);
 }
 .account-tile:hover {
     background:
         linear-gradient(180deg, alpha(white, 0.05), alpha(white, 0.02)),
-        alpha(#18211d, 0.96);
+        alpha(#141a1e, 0.96);
 }
 .account-tile-icon {
-    color: alpha(#f2efe8, 0.88);
+    color: alpha(#f2f1ed, 0.88);
 }
 .account-row {
     min-height: 50px;
 }
 .account-row-subtitle {
-    color: alpha(#b7beb8, 0.70);
+    color: alpha(#a6adb3, 0.70);
     font-size: 0.82em;
 }
 .account-row.striped {
@@ -209,7 +225,7 @@ _SETTINGS_CSS = """
     min-width: 18px;
     min-height: 18px;
     border-radius: 999px;
-    border: 1px solid alpha(#dfe4de, 0.10);
+    border: 1px solid alpha(#f2f1ed, 0.10);
 }
 .account-color-chip {
     min-height: 24px;
@@ -217,19 +233,60 @@ _SETTINGS_CSS = """
     border-radius: 999px;
     font-size: 0.80em;
     font-weight: 700;
-    background: alpha(#121715, 0.90);
-    border: 1px solid alpha(#dfe4de, 0.08);
+    background: alpha(#11171b, 0.90);
+    border: 1px solid alpha(#f2f1ed, 0.08);
 }
 .account-editor-header {
     font-size: 1.14em;
     font-weight: 800;
     letter-spacing: -0.03em;
-    color: #f2efe8;
-    font-family: Georgia, "Times New Roman", serif;
+    color: #f2f1ed;
+    font-family: "Geist", sans-serif;
 }
 .account-editor-page {
     padding-top: 8px;
 }
+.appearance-segment {
+    border-radius: 999px;
+    background: alpha(#11171b, 0.85);
+    border: 1px solid alpha(#f2f1ed, 0.08);
+    padding: 3px;
+}
+.appearance-segment > button {
+    border-radius: 999px;
+    background: transparent;
+    border: none;
+    padding: 6px 14px;
+    min-height: 26px;
+    color: alpha(#f2f1ed, 0.66);
+    font-family: "Geist Mono", monospace;
+    font-size: 0.76em;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+.appearance-segment > button.selected {
+    background: #2e6a70;
+    color: #f2f1ed;
+}
+.appearance-segment > button:hover:not(.selected) {
+    background: alpha(#f2f1ed, 0.06);
+    color: #f2f1ed;
+}
+.appearance-swatch {
+    min-width: 28px;
+    min-height: 28px;
+    border-radius: 999px;
+    padding: 0;
+    border: 1px solid alpha(#f2f1ed, 0.08);
+}
+.appearance-swatch.selected {
+    border: 2px solid #f2f1ed;
+}
+.appearance-swatch.accent-teal { background: #2e6a70; }
+.appearance-swatch.accent-forest { background: #3b6b4e; }
+.appearance-swatch.accent-gold { background: #b08a3e; }
+.appearance-swatch.accent-stone { background: #6f7b82; }
 """
 
 
@@ -253,6 +310,149 @@ def _make_settings_section(title):
     section.append(heading)
     section.append(group)
     return section, group
+
+
+def _make_segment(options, current, on_pick):
+    box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+    box.add_css_class("appearance-segment")
+    buttons = {}
+
+    def select(value):
+        for val, btn in buttons.items():
+            if val == value:
+                btn.add_css_class("selected")
+            else:
+                btn.remove_css_class("selected")
+
+    for value, label in options:
+        btn = Gtk.Button(label=label)
+        btn.set_has_frame(False)
+
+        def _cb(_b, v=value):
+            select(v)
+            on_pick(v)
+
+        btn.connect("clicked", _cb)
+        buttons[value] = btn
+        box.append(btn)
+    select(current)
+    return box
+
+
+def _make_swatch_row(current, on_pick):
+    box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+    buttons = {}
+
+    def select(value):
+        for val, btn in buttons.items():
+            if val == value:
+                btn.add_css_class("selected")
+            else:
+                btn.remove_css_class("selected")
+
+    for accent in ACCENTS:
+        btn = Gtk.Button()
+        btn.set_has_frame(False)
+        btn.add_css_class("appearance-swatch")
+        btn.add_css_class(f"accent-{accent}")
+        btn.set_tooltip_text(accent.capitalize())
+
+        def _cb(_b, v=accent):
+            select(v)
+            on_pick(v)
+
+        btn.connect("clicked", _cb)
+        buttons[accent] = btn
+        box.append(btn)
+    select(current)
+    return box
+
+
+def _build_appearance_section(parent, s):
+    section, group = _make_settings_section("Appearance")
+
+    def apply_theme(value):
+        s.set("theme_mode", value)
+        _notify_theme_change(parent)
+
+    theme_row = Adw.ActionRow(title="Theme", subtitle="Night or Day palette")
+    theme_seg = _make_segment(
+        [("night", "Night"), ("day", "Day")],
+        s.get("theme_mode"),
+        apply_theme,
+    )
+    theme_seg.set_valign(Gtk.Align.CENTER)
+    theme_row.add_suffix(theme_seg)
+    group.add(theme_row)
+
+    def apply_day(value):
+        s.set("day_variant", value)
+        _notify_theme_change(parent)
+
+    day_row = Adw.ActionRow(title="Day variant", subtitle="Only applies in Day mode")
+    day_seg = _make_segment(
+        [("paper", "Paper"), ("mist", "Mist"), ("linen", "Linen")],
+        s.get("day_variant"),
+        apply_day,
+    )
+    day_seg.set_valign(Gtk.Align.CENTER)
+    day_row.add_suffix(day_seg)
+    group.add(day_row)
+
+    def apply_accent(value):
+        s.set("accent", value)
+        _notify_theme_change(parent)
+
+    accent_row = Adw.ActionRow(
+        title="Accent",
+        subtitle="Teal · Forest · Gold · Stone",
+    )
+    accent_swatches = _make_swatch_row(s.get("accent"), apply_accent)
+    accent_swatches.set_valign(Gtk.Align.CENTER)
+    accent_row.add_suffix(accent_swatches)
+    group.add(accent_row)
+
+    def apply_density(value):
+        s.set("density", value)
+        _notify_theme_change(parent)
+
+    density_row = Adw.ActionRow(
+        title="Density",
+        subtitle="Row height in the mail list",
+    )
+    density_seg = _make_segment(
+        [("comfortable", "Comfortable"), ("balanced", "Balanced"), ("compact", "Compact")],
+        s.get("density"),
+        apply_density,
+    )
+    density_seg.set_valign(Gtk.Align.CENTER)
+    density_row.add_suffix(density_seg)
+    group.add(density_row)
+
+    ai_row = Adw.SwitchRow(
+        title="On-device AI",
+        subtitle="Thread summary, smart reply, and search. Runs locally; disabled by default.",
+    )
+    ai_row.set_active(s.get("ai_enabled"))
+    ai_row.connect(
+        "notify::active", lambda r, _: s.set("ai_enabled", r.get_active())
+    )
+    group.add(ai_row)
+
+    return section
+
+
+def _notify_theme_change(parent):
+    if parent is None:
+        return
+    for attr in ("_apply_theme", "apply_theme"):
+        fn = getattr(parent, attr, None)
+        if callable(fn):
+            try:
+                fn()
+            except Exception:
+                pass
+            return
 
 
 def build_settings_content(parent, on_close=None, on_back=None, scrollable=True):
@@ -315,6 +515,9 @@ def build_settings_content(parent, on_close=None, on_back=None, scrollable=True)
     root.account_controller = account_controller
     root.open_account_editor = account_controller.open_account_editor
     root.show_accounts_main = account_controller.show_main
+
+    appearance_section = _build_appearance_section(parent, s)
+    main_page.append(appearance_section)
 
     reading_section, reading_group = _make_settings_section("Reading")
     images_row = Adw.SwitchRow(

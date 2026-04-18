@@ -107,7 +107,7 @@ class EmailRow(Gtk.Box):
         )
 
         dot = Gtk.Box(valign=Gtk.Align.CENTER)
-        dot.set_size_request(4, 20)
+        dot.set_size_request(8, 8)
         dot.add_css_class("unread-dot")
         self._dot = dot
         if msg.get("is_read"):

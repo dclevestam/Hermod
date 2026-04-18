@@ -19,7 +19,7 @@ from gi.repository import Gtk, Adw, GLib, WebKit, Pango, Gdk, Gio
 
 try:
     from .backends import get_backends
-    from .styles import CSS, build_window_account_css, account_class_for_index
+    from .styles import CSS, build_window_account_css, account_class_for_index, build_theme_override_css
     from .settings import get_settings, get_disk_cache_budget_limit_mb
     from .window_mailbox_controller import MailboxControllerMixin
     from .window_message_cache import MessageListCacheMixin
@@ -97,7 +97,7 @@ try:
     )
 except ImportError:
     from backends import get_backends
-    from styles import CSS, build_window_account_css, account_class_for_index
+    from styles import CSS, build_window_account_css, account_class_for_index, build_theme_override_css
     from settings import get_settings, get_disk_cache_budget_limit_mb
     from window_mailbox_controller import MailboxControllerMixin
     from window_message_cache import MessageListCacheMixin
@@ -275,11 +275,32 @@ class HermodWindow(
         self._diag_watchdog_id = GLib.timeout_add_seconds(5, self._diag_watchdog_tick)
 
     def _apply_css(self):
+        theme_css = self._build_theme_override_css()
         provider = Gtk.CssProvider()
-        provider.load_from_string(CSS + self._account_css)
+        provider.load_from_string(CSS + self._account_css + theme_css)
+        if getattr(self, "_style_provider", None) is not None:
+            try:
+                Gtk.StyleContext.remove_provider_for_display(
+                    self.get_display(), self._style_provider
+                )
+            except Exception:
+                pass
         Gtk.StyleContext.add_provider_for_display(
             self.get_display(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
+        self._style_provider = provider
+
+    def _build_theme_override_css(self):
+        s = get_settings()
+        return build_theme_override_css(
+            theme=s.get("theme_mode") or "night",
+            day_variant=s.get("day_variant") or "paper",
+            accent=s.get("accent") or "teal",
+            density=s.get("density") or "balanced",
+        )
+
+    def apply_theme(self):
+        self._apply_css()
 
     def _build_account_css(self):
         return build_window_account_css(self.backends)
@@ -451,6 +472,7 @@ class HermodWindow(
         header = getattr(self, "_header_bar", None)
         if header is not None:
             header.set_visible(False)
+            header.remove_css_class("welcome-header-bar")
         self._reset_startup_state(active=False)
         self.current_backend = None
         self.current_folder = None
@@ -755,7 +777,7 @@ class HermodWindow(
             valign=Gtk.Align.CENTER,
         )
         compose_stack.append(Gtk.Image(icon_name="mail-message-new-symbolic"))
-        compose_lbl = Gtk.Label(label="COMPOSE")
+        compose_lbl = Gtk.Label(label="Compose")
         compose_lbl.add_css_class("sidebar-compose-label")
         compose_stack.append(compose_lbl)
         compose_inner.set_center_widget(compose_stack)

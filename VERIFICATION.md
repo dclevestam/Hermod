@@ -8,6 +8,7 @@ Use this checklist in a live GTK session.
 - [ ] Confirm debug logging does not hide startup errors
 - [ ] On GNOME Wayland, prefer the app-native live dump path when you need a visual capture:
   `python3 hermod.py --dump-ui /tmp/hermod-dump-ui.png`
+- [ ] Force the welcome screen with `HERMOD_FORCE_WELCOME=1` before `--dump-ui` when verifying onboarding surfaces
 - [ ] Use the shared Wayland screenshot helper to preview that PNG in-terminal when needed
   instead of relying on X11-only screenshot tooling
 - [ ] If the app is already running, use `launch-fresh` for code/UI changes and `launch-or-focus`
@@ -80,6 +81,23 @@ Use this checklist in a live GTK session.
 ## Startup flow
 - [ ] Startup status screen closes on its own after boot
 - [ ] Sidebar unread counts appear only after the startup screen closes
+
+## Welcome / onboarding
+- [ ] With `HERMOD_FORCE_WELCOME=1`, the welcome screen renders with its own titlebar ("H HERMOD" brand) and flat left photo panel
+- [ ] No banding visible on the photo panel, search shell, reading pane, or sidebar
+- [ ] Provider tile grid shows Gmail, Proton, Outlook, Other (IMAP/SMTP) as row tiles with colored letter glyphs
+- [ ] "Show all 8 providers" link opens the More Providers modal without a double titlebar
+- [ ] More Providers modal lists all eight providers and has an ADD ACCOUNT eyebrow + single close button
+- [ ] Connect <provider> dialog opens with stripped OS chrome and shows eyebrow + title + subtitle + close
+- [ ] Completing setup returns to the welcome screen and shows the account in the "Accounts added" list
+- [ ] "Continue to Hermod" appears only after at least one account exists
+
+## Appearance settings
+- [ ] Settings opens on the Appearance section containing theme / day variant / accent / density / AI toggle
+- [ ] Switching theme mode updates the app live (no restart needed)
+- [ ] Switching accent updates tinted surfaces live (provider rows, send button, badges)
+- [ ] Switching density adjusts row heights immediately
+- [ ] AI toggle persists across restarts
 
 ## Result log
 - Date:

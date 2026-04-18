@@ -192,6 +192,11 @@
       "package": false
     },
     {
+      "name": "fonts",
+      "path": "fonts.py",
+      "package": false
+    },
+    {
       "name": "hermod",
       "path": "hermod.py",
       "package": false
@@ -666,6 +671,11 @@
     },
     {
       "from": "__main__",
+      "to": "fonts",
+      "type": "import"
+    },
+    {
+      "from": "__main__",
       "to": "window",
       "type": "import"
     },
@@ -875,6 +885,11 @@
       "type": "import"
     },
     {
+      "from": "settings_accounts",
+      "to": "settings",
+      "type": "import"
+    },
+    {
       "from": "snapshot_cache",
       "to": "utils",
       "type": "import"
@@ -891,7 +906,17 @@
     },
     {
       "from": "utils",
+      "to": "styles",
+      "type": "import"
+    },
+    {
+      "from": "utils",
       "to": "settings",
+      "type": "import"
+    },
+    {
+      "from": "widgets",
+      "to": "styles",
       "type": "import"
     },
     {
@@ -947,6 +972,11 @@
     {
       "from": "window",
       "to": "window_welcome",
+      "type": "import"
+    },
+    {
+      "from": "window",
+      "to": "settings_accounts",
       "type": "import"
     },
     {
@@ -1046,6 +1076,11 @@
     },
     {
       "from": "window_reader",
+      "to": "styles",
+      "type": "import"
+    },
+    {
+      "from": "window_reader",
       "to": "settings",
       "type": "import"
     },
@@ -1087,6 +1122,16 @@
     {
       "from": "window_reader_controller",
       "to": "window_constants",
+      "type": "import"
+    },
+    {
+      "from": "window_welcome",
+      "to": "settings_accounts",
+      "type": "import"
+    },
+    {
+      "from": "window_welcome",
+      "to": "styles",
       "type": "import"
     }
   ],

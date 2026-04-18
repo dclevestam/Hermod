@@ -15,15 +15,21 @@ from gi.repository import Gtk, Adw, Notify, GLib, Gio
 try:
     from .backends import get_backends, is_transient_network_error, network_ready
     from .diagnostics.logger import log_network_change, log_startup_summary
+    from .fonts import register_bundled_fonts
     from .window import HermodWindow
     from .settings import get_settings
     from .utils import _log_exception, _perf_counter, _log_perf
 except ImportError:
     from backends import get_backends, is_transient_network_error, network_ready
     from diagnostics.logger import log_network_change, log_startup_summary
+    from fonts import register_bundled_fonts
     from window import HermodWindow
     from settings import get_settings
     from utils import _log_exception, _perf_counter, _log_perf
+
+# Register bundled Geist fonts before Pango initialises so that named lookups
+# of "Geist" / "Geist Mono" in CSS resolve without requiring a system install.
+register_bundled_fonts()
 
 
 class HermodApp(Adw.Application):

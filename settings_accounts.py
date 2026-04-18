@@ -1487,7 +1487,12 @@ def build_account_setup_dialog(parent, provider_key="imap-smtp", on_saved=None):
     except TypeError:
         dialog = Gtk.Dialog(modal=True)
     dialog.set_title(profile.get("title") or "Add Account")
-    dialog.set_default_size(720, 640)
+    dialog.set_default_size(640, 600)
+    try:
+        dialog.set_titlebar(Gtk.Box())
+    except Exception:
+        pass
+    dialog.add_css_class("onboarding-modal-window")
     content = dialog.get_content_area()
     content.set_spacing(18)
     content.add_css_class("onboarding-modal-content")
@@ -1496,11 +1501,14 @@ def build_account_setup_dialog(parent, provider_key="imap-smtp", on_saved=None):
     content.set_margin_start(16)
     content.set_margin_end(16)
 
-    topbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+    topbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
     topbar.add_css_class("onboarding-modal-header")
     topbar.set_hexpand(True)
     title_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
     title_box.set_hexpand(True)
+    eyebrow_lbl = Gtk.Label(label="ADD ACCOUNT", halign=Gtk.Align.START, xalign=0)
+    eyebrow_lbl.add_css_class("welcome-eyebrow")
+    title_box.append(eyebrow_lbl)
     title_lbl = Gtk.Label(
         label=profile.get("title") or "Add Account",
         halign=Gtk.Align.START,
@@ -1514,10 +1522,22 @@ def build_account_setup_dialog(parent, provider_key="imap-smtp", on_saved=None):
     )
     subtitle_lbl.add_css_class("onboarding-modal-subtitle")
     subtitle_lbl.set_wrap(True)
+    subtitle_lbl.set_max_width_chars(58)
     title_box.append(title_lbl)
     if subtitle_lbl.get_label().strip():
         title_box.append(subtitle_lbl)
     topbar.append(title_box)
+
+    close_btn = Gtk.Button()
+    close_btn.add_css_class("flat")
+    close_btn.add_css_class("onboarding-modal-close")
+    close_btn.set_valign(Gtk.Align.START)
+    close_btn.set_tooltip_text("Close")
+    close_icon = Gtk.Image.new_from_icon_name("window-close-symbolic")
+    close_icon.set_pixel_size(14)
+    close_btn.set_child(close_icon)
+    close_btn.connect("clicked", lambda *_: dialog.close())
+    topbar.append(close_btn)
     content.append(topbar)
 
     frame = Gtk.Frame(hexpand=True, vexpand=True)

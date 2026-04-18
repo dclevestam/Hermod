@@ -41,6 +41,29 @@ ACTIVE_ONBOARDING_PROVIDERS = [
     ("IMAP", "imap-smtp", _IMAP_ICON_PATH, "provider-tile-imap-smtp", "#ff6a3d"),
 ]
 
+ONBOARDING_TILE_META = {
+    "gmail": ("Gmail", "Google · OAuth", "G", "#ea4335"),
+    "microsoft": ("Outlook", "Microsoft · OAuth", "O", "#0078d4"),
+    "proton": ("Proton Mail", "Bridge · IMAP", "P", "#7c4dff"),
+    "icloud": ("iCloud Mail", "Apple · App password", "A", "#7b8794"),
+    "fastmail": ("Fastmail", "IMAP · App password", "F", "#4a90e2"),
+    "yahoo": ("Yahoo", "IMAP · App password", "Y", "#6001d2"),
+    "zoho": ("Zoho Mail", "IMAP · OAuth", "Z", "#e42527"),
+    "exchange": ("Exchange", "Microsoft · OAuth", "E", "#0078d4"),
+    "imap-smtp": ("Other (IMAP/SMTP)", "Manual configuration", "@", "#a6adb3"),
+}
+
+ALL_PROVIDERS_ORDER = [
+    "gmail",
+    "microsoft",
+    "icloud",
+    "fastmail",
+    "proton",
+    "yahoo",
+    "zoho",
+    "imap-smtp",
+]
+
 try:
     from .settings_accounts import _backend_color, _backend_display_name
     from .styles import apply_accent_css_class
@@ -75,7 +98,18 @@ def _load_picture(path, css_class):
 
 
 def _build_mark():
-    return _build_provider_icon(_APP_ICON_PATH, "welcome-mark")
+    frame = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+    frame.add_css_class("welcome-mark")
+    frame.set_size_request(64, 64)
+    frame.set_halign(Gtk.Align.START)
+    frame.set_valign(Gtk.Align.START)
+    icon = Gtk.Image.new_from_file(str(_APP_ICON_PATH))
+    icon.set_pixel_size(40)
+    icon.add_css_class("welcome-mark-icon")
+    icon.set_halign(Gtk.Align.CENTER)
+    icon.set_valign(Gtk.Align.CENTER)
+    frame.append(icon)
+    return frame
 
 
 def _build_provider_icon(path, css_class):
@@ -227,6 +261,49 @@ def _build_provider_tile(
     return button
 
 
+def _build_provider_row_tile(provider_key, callback):
+    meta = ONBOARDING_TILE_META.get(provider_key)
+    if meta is None:
+        meta = (provider_key.title(), "Manual", provider_key[:1].upper(), "#a6adb3")
+    name, sub, letter, color = meta
+
+    button = Gtk.Button()
+    button.add_css_class("provider-row-tile")
+    button.set_has_frame(False)
+    button.set_focus_on_click(False)
+    button.set_tooltip_text(name)
+    button.connect("clicked", lambda *_args: callback() if callable(callback) else None)
+    button.set_hexpand(True)
+
+    row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+    row.set_margin_top(12)
+    row.set_margin_bottom(12)
+    row.set_margin_start(14)
+    row.set_margin_end(14)
+    row.set_valign(Gtk.Align.CENTER)
+
+    glyph = Gtk.Label(label=letter)
+    glyph.add_css_class("provider-glyph")
+    glyph.add_css_class(f"glyph-{provider_key.replace('-', '_')}")
+    glyph.set_valign(Gtk.Align.CENTER)
+    glyph.set_halign(Gtk.Align.CENTER)
+
+    meta_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+    meta_box.set_hexpand(True)
+    meta_box.set_valign(Gtk.Align.CENTER)
+    name_label = Gtk.Label(label=name, halign=Gtk.Align.START, xalign=0)
+    name_label.add_css_class("provider-name")
+    sub_label = Gtk.Label(label=sub, halign=Gtk.Align.START, xalign=0)
+    sub_label.add_css_class("provider-sub")
+    meta_box.append(name_label)
+    meta_box.append(sub_label)
+
+    row.append(glyph)
+    row.append(meta_box)
+    button.set_child(row)
+    return button
+
+
 def _attach_window_move_controller(widget, window_widget):
     gesture = Gtk.GestureClick()
     gesture.set_button(1)
@@ -252,62 +329,146 @@ def _attach_window_move_controller(widget, window_widget):
     widget.add_controller(gesture)
 
 
+def _strip_dialog_chrome(dialog):
+    """Replace OS CSD titlebar with an empty stub so our internal header owns
+    the chrome. Keeps the window draggable via its root surface."""
+    try:
+        dialog.set_titlebar(Gtk.Box())
+    except Exception:
+        pass
+    return dialog
+
+
+def _build_modal_shell(title, subtitle_text, on_close):
+    """Shared modal chrome: outer rounded card with eyebrow + title + subtitle
+    + close button, matching the design's `.modal` + `.modal-head` pattern."""
+    frame = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+    frame.add_css_class("onboarding-modal-frame")
+    frame.set_hexpand(True)
+    frame.set_vexpand(True)
+
+    head = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+    head.add_css_class("onboarding-modal-head")
+    head.set_margin_top(22)
+    head.set_margin_bottom(16)
+    head.set_margin_start(24)
+    head.set_margin_end(20)
+
+    titles = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, hexpand=True)
+    eyebrow = Gtk.Label(label="ADD ACCOUNT", halign=Gtk.Align.START, xalign=0)
+    eyebrow.add_css_class("welcome-eyebrow")
+    titles.append(eyebrow)
+    heading = Gtk.Label(label=title, halign=Gtk.Align.START, xalign=0)
+    heading.add_css_class("onboarding-modal-title")
+    titles.append(heading)
+    if subtitle_text:
+        sub = Gtk.Label(label=subtitle_text, halign=Gtk.Align.START, xalign=0)
+        sub.set_wrap(True)
+        sub.set_max_width_chars(58)
+        sub.add_css_class("onboarding-modal-subtitle")
+        titles.append(sub)
+    head.append(titles)
+
+    close_btn = Gtk.Button()
+    close_btn.add_css_class("flat")
+    close_btn.add_css_class("onboarding-modal-close")
+    close_btn.set_valign(Gtk.Align.START)
+    close_btn.set_tooltip_text("Close")
+    close_btn.set_child(
+        _build_symbolic_icon(
+            ("window-close-symbolic", "close-symbolic"),
+            "welcome-close-icon",
+            pixel_size=14,
+        )
+    )
+    if callable(on_close):
+        close_btn.connect("clicked", lambda *_: on_close())
+    head.append(close_btn)
+
+    frame.append(head)
+
+    divider = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+    divider.add_css_class("onboarding-modal-divider")
+    frame.append(divider)
+
+    return frame
+
+
 def build_more_providers_dialog(parent, on_pick=None):
     try:
-        dialog = Gtk.Dialog(transient_for=parent, modal=True)
+        dialog = Gtk.Window(transient_for=parent, modal=True)
     except TypeError:
-        dialog = Gtk.Dialog(modal=True)
-    dialog.set_title("More Providers")
-    dialog.set_default_size(760, 560)
-    content = dialog.get_content_area()
-    content.set_margin_top(16)
-    content.set_margin_bottom(16)
-    content.set_margin_start(16)
-    content.set_margin_end(16)
+        dialog = Gtk.Window(modal=True)
+    dialog.set_title("More providers")
+    dialog.set_default_size(560, 640)
+    _strip_dialog_chrome(dialog)
+    dialog.add_css_class("onboarding-modal-window")
 
-    outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
-    topbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-    topbar.set_hexpand(True)
-    heading = Gtk.Label(label="More providers", halign=Gtk.Align.START, xalign=0)
-    heading.add_css_class("onboarding-modal-title")
-    topbar.append(heading)
-    topbar.append(_build_window_close_button(dialog, "Close more providers"))
-    subtitle = Gtk.Label(
-        label="Choose a provider. Hermod keeps the flow minimal and will guide you into the shortest setup path.",
-        halign=Gtk.Align.START,
-        xalign=0,
+    frame = _build_modal_shell(
+        "Connect a mail provider",
+        "Pick a service. OAuth uses your system browser — credentials never pass through Hermod.",
+        on_close=dialog.close,
     )
-    subtitle.add_css_class("onboarding-modal-subtitle")
-    subtitle.set_wrap(True)
-    outer.append(topbar)
-    outer.append(subtitle)
 
-    grid = Gtk.Grid(column_spacing=14, row_spacing=14, halign=Gtk.Align.CENTER)
+    body = Gtk.Box(
+        orientation=Gtk.Orientation.VERTICAL,
+        spacing=6,
+        hexpand=True,
+        vexpand=True,
+    )
+    body.set_margin_top(8)
+    body.set_margin_bottom(8)
+    body.set_margin_start(8)
+    body.set_margin_end(8)
+
+    scroller = Gtk.ScrolledWindow(
+        hscrollbar_policy=Gtk.PolicyType.NEVER,
+        vscrollbar_policy=Gtk.PolicyType.AUTOMATIC,
+        hexpand=True,
+        vexpand=True,
+    )
+    scroller.add_css_class("onboarding-modal-scroller")
+    list_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+    scroller.set_child(list_box)
+    body.append(scroller)
+    frame.append(body)
+
+    foot = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+    foot.add_css_class("onboarding-modal-foot")
+    foot.set_margin_top(4)
+    foot.set_margin_bottom(14)
+    foot.set_margin_start(24)
+    foot.set_margin_end(24)
+    lock_pill = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+    lock_pill.add_css_class("lock-pill")
+    lock_pill.append(
+        _build_symbolic_icon(
+            ("changes-prevent-symbolic", "security-high-symbolic"),
+            "lock-pill-icon",
+            pixel_size=11,
+        )
+    )
+    lock_text = Gtk.Label(
+        label="OAuth uses your system browser · no credentials stored by us"
+    )
+    lock_text.add_css_class("lock-pill-text")
+    lock_pill.append(lock_text)
+    foot.append(lock_pill)
+    frame.append(foot)
 
     def choose(provider_key):
         if callable(on_pick):
             on_pick(provider_key)
         dialog.close()
 
-    providers = [
-        ("iCloud", "icloud", _ICLOUD_ICON_PATH),
-        ("Yahoo", "yahoo", _YAHOO_ICON_PATH),
-        ("Fastmail", "fastmail", _FASTMAIL_ICON_PATH),
-        ("Zoho", "zoho", _ZOHO_ICON_PATH),
-        ("Exchange", "exchange", _EXCHANGE_ICON_PATH),
-        ("IMAP", "imap-smtp", _IMAP_ICON_PATH),
-    ]
-    for idx, (label, provider_key, icon_path) in enumerate(providers):
-        callback = lambda _provider=provider_key: choose(_provider)
-        tile = _build_provider_tile(
-            label,
-            callback,
-            icon_path=icon_path,
-            badge_class=f"provider-badge-{provider_key}",
+    for provider_key in ALL_PROVIDERS_ORDER:
+        row = _build_provider_row_tile(
+            provider_key,
+            lambda key=provider_key: choose(key),
         )
-        grid.attach(tile, idx % 3, idx // 3, 1, 1)
-    outer.append(grid)
-    content.append(outer)
+        list_box.append(row)
+
+    dialog.set_child(frame)
     return dialog
 
 
@@ -323,135 +484,149 @@ class WelcomeScreen(Gtk.Box):
         self._on_open_hermod = on_open_hermod
         self._get_backends = get_backends
 
-        overlay = Gtk.Overlay(hexpand=True, vexpand=True)
-        self.append(overlay)
+        header = Adw.HeaderBar()
+        header.add_css_class("welcome-header-bar")
+        header.add_css_class("flat")
+        brand = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        brand_mark = Gtk.Image.new_from_file(str(_APP_ICON_PATH))
+        brand_mark.set_pixel_size(18)
+        brand_mark.add_css_class("welcome-header-mark")
+        brand_text = Gtk.Label(label="HERMOD")
+        brand_text.add_css_class("welcome-header-brand")
+        brand.append(brand_mark)
+        brand.append(brand_text)
+        brand.set_valign(Gtk.Align.CENTER)
+        header.set_title_widget(brand)
+        self.append(header)
 
-        overlay.set_child(_load_picture(_WELCOME_SCENE_PATH, "welcome-scene"))
-        overlay.add_overlay(Gtk.Box())
+        body = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, hexpand=True, vexpand=True
+        )
+        self.append(body)
 
-        self._fireflies = _add_fireflies(overlay)
+        # Left panel: forest/aurora photo with caption at bottom-left.
+        photo = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL, hexpand=True, vexpand=True
+        )
+        photo.add_css_class("welcome-photo")
+        photo.set_size_request(360, -1)
+        photo.append(Gtk.Box(vexpand=True))
+        caption = Gtk.Label(
+            label="— forest / aurora photography —",
+            halign=Gtk.Align.START,
+            xalign=0,
+        )
+        caption.add_css_class("welcome-photo-caption")
+        caption.set_margin_start(24)
+        caption.set_margin_bottom(24)
+        photo.append(caption)
+        _attach_window_move_controller(photo, self)
+        body.append(photo)
 
-        wash = Gtk.Box()
-        wash.add_css_class("welcome-wash")
-        wash.set_hexpand(True)
-        wash.set_vexpand(True)
-        overlay.add_overlay(wash)
-        overlay.set_measure_overlay(wash, False)
+        # Right panel: content column, left-aligned, scrollable.
+        right_scroll = Gtk.ScrolledWindow(
+            hscrollbar_policy=Gtk.PolicyType.NEVER,
+            vscrollbar_policy=Gtk.PolicyType.AUTOMATIC,
+            hexpand=True,
+            vexpand=True,
+        )
+        right_scroll.add_css_class("welcome-right-scroll")
+        body.append(right_scroll)
 
-        shell = Gtk.Box(
+        right = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
             spacing=0,
             hexpand=True,
             vexpand=True,
-            margin_top=28,
-            margin_bottom=28,
-            margin_start=32,
-            margin_end=32,
         )
-        overlay.add_overlay(shell)
-        overlay.set_measure_overlay(shell, False)
+        right.add_css_class("welcome-right")
+        right_scroll.set_child(right)
 
-        clamp = Adw.Clamp(maximum_size=980, tightening_threshold=820)
-        shell.append(clamp)
-
-        stage = Gtk.Box(
-            orientation=Gtk.Orientation.VERTICAL, spacing=0, hexpand=True, vexpand=True
+        inner = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=0,
+            hexpand=True,
         )
-        stage.add_css_class("welcome-stage")
-        clamp.set_child(stage)
-
-        hero = Gtk.Box(
-            orientation=Gtk.Orientation.VERTICAL, spacing=18, hexpand=True, vexpand=True
-        )
-        hero.add_css_class("welcome-hero")
-        stage.append(hero)
-
-        hero.append(Gtk.Box(vexpand=True))
+        inner.add_css_class("welcome-inner")
+        inner.set_margin_top(40)
+        inner.set_margin_bottom(40)
+        inner.set_margin_start(72)
+        inner.set_margin_end(72)
+        inner.set_halign(Gtk.Align.START)
+        right.append(inner)
 
         mark = _build_mark()
-        mark.set_halign(Gtk.Align.CENTER)
-        hero.append(mark)
+        mark.set_halign(Gtk.Align.START)
+        inner.append(mark)
 
-        tagline = Gtk.Label(
-            label="THE INTELLIGENT EMAIL CLIENT", halign=Gtk.Align.CENTER
+        eyebrow = Gtk.Label(label="HERMOD", halign=Gtk.Align.START, xalign=0)
+        eyebrow.add_css_class("welcome-eyebrow")
+        eyebrow.set_margin_top(24)
+        inner.append(eyebrow)
+
+        title = Gtk.Label(
+            label="A quiet place\nfor your mail.",
+            halign=Gtk.Align.START,
+            xalign=0,
         )
-        tagline.set_xalign(0.5)
-        tagline.add_css_class("welcome-tagline")
-        hero.append(tagline)
+        title.set_wrap(True)
+        title.add_css_class("welcome-title")
+        title.set_margin_top(8)
+        inner.append(title)
 
         summary = Gtk.Label(
-            label="Built for focus. Powered by intelligence. Rooted in something timeless.",
-            halign=Gtk.Align.CENTER,
+            label=(
+                "A native Linux email client. Fast, private, built for focus. "
+                "All intelligence runs on your device."
+            ),
+            halign=Gtk.Align.START,
+            xalign=0,
         )
-        summary.set_xalign(0.5)
         summary.set_wrap(True)
-        summary.set_max_width_chars(44)
+        summary.set_max_width_chars(50)
         summary.add_css_class("welcome-summary")
-        hero.append(summary)
+        summary.set_margin_top(16)
+        inner.append(summary)
 
-        divider_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
-        divider_box.add_css_class("welcome-divider-box")
-        divider_box.set_halign(Gtk.Align.CENTER)
-        line_left = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        line_left.set_hexpand(True)
-        line_left.add_css_class("welcome-divider-line")
-        divider_mark = Gtk.Label(label="✕")
-        divider_mark.add_css_class("welcome-divider-mark")
-        line_right = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        line_right.set_hexpand(True)
-        line_right.add_css_class("welcome-divider-line")
-        divider_box.append(line_left)
-        divider_box.append(divider_mark)
-        divider_box.append(line_right)
-        hero.append(divider_box)
-
-        provider_grid = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL, spacing=14, halign=Gtk.Align.CENTER
+        providers_eyebrow = Gtk.Label(
+            label="CONNECT AN ACCOUNT", halign=Gtk.Align.START, xalign=0
         )
-        provider_grid.add_css_class("onboarding-provider-grid")
-        for (
-            label,
-            provider_key,
-            icon_path,
-            css_class,
-            _hover_color,
-        ) in ACTIVE_ONBOARDING_PROVIDERS:
-            tile = _build_provider_tile(
-                label,
+        providers_eyebrow.add_css_class("welcome-providers-eyebrow")
+        providers_eyebrow.set_margin_top(40)
+        inner.append(providers_eyebrow)
+
+        provider_grid = Gtk.Grid(
+            column_spacing=10,
+            row_spacing=10,
+            halign=Gtk.Align.FILL,
+        )
+        provider_grid.add_css_class("welcome-provider-grid")
+        provider_grid.set_margin_top(14)
+        for idx, (label, provider_key, _icon_path, _css_class, _hover) in enumerate(
+            ACTIVE_ONBOARDING_PROVIDERS
+        ):
+            tile = _build_provider_row_tile(
+                provider_key,
                 lambda key=provider_key: self._select_provider(key),
-                icon_path=icon_path,
             )
-            tile.add_css_class(css_class)
-            provider_grid.append(tile)
-        hero.append(provider_grid)
+            provider_grid.attach(tile, idx % 2, idx // 2, 1, 1)
+        inner.append(provider_grid)
 
-        self._open_button = Gtk.Button(label="Continue to Hermod")
-        self._open_button.add_css_class("suggested-action")
-        self._open_button.add_css_class("onboarding-open-btn")
-        self._open_button.set_halign(Gtk.Align.CENTER)
-        self._open_button.set_visible(False)
-        open_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        open_box.set_halign(Gtk.Align.CENTER)
-        open_box.append(
-            _build_symbolic_icon(
-                ("go-next-symbolic", "pan-end-symbolic", "mail-send-receive-symbolic"),
-                "onboarding-open-icon",
-            )
+        more_btn = Gtk.Button(label="Show all 8 providers  →")
+        more_btn.add_css_class("welcome-more")
+        more_btn.set_has_frame(False)
+        more_btn.set_halign(Gtk.Align.START)
+        more_btn.set_margin_top(14)
+        more_btn.connect(
+            "clicked", lambda *_: self._select_provider("more-providers")
         )
-        open_label = Gtk.Label(label="Continue to Hermod")
-        open_label.add_css_class("onboarding-open-label")
-        open_box.append(open_label)
-        self._open_button.set_child(open_box)
-        if callable(self._on_open_hermod):
-            self._open_button.connect("clicked", lambda *_args: self._on_open_hermod())
-        hero.append(self._open_button)
+        inner.append(more_btn)
 
+        # Accounts section (shown once at least one account exists).
         accounts_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         accounts_section.add_css_class("onboarding-accounts")
         accounts_section.set_halign(Gtk.Align.START)
-        accounts_section.set_valign(Gtk.Align.START)
-        accounts_section.set_margin_top(18)
-        accounts_section.set_margin_start(24)
+        accounts_section.set_margin_top(32)
         accounts_heading = Gtk.Label(
             label="Accounts added", halign=Gtk.Align.START, xalign=0
         )
@@ -460,37 +635,40 @@ class WelcomeScreen(Gtk.Box):
         self._accounts_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         self._accounts_list.add_css_class("onboarding-accounts-list")
         accounts_section.append(self._accounts_list)
-        overlay.add_overlay(accounts_section)
-        overlay.set_measure_overlay(accounts_section, False)
+        inner.append(accounts_section)
         self._accounts_section = accounts_section
 
-        move_strip = Gtk.Box()
-        move_strip.set_halign(Gtk.Align.FILL)
-        move_strip.set_valign(Gtk.Align.START)
-        move_strip.set_hexpand(True)
-        move_strip.set_size_request(-1, 44)
-        move_strip.add_css_class("welcome-move-strip")
-        _attach_window_move_controller(move_strip, self)
-        overlay.add_overlay(move_strip)
-        overlay.set_measure_overlay(move_strip, False)
+        # Continue button (shown once at least one account exists).
+        self._open_button = Gtk.Button(label="Continue to Hermod")
+        self._open_button.add_css_class("suggested-action")
+        self._open_button.add_css_class("onboarding-open-btn")
+        self._open_button.set_halign(Gtk.Align.START)
+        self._open_button.set_margin_top(20)
+        self._open_button.set_visible(False)
+        if callable(self._on_open_hermod):
+            self._open_button.connect(
+                "clicked", lambda *_args: self._on_open_hermod()
+            )
+        inner.append(self._open_button)
 
-        hero.append(Gtk.Box(vexpand=True))
-
-        close_bar = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL,
-            hexpand=True,
-            halign=Gtk.Align.FILL,
-            valign=Gtk.Align.START,
-            margin_top=16,
-            margin_start=16,
-            margin_end=16,
+        # Foot: lock pill.
+        foot = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        foot.set_margin_top(40)
+        foot.set_halign(Gtk.Align.START)
+        lock_pill = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        lock_pill.add_css_class("lock-pill")
+        lock_pill.append(
+            _build_symbolic_icon(
+                ("changes-prevent-symbolic", "security-high-symbolic"),
+                "lock-pill-icon",
+                pixel_size=11,
+            )
         )
-        close_bar.add_css_class("welcome-window-controls")
-        close_spacer = Gtk.Box(hexpand=True)
-        close_bar.append(close_spacer)
-        close_bar.append(_build_window_close_button(self))
-        overlay.add_overlay(close_bar)
-        overlay.set_measure_overlay(close_bar, False)
+        lock_text = Gtk.Label(label="Zero-cloud · local model")
+        lock_text.add_css_class("lock-pill-text")
+        lock_pill.append(lock_text)
+        foot.append(lock_pill)
+        inner.append(foot)
 
         self.refresh_accounts()
 

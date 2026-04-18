@@ -1,4 +1,61 @@
 CSS = """
+/* ═════════════════════════════════════════════════════════════
+   Hermod design tokens — ported from design_handoff_hermod/tokens.css.
+   Night theme is the default; day theme + variants are layered below.
+   Kept as @define-color so Adwaita widgets (buttons, entries, popovers)
+   inherit the palette automatically.
+   ═════════════════════════════════════════════════════════════ */
+@define-color hermod_bg              #0B0F12;
+@define-color hermod_bg_elevated     #0F1417;
+@define-color hermod_bg_hover        #141A1E;
+@define-color hermod_surface_card    #11171B;
+@define-color hermod_surface_sunken  #090C0F;
+
+@define-color hermod_fg              #F2F1ED;
+@define-color hermod_fg_muted        #A6ADB3;
+@define-color hermod_fg_dim          alpha(#A6ADB3, 0.56);
+@define-color hermod_fg_faint        alpha(#A6ADB3, 0.34);
+
+@define-color hermod_border          alpha(#A6ADB3, 0.08);
+@define-color hermod_border_strong   alpha(#A6ADB3, 0.14);
+@define-color hermod_border_faint    alpha(#A6ADB3, 0.04);
+
+@define-color hermod_accent          #2E6A70;
+@define-color hermod_accent_weak     alpha(#2E6A70, 0.16);
+@define-color hermod_accent_fg       #F2F1ED;
+
+@define-color hermod_success         #6F9B73;
+@define-color hermod_warning         #C9A869;
+@define-color hermod_danger          #C76D63;
+
+/* Override Adwaita's own accent so buttons/entries pick up Hermod's teal. */
+@define-color accent_color           #2E6A70;
+@define-color accent_bg_color        #2E6A70;
+@define-color accent_fg_color        #F2F1ED;
+
+/* Base typography — Geist (body) + Geist Mono (metadata), bundled in
+   assets/fonts/ and registered via fonts.py. */
+window, dialog, popover, .app-window {
+    font-family: "Geist", "Inter", -apple-system, system-ui, "Cantarell", sans-serif;
+    font-size: 13px;
+    letter-spacing: -0.005em;
+}
+
+.hermod-mono,
+.mono,
+.kbd,
+.eyebrow,
+.eyebrow-cinzel,
+.msg-time,
+.thread-msg-time,
+.reader-meta,
+.pinned-sub,
+.countdown-lbl,
+.sync-meta {
+    font-family: "Geist Mono", ui-monospace, "SF Mono", "Menlo", "Consolas", monospace;
+    letter-spacing: 0;
+}
+
 @keyframes hermod-spin {
     from { transform: rotate(0deg); }
     to   { transform: rotate(360deg); }
@@ -24,14 +81,16 @@ CSS = """
 
 .unread-dot {
     background-color: @accent_color;
-    border-radius: 0 999px 999px 0;
-    min-width: 4px;
-    min-height: 24px;
-    margin-left: -12px;
+    border-radius: 999px;
+    min-width: 8px;
+    min-height: 8px;
+    margin-left: 0;
     margin-right: 8px;
+    box-shadow: 0 0 0 2px alpha(@accent_color, 0.18);
 }
 .unread-dot.hidden {
     opacity: 0;
+    box-shadow: none;
 }
 .email-row {
     border-bottom: 1px solid alpha(@borders, 0.4);
@@ -47,30 +106,30 @@ CSS = """
 }
 /* Hover: barely-there background shift, only on unselected rows */
 .message-list-view row:hover .email-row:not(.selected) {
-    background-color: alpha(#dfe4de, 0.03);
+    background-color: alpha(#f2f1ed, 0.03);
 }
 /* Selected: left accent bar + subtle tinted background */
 .message-list-view .email-row.selected {
     background-image: none;
-    background-color: rgba(116, 164, 141, 0.12);
-    box-shadow: inset 3px 0 0 0 #74a48d;
-    border-bottom-color: rgba(116, 164, 141, 0.18);
+    background-color: rgba(46, 106, 112, 0.12);
+    box-shadow: inset 3px 0 0 0 #2e6a70;
+    border-bottom-color: rgba(46, 106, 112, 0.18);
 }
 .message-list-view row:hover .email-row.selected {
     background-image: none;
-    background-color: rgba(116, 164, 141, 0.16);
+    background-color: rgba(46, 106, 112, 0.16);
 }
 .thread-indicator {
-    background-color: alpha(#dfe4de, 0.06);
+    background-color: alpha(#f2f1ed, 0.06);
     border-radius: 999px;
     padding: 0px 6px;
     min-height: 18px;
 }
 .thread-indicator image {
-    color: alpha(#b7beb8, 0.74);
+    color: alpha(#a6adb3, 0.74);
 }
 .thread-badge {
-    color: alpha(#b7beb8, 0.80);
+    color: alpha(#a6adb3, 0.80);
     font-size: 0.68em;
     font-weight: 700;
     margin-left: 2px;
@@ -87,15 +146,15 @@ CSS = """
     margin-right: 4px;
 }
 .folder-count-dim {
-    color: alpha(#b7beb8, 0.26);
+    color: alpha(#a6adb3, 0.26);
 }
 .all-inboxes-row {
-    background-color: alpha(#dfe4de, 0.04);
+    background-color: alpha(#f2f1ed, 0.04);
     border-radius: 8px;
     font-weight: 700;
 }
 .all-inboxes-row .folder-count {
-    color: alpha(#b7beb8, 0.74);
+    color: alpha(#a6adb3, 0.74);
     font-weight: 800;
 }
 .navigation-sidebar row:selected .folder-count {
@@ -164,14 +223,14 @@ CSS = """
     font-weight: 600;
     padding: 3px 16px;
     border-radius: 999px;
-    color: alpha(#b7beb8, 0.78);
-    background-color: alpha(#121715, 0.88);
-    border: 1px solid alpha(#dfe4de, 0.10);
+    color: alpha(#a6adb3, 0.78);
+    background-color: alpha(#11171b, 0.88);
+    border: 1px solid alpha(#f2f1ed, 0.10);
 }
 .load-more-row button:hover {
-    background-color: alpha(#18211d, 0.96);
-    color: #f2efe8;
-    border-color: alpha(#dfe4de, 0.18);
+    background-color: alpha(#141a1e, 0.96);
+    color: #f2f1ed;
+    border-color: alpha(#f2f1ed, 0.18);
 }
 .account-accent-strip {
     border-radius: 999px;
@@ -192,76 +251,70 @@ CSS = """
     background-color: alpha(@window_fg_color, 0.04);
 }
 .search-bar-box {
-    border-bottom: 1px solid alpha(#dfe4de, 0.08);
+    border-bottom: 1px solid alpha(#f2f1ed, 0.08);
     padding: 6px 8px 6px;
 }
 .search-entry-shell {
-    background:
-        linear-gradient(180deg, alpha(white, 0.03), alpha(white, 0.01)),
-        alpha(#121715, 0.92);
-    border: 1px solid alpha(#dfe4de, 0.10);
+    background-color: alpha(#11171b, 0.94);
+    border: 1px solid alpha(#f2f1ed, 0.10);
     border-radius: 13px;
     min-height: 34px;
 }
 .sorting-toolbar {
     padding: 4px 8px 8px;
-    border-bottom: 1px solid alpha(#dfe4de, 0.08);
+    border-bottom: 1px solid alpha(#f2f1ed, 0.08);
 }
 .sorting-toggle {
     min-width: 26px;
     min-height: 26px;
     padding: 3px;
     border-radius: 8px;
-    color: alpha(#b7beb8, 0.80);
-    background-color: alpha(#121715, 0.90);
-    border: 1px solid alpha(#dfe4de, 0.06);
+    color: alpha(#a6adb3, 0.80);
+    background-color: alpha(#11171b, 0.90);
+    border: 1px solid alpha(#f2f1ed, 0.06);
 }
 .sorting-toggle image {
     color: inherit;
 }
 .sorting-toggle:hover {
-    background-color: alpha(#18211d, 0.96);
-    color: #f2efe8;
+    background-color: alpha(#141a1e, 0.96);
+    color: #f2f1ed;
 }
 .sorting-toggle.active {
-    background-color: alpha(#1b2621, 0.98);
-    color: #f2efe8;
-    border-color: alpha(#74a48d, 0.26);
+    background-color: alpha(#141a1e, 0.98);
+    color: #f2f1ed;
+    border-color: alpha(#2e6a70, 0.26);
 }
 .load-older-toolbar {
     min-height: 26px;
     padding: 0px 10px;
     border-radius: 999px;
-    color: alpha(#b7beb8, 0.82);
-    background-color: alpha(#121715, 0.88);
-    border: 1px solid alpha(#dfe4de, 0.10);
+    color: alpha(#a6adb3, 0.82);
+    background-color: alpha(#11171b, 0.88);
+    border: 1px solid alpha(#f2f1ed, 0.10);
     font-size: 0.82em;
     font-weight: 700;
 }
 .load-older-toolbar:hover {
-    background-color: alpha(#18211d, 0.96);
-    color: #f2efe8;
-    border-color: alpha(#dfe4de, 0.18);
+    background-color: alpha(#141a1e, 0.96);
+    color: #f2f1ed;
+    border-color: alpha(#f2f1ed, 0.18);
 }
 .load-older-toolbar:disabled {
     opacity: 0.88;
 }
 .startup-status-panel {
-    background: radial-gradient(circle at top left, alpha(#74a48d, 0.12), transparent 34%),
-                radial-gradient(circle at top right, alpha(#a8d1c0, 0.06), transparent 28%),
-                linear-gradient(180deg, alpha(#ffffff, 0.01), alpha(#000000, 0.00));
+    background-color: transparent;
 }
 .startup-status-card {
     border-radius: 28px;
-    border: 1px solid alpha(#dfe4de, 0.08);
-    background:
-        linear-gradient(180deg, alpha(white, 0.03), alpha(white, 0.01)),
-        alpha(#121715, 0.94);
+    border: 1px solid alpha(#f2f1ed, 0.08);
+    background-color: alpha(#11171b, 0.95);
     box-shadow: 0 18px 34px alpha(@window_fg_color, 0.12);
 }
 .startup-status-hero {
     padding: 22px 22px 16px;
-    border-bottom: 1px solid alpha(#dfe4de, 0.08);
+    border-bottom: 1px solid alpha(#f2f1ed, 0.08);
 }
 .startup-status-orb {
     min-width: 78px;
@@ -279,12 +332,12 @@ CSS = """
     letter-spacing: -0.03em;
 }
 .startup-status-subtitle {
-    color: alpha(#b7beb8, 0.80);
+    color: alpha(#a6adb3, 0.80);
     font-size: 0.90em;
     line-height: 1.35;
 }
 .startup-status-mood {
-    color: alpha(#b7beb8, 0.70);
+    color: alpha(#a6adb3, 0.70);
     font-size: 0.83em;
     font-weight: 700;
     letter-spacing: 0.02em;
@@ -295,20 +348,20 @@ CSS = """
 }
 .startup-status-progress trough {
     border-radius: 999px;
-    background-color: alpha(#dfe4de, 0.08);
+    background-color: alpha(#f2f1ed, 0.08);
 }
 .startup-status-progress progress {
     border-radius: 999px;
-    background-image: linear-gradient(90deg, alpha(#74a48d, 0.95), alpha(#24362d, 0.82));
+    background-image: linear-gradient(90deg, alpha(#2e6a70, 0.95), alpha(#24362e, 0.82));
 }
 .startup-status-summary {
-    color: #f2efe8;
+    color: #f2f1ed;
     font-size: 0.82em;
     font-weight: 800;
     padding: 5px 11px;
     border-radius: 999px;
-    background-color: alpha(#121715, 0.92);
-    border: 1px solid alpha(#dfe4de, 0.08);
+    background-color: alpha(#11171b, 0.92);
+    border: 1px solid alpha(#f2f1ed, 0.08);
 }
 .startup-status-list {
     background: transparent;
@@ -318,7 +371,7 @@ CSS = """
     padding: 4px 8px 2px;
 }
 .startup-status-issues-title {
-    color: alpha(#b7beb8, 0.68);
+    color: alpha(#a6adb3, 0.68);
     font-size: 0.72em;
     font-weight: 800;
     letter-spacing: 0.08em;
@@ -327,8 +380,8 @@ CSS = """
 .startup-status-issue-row {
     padding: 8px 10px;
     border-radius: 14px;
-    background-color: alpha(#121715, 0.88);
-    border: 1px solid alpha(#dfe4de, 0.08);
+    background-color: alpha(#11171b, 0.88);
+    border: 1px solid alpha(#f2f1ed, 0.08);
 }
 .startup-status-issue-icon {
     margin-top: 2px;
@@ -338,7 +391,7 @@ CSS = """
     font-weight: 800;
 }
 .startup-status-issue-detail {
-    color: alpha(#b7beb8, 0.78);
+    color: alpha(#a6adb3, 0.78);
     font-size: 0.78em;
     line-height: 1.25;
 }
@@ -347,7 +400,7 @@ CSS = """
     color: alpha(@warning_color, 0.98);
 }
 .startup-status-issue-row.state-warning .startup-status-issue-detail {
-    color: alpha(#e0b66f, 0.84);
+    color: alpha(#c9a869, 0.84);
 }
 .startup-status-issue-row.state-warning .startup-status-strip {
     background-color: alpha(@warning_color, 0.92);
@@ -357,7 +410,7 @@ CSS = """
     color: alpha(@error_color, 0.98);
 }
 .startup-status-issue-row.state-error .startup-status-issue-detail {
-    color: alpha(#da6e63, 0.84);
+    color: alpha(#c76d63, 0.84);
 }
 .startup-status-issue-row.state-error .startup-status-strip {
     background-color: alpha(@error_color, 0.92);
@@ -369,39 +422,161 @@ CSS = """
     font-weight: 700;
 }
 .startup-status-row.state-pending .startup-status-strip {
-    background-color: alpha(#b7beb8, 0.18);
+    background-color: alpha(#a6adb3, 0.18);
 }
 .startup-status-row.state-checking .startup-status-strip {
-    background-color: alpha(#74a48d, 0.86);
+    background-color: alpha(#2e6a70, 0.86);
 }
 .startup-status-row.state-ready .startup-status-strip {
     background-color: alpha(#6f9b73, 0.92);
 }
 .startup-status-row.state-warning .startup-status-strip {
-    background-color: alpha(#e0b66f, 0.92);
+    background-color: alpha(#c9a869, 0.92);
 }
 .startup-status-row.state-error .startup-status-strip {
-    background-color: alpha(#da6e63, 0.92);
+    background-color: alpha(#c76d63, 0.92);
 }
 .startup-status-row.state-warning .startup-status-title,
 .startup-status-row.state-warning .startup-status-detail,
 .startup-status-row.state-warning .startup-status-indicator,
 .startup-status-row.state-warning .startup-status-indicator image {
-    color: alpha(#e0b66f, 0.98);
+    color: alpha(#c9a869, 0.98);
 }
 .startup-status-row.state-error .startup-status-title,
 .startup-status-row.state-error .startup-status-detail,
 .startup-status-row.state-error .startup-status-indicator,
 .startup-status-row.state-error .startup-status-indicator image {
-    color: alpha(#da6e63, 0.98);
+    color: alpha(#c76d63, 0.98);
 }
 .welcome-screen,
 .welcome-settings-shell {
-    background-color: #0b0f0d;
-    background:
-        radial-gradient(circle at 16% 14%, alpha(#2b5f4e, 0.20), transparent 34%),
-        radial-gradient(circle at 84% 10%, alpha(#476a61, 0.14), transparent 28%),
-        linear-gradient(180deg, #090c0b 0%, #0d1110 56%, #0a0d0c 100%);
+    background-color: #0b0f12;
+}
+.welcome-photo {
+    background-color: #0c1613;
+    border-right: 1px solid alpha(#a6adb3, 0.08);
+}
+.welcome-header-bar {
+    background: transparent;
+    border-bottom: 1px solid alpha(#a6adb3, 0.08);
+    box-shadow: none;
+    min-height: 40px;
+    padding: 0 16px;
+}
+.welcome-header-mark {
+    -gtk-icon-size: 18px;
+    color: #f2f1ed;
+    opacity: 0.92;
+}
+.welcome-header-brand {
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: alpha(#f2f1ed, 0.78);
+}
+.welcome-photo-caption {
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: alpha(#f2f1ed, 0.38);
+}
+.welcome-right,
+.welcome-right-scroll,
+.welcome-right-scroll viewport {
+    background: transparent;
+}
+.welcome-inner {
+    min-width: 0;
+}
+.welcome-providers-eyebrow {
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: alpha(#a6adb3, 0.72);
+}
+.welcome-provider-grid {
+    min-width: 0;
+}
+.welcome-more {
+    background: transparent;
+    border: none;
+    padding: 2px 0;
+    font-size: 12.5px;
+    color: #2e6a70;
+    box-shadow: none;
+}
+.welcome-more:hover {
+    background: transparent;
+    color: shade(#2e6a70, 1.18);
+}
+.provider-row-tile {
+    padding: 0;
+    border-radius: 10px;
+    background: #11171b;
+    border: 1px solid alpha(#a6adb3, 0.08);
+    color: #f2f1ed;
+    box-shadow: none;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.provider-row-tile:hover {
+    background: #141a1e;
+    border-color: alpha(#a6adb3, 0.14);
+}
+.provider-row-tile:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px alpha(#2e6a70, 0.40);
+}
+.provider-glyph {
+    min-width: 34px;
+    min-height: 34px;
+    border-radius: 8px;
+    font-family: "Geist", sans-serif;
+    font-weight: 500;
+    font-size: 15px;
+    padding: 0;
+}
+.provider-glyph.glyph-gmail   { background: alpha(#ea4335, 0.14); color: #ea4335; border: 1px solid alpha(#ea4335, 0.28); }
+.provider-glyph.glyph_gmail   { background: alpha(#ea4335, 0.14); color: #ea4335; border: 1px solid alpha(#ea4335, 0.28); }
+.provider-glyph.glyph-microsoft,
+.provider-glyph.glyph_microsoft { background: alpha(#0078d4, 0.14); color: #0078d4; border: 1px solid alpha(#0078d4, 0.28); }
+.provider-glyph.glyph-proton,
+.provider-glyph.glyph_proton  { background: alpha(#7c4dff, 0.14); color: #7c4dff; border: 1px solid alpha(#7c4dff, 0.28); }
+.provider-glyph.glyph-imap_smtp,
+.provider-glyph.glyph_imap_smtp { background: alpha(#a6adb3, 0.14); color: #a6adb3; border: 1px solid alpha(#a6adb3, 0.28); }
+.provider-glyph.glyph_icloud    { background: alpha(#7b8794, 0.14); color: #b0bac4; border: 1px solid alpha(#7b8794, 0.28); }
+.provider-glyph.glyph_fastmail  { background: alpha(#4a90e2, 0.14); color: #4a90e2; border: 1px solid alpha(#4a90e2, 0.28); }
+.provider-glyph.glyph_yahoo     { background: alpha(#6001d2, 0.18); color: #a77bf0; border: 1px solid alpha(#6001d2, 0.32); }
+.provider-glyph.glyph_zoho      { background: alpha(#e42527, 0.14); color: #e42527; border: 1px solid alpha(#e42527, 0.28); }
+.provider-glyph.glyph_exchange  { background: alpha(#0078d4, 0.14); color: #0078d4; border: 1px solid alpha(#0078d4, 0.28); }
+.provider-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #f2f1ed;
+}
+.provider-sub {
+    font-size: 11px;
+    color: alpha(#a6adb3, 0.72);
+}
+.lock-pill {
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: #11171b;
+    border: 1px solid alpha(#a6adb3, 0.10);
+}
+.lock-pill-icon {
+    min-width: 11px;
+    min-height: 11px;
+    color: alpha(#a6adb3, 0.72);
+}
+.lock-pill-text {
+    font-size: 11px;
+    color: alpha(#a6adb3, 0.72);
 }
 .welcome-scene {
     background: transparent;
@@ -431,8 +606,8 @@ CSS = """
     min-width: 4px;
     min-height: 4px;
     border-radius: 999px;
-    background-color: alpha(#f2efe8, 0.92);
-    box-shadow: 0 0 10px alpha(#f2efe8, 0.20), 0 0 20px alpha(#74a48d, 0.12);
+    background-color: alpha(#f2f1ed, 0.92);
+    box-shadow: 0 0 10px alpha(#f2f1ed, 0.20), 0 0 20px alpha(#2e6a70, 0.12);
     animation: hermod-firefly-twinkle 6.5s ease-in-out infinite;
 }
 .welcome-firefly.firefly-a { opacity: 0.90; }
@@ -456,39 +631,53 @@ CSS = """
     min-height: 0;
 }
 .welcome-mark {
-    min-width: 248px;
-    min-height: 248px;
+    min-width: 64px;
+    min-height: 64px;
+    border-radius: 16px;
+    border: 1px solid alpha(#a6adb3, 0.14);
+    background: #11171b;
+    padding: 12px;
     opacity: 1.0;
-    box-shadow: 0 22px 56px alpha(black, 0.22);
 }
-.welcome-tagline {
-    font-size: 0.72em;
-    font-weight: 800;
-    letter-spacing: 0.32em;
-    color: alpha(#b7beb8, 0.88);
-    margin-top: 8px;
-    font-family: "DejaVu Sans", sans-serif;
+.welcome-eyebrow {
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.22em;
+    color: alpha(#a6adb3, 0.74);
+}
+.welcome-title {
+    font-family: "Geist", -apple-system, system-ui, sans-serif;
+    font-size: 44px;
+    font-weight: 400;
+    letter-spacing: 0.01em;
+    line-height: 1.10;
+    color: #f2f1ed;
 }
 .welcome-summary {
-    font-size: 1.05em;
-    line-height: 1.54;
-    margin-top: 32px;
+    font-family: "Geist", -apple-system, system-ui, sans-serif;
+    font-size: 15px;
     font-weight: 400;
-    color: alpha(#b7beb8, 0.82);
-    font-family: serif, "Times New Roman", FreeSerif, serif;
+    line-height: 1.50;
+    color: alpha(#a6adb3, 0.88);
 }
-.welcome-divider-box {
-    margin-top: 24px;
-    min-width: 380px;
+.welcome-pledge {
+    margin-top: 18px;
 }
-.welcome-divider-line {
-    opacity: 0.18;
-    margin-top: 1px;
+.welcome-pledge-item {
+    color: alpha(#a6adb3, 0.72);
+    font-size: 11.5px;
+    font-weight: 500;
 }
-.welcome-divider-mark {
-    font-size: 0.72em;
-    color: alpha(#b7beb8, 0.32);
-    font-weight: 300;
+.welcome-pledge-text {
+    font-family: "Geist", -apple-system, system-ui, sans-serif;
+    letter-spacing: -0.005em;
+    color: alpha(#a6adb3, 0.72);
+}
+.welcome-pledge-check {
+    color: alpha(#6f9b73, 0.96);
+    min-width: 12px;
+    min-height: 12px;
 }
 .onboarding-provider-grid {
     margin-top: 28px;
@@ -511,7 +700,7 @@ CSS = """
 }
 .provider-tile:hover {
     background-color: alpha(#ffffff, 0.06);
-    border-color: alpha(#dfe4de, 0.12);
+    border-color: alpha(#f2f1ed, 0.12);
     transform: scale(1.04);
 }
 .provider-tile-gmail:hover { background-color: alpha(#ea4335, 0.10); border-color: alpha(#ea4335, 0.20); }
@@ -554,13 +743,13 @@ CSS = """
     font-weight: 800;
     letter-spacing: 0.11em;
     text-transform: uppercase;
-    color: alpha(#b7beb8, 0.72);
+    color: alpha(#a6adb3, 0.72);
 }
 .onboarding-accounts-list {
     padding: 2px 0 0;
 }
 .onboarding-accounts-empty {
-    color: alpha(#b7beb8, 0.68);
+    color: alpha(#a6adb3, 0.68);
     font-size: 0.92em;
 }
 .onboarding-account-row {
@@ -585,7 +774,7 @@ CSS = """
 }
 .onboarding-account-subtitle {
     font-size: 0.74em;
-    color: alpha(#b7beb8, 0.72);
+    color: alpha(#a6adb3, 0.72);
 }
 .onboarding-open-btn {
     margin-top: 22px;
@@ -604,19 +793,45 @@ CSS = """
     font-size: 1.28em;
     font-weight: 800;
     letter-spacing: -0.03em;
-    color: #f2efe8;
+    color: #f2f1ed;
 }
 .onboarding-modal-subtitle {
     font-size: 0.92em;
-    color: alpha(#b7beb8, 0.76);
+    color: alpha(#a6adb3, 0.76);
+}
+.onboarding-modal-window {
+    background: transparent;
 }
 .onboarding-modal-frame {
-    border-radius: 24px;
-    border: 1px solid alpha(#dfe4de, 0.10);
-    background:
-        linear-gradient(180deg, alpha(white, 0.04), alpha(white, 0.01)),
-        alpha(#111614, 0.96);
-    box-shadow: 0 18px 46px alpha(black, 0.20);
+    border-radius: 18px;
+    border: 1px solid alpha(#a6adb3, 0.14);
+    background: #0f1417;
+    box-shadow: 0 18px 46px alpha(black, 0.35);
+}
+.onboarding-modal-head {
+    min-height: 56px;
+}
+.onboarding-modal-divider {
+    background: alpha(#a6adb3, 0.08);
+    min-height: 1px;
+}
+.onboarding-modal-close {
+    min-width: 28px;
+    min-height: 28px;
+    padding: 0;
+    border-radius: 999px;
+    background: transparent;
+    border: none;
+    color: alpha(#f2f1ed, 0.72);
+}
+.onboarding-modal-close:hover {
+    background: alpha(#f2f1ed, 0.06);
+    color: #f2f1ed;
+}
+.onboarding-modal-foot {
+    padding-top: 12px;
+    border-top: 1px solid alpha(#a6adb3, 0.08);
+    background: #090c0f;
 }
 .onboarding-modal-scroller,
 .onboarding-modal-scroller viewport {
@@ -632,19 +847,19 @@ CSS = """
     margin-top: 8px;
 }
 .welcome-settings-title {
-    font-size: 1.54em;
-    font-weight: 860;
-    letter-spacing: -0.04em;
-    color: #f2efe8;
-    font-family: Georgia, "Times New Roman", serif;
+    font-family: "Geist", -apple-system, system-ui, sans-serif;
+    font-size: 1.74em;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    color: #f2f1ed;
 }
 .welcome-settings-subtitle {
     font-size: 0.94em;
     line-height: 1.38;
-    color: alpha(#b7beb8, 0.78);
+    color: alpha(#a6adb3, 0.78);
 }
 .search-entry-shell:focus-within {
-    border-color: alpha(#74a48d, 0.22);
+    border-color: alpha(#2e6a70, 0.22);
     box-shadow: none;
 }
 .search-entry-tab {
@@ -662,11 +877,11 @@ CSS = """
     outline: none;
 }
 .search-entry-icon {
-    color: alpha(#b7beb8, 0.58);
+    color: alpha(#a6adb3, 0.58);
 }
 .sidebar-actions {
     padding: 4px 10px 8px;
-    border-bottom: 1px solid alpha(#dfe4de, 0.10);
+    border-bottom: 1px solid alpha(#f2f1ed, 0.10);
 }
 .sidebar-action-btn {
     padding-top: 0px;
@@ -679,15 +894,24 @@ CSS = """
     background-color: alpha(@accent_color, 0.12);
 }
 .sidebar-compose-label {
-    font-size: 0.76em;
-    font-weight: 800;
-    letter-spacing: 0.06em;
+    font-family: "Geist", -apple-system, system-ui, sans-serif;
+    font-size: 0.96em;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+}
+.account-header {
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 0.82em;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: alpha(@window_fg_color, 0.68);
 }
 .sync-control {
     padding: 0px;
     border-radius: 10px;
-    border: 1px solid alpha(#dfe4de, 0.10);
-    background-color: alpha(#121715, 0.88);
+    border: 1px solid alpha(#f2f1ed, 0.10);
+    background-color: alpha(#11171b, 0.88);
 }
 .sync-control box,
 .sync-control label,
@@ -714,14 +938,14 @@ CSS = """
 .sync-divider {
     min-width: 1px;
     min-height: 30px;
-    background-color: alpha(#dfe4de, 0.28);
+    background-color: alpha(#f2f1ed, 0.28);
     border-radius: 999px;
 }
 .sync-auto-label {
     font-size: 0.60em;
     font-weight: 700;
     letter-spacing: 0.07em;
-    color: alpha(#b7beb8, 0.62);
+    color: alpha(#a6adb3, 0.62);
 }
 .sync-auto-value {
     font-size: 0.76em;
@@ -768,23 +992,19 @@ CSS = """
     margin: 2px;
 }
 .attachment-bar {
-    border-top: 1px solid alpha(#dfe4de, 0.08);
-    background:
-        linear-gradient(180deg, alpha(white, 0.02), alpha(white, 0.00)),
-        alpha(#121715, 0.94);
+    border-top: 1px solid alpha(#f2f1ed, 0.08);
+    background-color: alpha(#11171b, 0.95);
     padding: 6px 10px 8px;
 }
 .thread-reply-bar {
-    border-top: 1px solid alpha(#dfe4de, 0.08);
-    background:
-        linear-gradient(180deg, alpha(white, 0.02), alpha(white, 0.00)),
-        alpha(#101312, 0.96);
+    border-top: 1px solid alpha(#f2f1ed, 0.08);
+    background-color: alpha(#0f1417, 0.96);
     padding: 8px 10px 10px;
 }
 .thread-reply-editor {
     min-height: 62px;
-    background-color: alpha(#121715, 0.92);
-    border: 1px solid alpha(#dfe4de, 0.10);
+    background-color: alpha(#11171b, 0.92);
+    border: 1px solid alpha(#f2f1ed, 0.10);
     border-radius: 12px;
     padding: 8px 10px;
 }
@@ -794,10 +1014,8 @@ CSS = """
     font-weight: 700;
 }
 .message-info-bar {
-    border-bottom: 1px solid alpha(#dfe4de, 0.08);
-    background:
-        linear-gradient(180deg, alpha(white, 0.02), alpha(white, 0.00)),
-        alpha(#101312, 0.96);
+    border-bottom: 1px solid alpha(#f2f1ed, 0.08);
+    background-color: alpha(#0f1417, 0.96);
     padding: 8px 12px 7px;
     min-height: 58px;
 }
@@ -816,21 +1034,21 @@ CSS = """
     font-size: 0.82em;
     font-weight: 700;
     border-radius: 999px;
-    background-color: alpha(#121715, 0.90);
-    border: 1px solid alpha(#dfe4de, 0.10);
-    color: alpha(#f2efe8, 0.82);
+    background-color: alpha(#11171b, 0.90);
+    border: 1px solid alpha(#f2f1ed, 0.10);
+    color: alpha(#f2f1ed, 0.82);
 }
 .thread-tab {
     border-radius: 999px;
     padding: 0px 14px;
     min-height: 28px;
-    background-color: alpha(#121715, 0.90);
-    border: 1px solid alpha(#dfe4de, 0.10);
+    background-color: alpha(#11171b, 0.90);
+    border: 1px solid alpha(#f2f1ed, 0.10);
     transition: all 120ms ease;
 }
 .thread-tab:hover {
-    background-color: alpha(#18211d, 0.96);
-    border-color: alpha(#dfe4de, 0.18);
+    background-color: alpha(#141a1e, 0.96);
+    border-color: alpha(#f2f1ed, 0.18);
 }
 .thread-msg-count {
     font-size: 0.76em;
@@ -839,30 +1057,30 @@ CSS = """
     font-variant-numeric: tabular-nums;
 }
 .thread-info-button.active {
-    background-color: rgba(116, 164, 141, 0.18);
-    color: #f2efe8;
-    border-color: rgba(116, 164, 141, 0.28);
+    background-color: rgba(46, 106, 112, 0.18);
+    color: #f2f1ed;
+    border-color: rgba(46, 106, 112, 0.28);
     box-shadow: none;
 }
 .thread-info-senders {
     margin-top: 5px;
 }
 .message-info-sender-line {
-    color: alpha(#b7beb8, 0.82);
+    color: alpha(#a6adb3, 0.82);
 }
 .message-info-subject {
-    font-size: 0.92em;
-    font-weight: 700;
-    color: #f2efe8;
-    letter-spacing: 0.01em;
-    min-height: 18px;
-    line-height: 1.2;
-    font-family: Georgia, "Times New Roman", serif;
+    font-family: "Geist", -apple-system, system-ui, sans-serif;
+    font-size: 1.36em;
+    font-weight: 500;
+    color: #f2f1ed;
+    letter-spacing: -0.025em;
+    min-height: 22px;
+    line-height: 1.25;
 }
 .message-info-sender {
     font-size: 0.80em;
     font-weight: 400;
-    color: alpha(#b7beb8, 0.84);
+    color: alpha(#a6adb3, 0.84);
     line-height: 1.10;
 }
 .message-info-accent {
@@ -873,35 +1091,30 @@ CSS = """
 .message-info-date {
     font-size: 0.80em;
     font-weight: 400;
-    color: alpha(#b7beb8, 0.80);
+    color: alpha(#a6adb3, 0.80);
     line-height: 1.10;
 }
 .message-info-title {
     font-size: 0.88em;
     font-weight: 700;
-    color: #f2efe8;
+    color: #f2f1ed;
     letter-spacing: 0.01em;
 }
 .message-info-meta {
     font-size: 0.78em;
-    color: alpha(#b7beb8, 0.72);
+    color: alpha(#a6adb3, 0.72);
 }
 .reading-pane-shell {
-    background:
-        radial-gradient(circle at 50% 0%, alpha(#74a48d, 0.03), transparent 34%),
-        linear-gradient(180deg, alpha(white, 0.01), alpha(white, 0.00)),
-        alpha(#0f1311, 0.96);
+    background-color: alpha(#0b0f12, 0.96);
     border: none;
     border-radius: 0;
 }
 .thread-sidebar-dim {
-    background-color: alpha(#0f1311, 0.10);
+    background-color: alpha(#0b0f12, 0.10);
 }
 .thread-sidebar {
-    border-left: 1px solid alpha(#dfe4de, 0.08);
-    background:
-        linear-gradient(180deg, alpha(white, 0.02), alpha(white, 0.00)),
-        alpha(#0f1311, 0.98);
+    border-left: 1px solid alpha(#f2f1ed, 0.08);
+    background-color: alpha(#0b0f12, 0.98);
     min-width: 330px;
 }
 .thread-sidebar-list {
@@ -913,10 +1126,10 @@ CSS = """
     padding: 7px 10px;
 }
 .thread-sidebar-row:selected {
-    background-color: rgba(116, 164, 141, 0.14);
+    background-color: rgba(46, 106, 112, 0.14);
 }
 .thread-sidebar-row:hover {
-    background-color: alpha(#dfe4de, 0.04);
+    background-color: alpha(#f2f1ed, 0.04);
 }
 .thread-sidebar-avatar {
     min-width: 28px;
@@ -928,8 +1141,8 @@ CSS = """
     letter-spacing: 0.02em;
 }
 .thread-sidebar-avatar.generic {
-    background-color: alpha(#dfe4de, 0.10);
-    color: alpha(#f2efe8, 0.84);
+    background-color: alpha(#f2f1ed, 0.10);
+    color: alpha(#f2f1ed, 0.84);
 }
 .thread-sidebar-sender {
     font-size: 0.84em;
@@ -937,11 +1150,11 @@ CSS = """
 }
 .thread-sidebar-snippet {
     font-size: 0.75em;
-    color: alpha(#b7beb8, 0.72);
+    color: alpha(#a6adb3, 0.72);
 }
 .thread-sidebar-time {
     font-size: 0.72em;
-    color: alpha(#b7beb8, 0.72);
+    color: alpha(#a6adb3, 0.72);
 }
 .thread-sidebar-strip {
     min-width: 4px;
@@ -973,29 +1186,100 @@ CSS = """
     box-shadow: none;
 }
 .message-column {
-    background:
-        linear-gradient(180deg, alpha(white, 0.015), alpha(white, 0.00)),
-        alpha(#101312, 0.96);
+    background-color: alpha(#0f1417, 0.96);
     border-radius: 16px;
-    border: 1px solid alpha(#dfe4de, 0.08);
+    border: 1px solid alpha(#f2f1ed, 0.08);
 }
 .attachment-chip {
     border-radius: 8px;
-    border: 1px solid alpha(#dfe4de, 0.10);
+    border: 1px solid alpha(#f2f1ed, 0.10);
 }
 .countdown-lbl {
     font-family: monospace;
     font-variant-numeric: tabular-nums;
     font-size: 0.72em;
-    color: alpha(#b7beb8, 0.48);
+    color: alpha(#a6adb3, 0.48);
     min-width: 54px;
 }
 .countdown-hint {
     font-size: 0.62em;
-    color: alpha(#b7beb8, 0.42);
+    color: alpha(#a6adb3, 0.42);
     line-height: 1.0;
 }
 """
+
+ACCENT_PALETTE = {
+    "teal":   {"base": "#2E6A70", "weak": "rgba(46,106,112,0.16)"},
+    "forest": {"base": "#3B6B4E", "weak": "rgba(59,107,78,0.16)"},
+    "gold":   {"base": "#B08A3E", "weak": "rgba(176,138,62,0.16)"},
+    "stone":  {"base": "#6F7B82", "weak": "rgba(111,123,130,0.16)"},
+}
+
+DAY_PALETTES = {
+    "paper": {
+        "bg":       "#F2F1ED",
+        "elevated": "#FAF9F5",
+        "hover":    "#EDECE6",
+        "card":     "#FFFFFF",
+        "sunken":   "#E8E7E1",
+        "fg":       "#14181B",
+        "fg_muted": "#5A636A",
+    },
+    "mist": {
+        "bg":       "#E9EEF1",
+        "elevated": "#F2F6F8",
+        "hover":    "#E1E7EB",
+        "card":     "#FFFFFF",
+        "sunken":   "#D9E0E5",
+        "fg":       "#0E1418",
+        "fg_muted": "#506068",
+    },
+    "linen": {
+        "bg":       "#EFEAE0",
+        "elevated": "#F6F2E9",
+        "hover":    "#E7E1D4",
+        "card":     "#FFFFFF",
+        "sunken":   "#DFD9CB",
+        "fg":       "#1A1714",
+        "fg_muted": "#635A4E",
+    },
+}
+
+DENSITY_ROW_HEIGHT = {
+    "comfortable": 84,
+    "balanced":    60,
+    "compact":     44,
+}
+
+
+def build_theme_override_css(theme="night", day_variant="paper", accent="teal", density="balanced"):
+    accent_info = ACCENT_PALETTE.get(accent, ACCENT_PALETTE["teal"])
+    base = accent_info["base"]
+    weak = accent_info["weak"]
+
+    parts = []
+    parts.append(f"@define-color hermod_accent {base};")
+    parts.append(f"@define-color hermod_accent_weak {weak};")
+    parts.append(f"@define-color accent_color {base};")
+    parts.append(f"@define-color accent_bg_color {base};")
+
+    if theme == "day":
+        day = DAY_PALETTES.get(day_variant, DAY_PALETTES["paper"])
+        parts.append(f"@define-color hermod_bg {day['bg']};")
+        parts.append(f"@define-color hermod_bg_elevated {day['elevated']};")
+        parts.append(f"@define-color hermod_bg_hover {day['hover']};")
+        parts.append(f"@define-color hermod_surface_card {day['card']};")
+        parts.append(f"@define-color hermod_surface_sunken {day['sunken']};")
+        parts.append(f"@define-color hermod_fg {day['fg']};")
+        parts.append(f"@define-color hermod_fg_muted {day['fg_muted']};")
+        parts.append(f"@define-color hermod_accent_fg #FFFFFF;")
+        parts.append(f"@define-color accent_fg_color #FFFFFF;")
+
+    row_height = DENSITY_ROW_HEIGHT.get(density, DENSITY_ROW_HEIGHT["balanced"])
+    parts.append(f".email-row {{ min-height: {row_height}px; }}")
+
+    return "\n".join(parts) + "\n"
+
 
 ACCOUNT_SAFE_PALETTE = [
     "#6f7f79",
