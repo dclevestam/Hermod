@@ -509,6 +509,8 @@ class AccountSettingsController:
         return tile_box
 
     def _render_accounts(self):
+        if self.accounts_group is None:
+            return
         self._clear_container(self.accounts_group)
         backends = list(getattr(self.parent, "backends", []) or [])
         if not backends:

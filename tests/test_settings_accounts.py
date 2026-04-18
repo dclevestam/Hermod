@@ -141,6 +141,15 @@ class AccountSettingsControllerTests(unittest.TestCase):
             "Browser approval received. Finishing sign-in...",
         )
 
+    def test_render_accounts_is_safe_without_accounts_group(self):
+        controller = settings_accounts.AccountSettingsController.__new__(
+            settings_accounts.AccountSettingsController
+        )
+        controller.accounts_group = None
+        controller.parent = mock.Mock(backends=[])
+
+        controller._render_accounts()
+
 
 if __name__ == "__main__":
     unittest.main()
