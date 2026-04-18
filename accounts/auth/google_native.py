@@ -258,18 +258,31 @@ def run_google_native_oauth_authorization(
     result = {}
     ready = threading.Event()
 
+    callback_path = "/oauth2/callback"
+
     class _OAuthHandler(BaseHTTPRequestHandler):
         def do_GET(self):
             parsed = urllib.parse.urlparse(self.path)
             query = urllib.parse.parse_qs(parsed.query)
-            result["path"] = parsed.path
-            result["code"] = str((query.get("code") or [""])[0] or "").strip()
-            result["state"] = str((query.get("state") or [""])[0] or "").strip()
-            result["error"] = str((query.get("error") or [""])[0] or "").strip()
-            result["error_description"] = str(
+            if parsed.path == "/favicon.ico":
+                self.send_response(204)
+                self.end_headers()
+                return
+
+            is_callback = parsed.path == callback_path
+            code = str((query.get("code") or [""])[0] or "").strip()
+            state_value = str((query.get("state") or [""])[0] or "").strip()
+            error = str((query.get("error") or [""])[0] or "").strip()
+            error_description = str(
                 (query.get("error_description") or [""])[0] or ""
             ).strip()
-            ready.set()
+            if is_callback and (code or error) and not ready.is_set():
+                result["path"] = parsed.path
+                result["code"] = code
+                result["state"] = state_value
+                result["error"] = error
+                result["error_description"] = error_description
+                ready.set()
             body = (
                 '<html><body style="font-family: sans-serif;">'
                 "<h2>Hermod sign-in complete</h2>"
@@ -287,7 +300,7 @@ def run_google_native_oauth_authorization(
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), _OAuthHandler)
     server.daemon_threads = True
-    redirect_uri = f"http://127.0.0.1:{server.server_address[1]}/oauth2/callback"
+    redirect_uri = f"http://127.0.0.1:{server.server_address[1]}{callback_path}"
     server_thread = threading.Thread(
         target=server.serve_forever, kwargs={"poll_interval": 0.2}, daemon=True
     )
