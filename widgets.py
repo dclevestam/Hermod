@@ -143,8 +143,19 @@ class EmailRow(Gtk.Box):
             margin_bottom=8,
             margin_start=13,
             margin_end=10,
-            spacing=8,
+            spacing=10,
         )
+
+        avatar = Gtk.Label(
+            label=_sender_initials(msg.get("sender_name"), msg.get("sender_email")),
+            valign=Gtk.Align.CENTER,
+            halign=Gtk.Align.CENTER,
+        )
+        avatar.add_css_class("message-row-avatar")
+        if accent_class:
+            avatar.add_css_class(accent_class)
+        avatar.set_size_request(32, 32)
+        outer.append(avatar)
 
         col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1, hexpand=True)
 

@@ -616,7 +616,11 @@ class ReaderMixin:
         )
         self._show_attachments(attachments, selected_msg)
         self._thread_reply_target = self._thread_reply_msg_for_records(render_records)
-        self._thread_reply_bar.set_visible(False)
+        self._thread_reply_bar.set_visible(True)
+        if getattr(self, "_smart_reply_bar", None) is not None:
+            self._smart_reply_bar.set_visible(True)
+        if getattr(self, "_thread_summary_banner", None) is not None:
+            self._thread_summary_banner.set_visible(len(thread_msgs) > 1)
         if len(thread_msgs) > 1:
             if getattr(self, "_thread_messages_count_lbl", None) is not None:
                 self._thread_messages_count_lbl.set_label(str(len(thread_msgs)))
@@ -801,7 +805,11 @@ class ReaderMixin:
         self._current_thread_messages = None
         self._thread_reply_target = None
         self._thread_original_sources = {}
-        self._thread_reply_bar.set_visible(False)
+        self._thread_reply_bar.set_visible(True)
+        if getattr(self, "_smart_reply_bar", None) is not None:
+            self._smart_reply_bar.set_visible(True)
+        if getattr(self, "_thread_summary_banner", None) is not None:
+            self._thread_summary_banner.set_visible(False)
         self._thread_messages_btn.set_visible(False)
         self._set_thread_sidebar_visible(False)
         sender_seed = (
@@ -901,6 +909,10 @@ class ReaderMixin:
         self._set_original_message_source("", None, None)
         self._thread_original_sources = {}
         self._thread_reply_bar.set_visible(False)
+        if getattr(self, "_smart_reply_bar", None) is not None:
+            self._smart_reply_bar.set_visible(False)
+        if getattr(self, "_thread_summary_banner", None) is not None:
+            self._thread_summary_banner.set_visible(False)
         self._thread_messages_btn.set_visible(False)
         self._set_thread_sidebar_visible(False)
         self._webview_bg_color = None
@@ -920,6 +932,10 @@ class ReaderMixin:
         self._attachment_bar.set_visible(False)
         self._message_info_bar.set_visible(False)
         self._thread_reply_bar.set_visible(False)
+        if getattr(self, "_smart_reply_bar", None) is not None:
+            self._smart_reply_bar.set_visible(False)
+        if getattr(self, "_thread_summary_banner", None) is not None:
+            self._thread_summary_banner.set_visible(False)
         self._thread_messages_btn.set_visible(False)
         self._set_thread_sidebar_visible(False)
         self._webview_bg_color = None

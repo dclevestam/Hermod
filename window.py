@@ -1011,6 +1011,46 @@ class HermodWindow(
         self.folder_list.connect("row-activated", self._on_row_activated)
         sidebar_scroll.set_child(self.folder_list)
         sidebar_col.append(sidebar_scroll)
+
+        sidebar_status = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL, spacing=4
+        )
+        sidebar_status.add_css_class("sidebar-status")
+        sidebar_synced_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=8
+        )
+        sidebar_synced_dot = Gtk.Box(valign=Gtk.Align.CENTER)
+        sidebar_synced_dot.set_size_request(8, 8)
+        sidebar_synced_dot.add_css_class("sidebar-status-dot")
+        sidebar_synced_dot.add_css_class("sidebar-status-dot-online")
+        sidebar_synced_row.append(sidebar_synced_dot)
+        self._sidebar_synced_lbl = Gtk.Label(
+            label="All synced", halign=Gtk.Align.START, hexpand=True, xalign=0.0
+        )
+        self._sidebar_synced_lbl.add_css_class("sidebar-status-label")
+        sidebar_synced_row.append(self._sidebar_synced_lbl)
+        self._sidebar_synced_age_lbl = Gtk.Label(
+            label="just now", halign=Gtk.Align.END, xalign=1.0
+        )
+        self._sidebar_synced_age_lbl.add_css_class("sidebar-status-age")
+        sidebar_synced_row.append(self._sidebar_synced_age_lbl)
+        sidebar_status.append(sidebar_synced_row)
+
+        sidebar_local_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=8
+        )
+        sidebar_local_dot = Gtk.Box(valign=Gtk.Align.CENTER)
+        sidebar_local_dot.set_size_request(8, 8)
+        sidebar_local_dot.add_css_class("sidebar-status-dot")
+        sidebar_local_dot.add_css_class("sidebar-status-dot-local")
+        sidebar_local_row.append(sidebar_local_dot)
+        sidebar_local_lbl = Gtk.Label(
+            label="Local mode", halign=Gtk.Align.START, hexpand=True, xalign=0.0
+        )
+        sidebar_local_lbl.add_css_class("sidebar-status-label")
+        sidebar_local_row.append(sidebar_local_lbl)
+        sidebar_status.append(sidebar_local_row)
+        sidebar_col.append(sidebar_status)
         body.append(sidebar_col)
 
         right = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL, hexpand=True)
@@ -1238,6 +1278,31 @@ class HermodWindow(
         )
         self._info_actions.append(self._reader_delete_btn)
 
+        _thread_btn_box = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=5, valign=Gtk.Align.CENTER
+        )
+        self._thread_messages_icon = Gtk.Image(icon_name="view-list-symbolic")
+        self._thread_messages_count_lbl = Gtk.Label(label="")
+        self._thread_messages_count_lbl.add_css_class("thread-msg-count")
+        _thread_btn_box.append(self._thread_messages_icon)
+        _thread_btn_box.append(self._thread_messages_count_lbl)
+        self._thread_messages_btn = Gtk.Button(
+            child=_thread_btn_box, tooltip_text="Toggle message list"
+        )
+        self._thread_messages_btn.add_css_class("flat")
+        self._thread_messages_btn.add_css_class("reader-action-btn")
+        self._thread_messages_btn.add_css_class("reader-thread-btn")
+        self._thread_messages_btn.set_visible(False)
+        self._thread_messages_btn.connect(
+            "clicked",
+            lambda *_: self._set_thread_sidebar_visible(
+                not getattr(self, "_thread_sidebar_revealer", None).get_reveal_child()
+                if getattr(self, "_thread_sidebar_revealer", None) is not None
+                else True
+            ),
+        )
+        self._info_actions.append(self._thread_messages_btn)
+
         self._message_info_top.append(self._info_actions)
 
         self._message_info_actions = Gtk.Box(
@@ -1255,29 +1320,6 @@ class HermodWindow(
             "clicked", self._show_original_message_dialog
         )
         self._message_info_actions.append(self._message_info_original_btn)
-        _thread_btn_box = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL, spacing=5, valign=Gtk.Align.CENTER
-        )
-        self._thread_messages_icon = Gtk.Image(icon_name="view-list-symbolic")
-        self._thread_messages_count_lbl = Gtk.Label(label="")
-        self._thread_messages_count_lbl.add_css_class("thread-msg-count")
-        _thread_btn_box.append(self._thread_messages_icon)
-        _thread_btn_box.append(self._thread_messages_count_lbl)
-        self._thread_messages_btn = Gtk.Button(
-            child=_thread_btn_box, tooltip_text="Toggle message list"
-        )
-        self._thread_messages_btn.add_css_class("thread-info-button")
-        self._thread_messages_btn.add_css_class("thread-tab")
-        self._thread_messages_btn.set_visible(False)
-        self._thread_messages_btn.connect(
-            "clicked",
-            lambda *_: self._set_thread_sidebar_visible(
-                not getattr(self, "_thread_sidebar_revealer", None).get_reveal_child()
-                if getattr(self, "_thread_sidebar_revealer", None) is not None
-                else True
-            ),
-        )
-        self._message_info_actions.append(self._thread_messages_btn)
         self._message_info_top.append(self._message_info_actions)
         self._message_info_bar.append(self._message_info_top)
 
@@ -1347,6 +1389,31 @@ class HermodWindow(
         att_bar.append(att_scroll)
         self._attachment_bar = att_bar
         viewer_box.append(self._attachment_bar)
+
+        self._smart_reply_bar = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=8
+        )
+        self._smart_reply_bar.add_css_class("smart-reply-bar")
+        smart_reply_title = Gtk.Label(label="SMART REPLY", xalign=0.0)
+        smart_reply_title.add_css_class("smart-reply-title")
+        self._smart_reply_bar.append(smart_reply_title)
+        smart_reply_chip = Gtk.Label(label="LOCAL")
+        smart_reply_chip.add_css_class("smart-reply-chip")
+        self._smart_reply_bar.append(smart_reply_chip)
+        self._smart_reply_btn_box = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=6, hexpand=True
+        )
+        self._smart_reply_btn_box.set_halign(Gtk.Align.START)
+        self._smart_reply_bar.append(self._smart_reply_btn_box)
+        smart_reply_write_btn = Gtk.Button(label="Write my own")
+        smart_reply_write_btn.add_css_class("flat")
+        smart_reply_write_btn.add_css_class("smart-reply-write")
+        smart_reply_write_btn.connect(
+            "clicked", lambda _: self._thread_reply_view.grab_focus()
+        )
+        self._smart_reply_bar.append(smart_reply_write_btn)
+        self._smart_reply_bar.set_visible(False)
+        viewer_box.append(self._smart_reply_bar)
 
         self._thread_reply_bar = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
@@ -1443,7 +1510,34 @@ class HermodWindow(
         )
         self._thread_body_box.append(self._thread_webview_overlay)
         self._thread_body_box.append(self._thread_sidebar_revealer)
+
+        self._thread_summary_banner = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL, spacing=6
+        )
+        self._thread_summary_banner.add_css_class("thread-summary-banner")
+        summary_head = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=8
+        )
+        summary_title = Gtk.Label(label="THREAD SUMMARY", xalign=0.0)
+        summary_title.add_css_class("thread-summary-title")
+        summary_head.append(summary_title)
+        summary_chip = Gtk.Label(label="LOCAL")
+        summary_chip.add_css_class("thread-summary-chip")
+        summary_head.append(summary_chip)
+        self._thread_summary_banner.append(summary_head)
+        self._thread_summary_text = Gtk.Label(
+            label="Summary appears when a local model is connected.",
+            xalign=0.0,
+        )
+        self._thread_summary_text.add_css_class("thread-summary-text")
+        self._thread_summary_text.set_wrap(True)
+        self._thread_summary_banner.append(self._thread_summary_text)
+        self._thread_summary_banner.set_visible(False)
+
         viewer_box.insert_child_after(self._thread_body_box, self._message_info_bar)
+        viewer_box.insert_child_after(
+            self._thread_summary_banner, self._message_info_bar
+        )
 
         viewer_shell = Gtk.Frame(vexpand=True, hexpand=True, margin_top=5)
         viewer_shell.add_css_class("reading-pane-shell")

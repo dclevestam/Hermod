@@ -215,7 +215,7 @@ class MessageListMixin:
         for backend in self.backends:
             accent_class = self._account_class_for(backend.identity)
             header_row = AccountHeaderRow(backend.identity, accent_class=accent_class)
-            header_row.set_label(getattr(backend, 'presentation_name', '') or backend.identity)
+            header_row.set_label(backend.identity or getattr(backend, 'presentation_name', ''))
             header_row.backend = backend
             if expand_by_default:
                 header_row.expanded = True

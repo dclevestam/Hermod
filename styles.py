@@ -1087,6 +1087,106 @@ window, dialog, popover, .app-window {
     border-radius: 6px;
     padding: 1px 7px;
 }
+.sidebar-status {
+    padding: 10px 18px 12px;
+    border-top: 1px solid alpha(@hermod_fg, 0.08);
+}
+.sidebar-status-dot {
+    border-radius: 999px;
+}
+.sidebar-status-dot-online {
+    background-color: #5BB07A;
+    box-shadow: 0 0 6px rgba(91, 176, 122, 0.4);
+}
+.sidebar-status-dot-local {
+    background-color: #6F7B82;
+}
+.sidebar-status-label {
+    font-size: 0.78em;
+    color: alpha(@hermod_fg_muted, 0.80);
+}
+.sidebar-status-age {
+    font-size: 0.72em;
+    color: alpha(@hermod_fg_muted, 0.56);
+}
+.thread-summary-banner {
+    margin: 8px 18px 0;
+    padding: 10px 14px;
+    background-color: alpha(@hermod_fg, 0.05);
+    border: 1px solid alpha(@hermod_fg, 0.08);
+    border-radius: 10px;
+}
+.thread-summary-title {
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 0.68em;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: alpha(@hermod_fg_muted, 0.72);
+}
+.thread-summary-chip {
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 0.62em;
+    font-weight: 600;
+    letter-spacing: 0.10em;
+    color: #9ED7DC;
+    background-color: rgba(46, 106, 112, 0.24);
+    border-radius: 5px;
+    padding: 1px 6px;
+}
+.thread-summary-text {
+    font-size: 0.88em;
+    color: alpha(@hermod_fg, 0.85);
+    line-height: 1.4;
+}
+.smart-reply-bar {
+    margin: 6px 18px 0;
+    padding: 8px 14px;
+    background-color: alpha(@hermod_fg, 0.04);
+    border: 1px solid alpha(@hermod_fg, 0.08);
+    border-radius: 10px;
+}
+.smart-reply-title {
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 0.66em;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: alpha(@hermod_fg_muted, 0.72);
+}
+.smart-reply-chip {
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 0.60em;
+    font-weight: 600;
+    letter-spacing: 0.10em;
+    color: #9ED7DC;
+    background-color: rgba(46, 106, 112, 0.24);
+    border-radius: 5px;
+    padding: 1px 6px;
+}
+.smart-reply-write {
+    font-size: 0.80em;
+    padding: 4px 10px;
+    border-radius: 6px;
+}
+.reader-thread-btn {
+    padding: 4px 8px;
+}
+.thread-msg-count {
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 0.72em;
+    font-weight: 600;
+    color: alpha(@hermod_fg, 0.75);
+}
+.message-row-avatar {
+    min-width: 32px;
+    min-height: 32px;
+    border-radius: 999px;
+    background-color: alpha(@hermod_fg, 0.12);
+    color: alpha(@hermod_fg, 0.85);
+    font-size: 0.76em;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    box-shadow: 0 0 0 2px alpha(@hermod_fg, 0.06);
+}
 .sidebar-section {
     background: transparent;
 }
