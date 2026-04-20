@@ -19,6 +19,10 @@ from email.mime.text import MIMEText
 from email import policy as email_policy
 from email.parser import BytesParser
 
+import google.auth.credentials
+from googleapiclient.discovery import build as _gapi_build
+from googleapiclient.errors import HttpError as _GapiHttpError
+
 try:
     from ..accounts.auth.oauth_common import OAuthTokenAcquisitionError
     from ..diagnostics.logger import log_event
@@ -73,6 +77,41 @@ _GMAIL_SMTP_TIMEOUT_SECS = 20
 _GMAIL_API_TIMEOUT_SECS = 10
 _GMAIL_TOKEN_CACHE_TTL_SECS = 3300
 _SYNC_RECENT_MESSAGES_LIMIT = 100
+_GMAIL_BATCH_MAX = 100
+
+
+class _HermodGmailCredentials(google.auth.credentials.Credentials):
+    """Adapter that plugs our existing OAuth token cache into googleapiclient.
+
+    Our access tokens come from ``backend._token()``, which delegates to the
+    account source's refresh logic. We stamp every outbound request with the
+    current cached token; on 401 the SDK will call ``refresh()``, which
+    invalidates the cache so the next ``_token()`` triggers a real refresh.
+    """
+
+    def __init__(self, backend):
+        super().__init__()
+        self._backend = backend
+
+    def refresh(self, request):
+        self._backend._invalidate_token()
+        self.token = self._backend._token()
+
+    @property
+    def expired(self):
+        return False
+
+    @property
+    def valid(self):
+        return True
+
+    def apply(self, headers, token=None):
+        resolved = token or self._backend._token()
+        self.token = resolved
+        headers["authorization"] = "Bearer {}".format(resolved)
+
+    def before_request(self, request, method, url, headers):
+        self.apply(headers)
 _GMAIL_METADATA_HEADERS = [
     'From',
     'To',
@@ -189,6 +228,8 @@ class GmailBackend:
         self._sync_notices = []
         self._cached_token = None
         self._cached_token_expiry = 0.0
+        self._gmail_service = None
+        self._gmail_service_lock = threading.Lock()
         self._gmail_last_health_event = None
         self._sync_health = SyncHealthState(
             provider='gmail',
@@ -708,12 +749,19 @@ class GmailBackend:
             return []
 
         message_refs = message_refs[:limit]
-        messages = []
+        api_ids = []
         for ref in message_refs:
             api_id = str((ref or {}).get('id') or '').strip()
-            if not api_id:
+            if api_id:
+                api_ids.append(api_id)
+
+        metadata_by_id = self._gmail_batch_get_metadata(api_ids)
+
+        messages = []
+        for api_id in api_ids:
+            api_message = metadata_by_id.get(api_id)
+            if not api_message:
                 continue
-            api_message = self._gmail_message_metadata(api_id)
             messages.append(self._gmail_api_message_to_row(
                 api_message,
                 folder=folder,
@@ -1329,6 +1377,97 @@ class GmailBackend:
             query={'format': 'metadata', 'metadataHeaders': _GMAIL_METADATA_HEADERS},
         )
 
+    def _gmail_api_service(self):
+        """Lazy-build the googleapiclient Gmail service for this backend."""
+        service = self._gmail_service
+        if service is not None:
+            return service
+        with self._gmail_service_lock:
+            if self._gmail_service is not None:
+                return self._gmail_service
+            ensure_network_ready()
+            # Prime the token cache so the first SDK call has a live token.
+            self._token()
+            credentials = _HermodGmailCredentials(self)
+            self._gmail_service = _gapi_build(
+                'gmail',
+                'v1',
+                credentials=credentials,
+                cache_discovery=False,
+            )
+            return self._gmail_service
+
+    def _gmail_batch_get_metadata(self, api_ids):
+        """Fetch metadata for many Gmail message IDs in one batch round-trip.
+
+        Returns a ``{api_id: message_dict}`` mapping. Missing entries mean the
+        per-message sub-request failed — callers should treat those as
+        skipped rather than raising.
+        """
+        ids = [str(x or '').strip() for x in (api_ids or []) if x]
+        ids = [x for x in ids if x]
+        if not ids:
+            return {}
+        service = self._gmail_api_service()
+        results = {}
+        pending = list(ids)
+        # One retry pass for sub-requests that transiently fail.
+        for attempt in (0, 1):
+            failures = []
+            auth_failed = False
+
+            def _make_callback(aid, failures_list):
+                def _cb(request_id, response, exception):
+                    nonlocal auth_failed
+                    if exception is not None:
+                        status = getattr(exception, 'status_code', None)
+                        if status is None and isinstance(exception, _GapiHttpError):
+                            status = exception.resp.status if exception.resp else None
+                        if status in (401, 403):
+                            auth_failed = True
+                        failures_list.append(aid)
+                        return
+                    if response:
+                        results[aid] = response
+                return _cb
+
+            messages_api = service.users().messages()
+            for start in range(0, len(pending), _GMAIL_BATCH_MAX):
+                chunk = pending[start:start + _GMAIL_BATCH_MAX]
+                batch = service.new_batch_http_request()
+                for aid in chunk:
+                    batch.add(
+                        messages_api.get(
+                            userId='me',
+                            id=aid,
+                            format='metadata',
+                            metadataHeaders=_GMAIL_METADATA_HEADERS,
+                        ),
+                        callback=_make_callback(aid, failures),
+                    )
+                try:
+                    batch.execute()
+                except _GapiHttpError as exc:
+                    # Whole batch failed. If it's an auth error, refresh and
+                    # retry once; otherwise surface via standard notice path.
+                    status = exc.resp.status if exc.resp else None
+                    if status in (401, 403) and attempt == 0:
+                        self._invalidate_token()
+                        failures = list(chunk) + failures
+                        continue
+                    raise
+                except Exception:
+                    # Unknown whole-batch failure — log and give the retry
+                    # loop a chance to pick remaining ids up serially.
+                    failures.extend(chunk)
+
+            if not failures:
+                break
+            if auth_failed and attempt == 0:
+                self._invalidate_token()
+            pending = failures
+        return results
+
     def _gmail_header_map(self, api_message):
         headers = {}
         for header in (((api_message or {}).get('payload') or {}).get('headers') or []):
@@ -1389,8 +1528,12 @@ class GmailBackend:
             for msg in self._folder_cached_messages(folder)
             if msg.get('gmail_msgid')
         }
-        for gmail_msgid, api_id in (refresh_map or {}).items():
-            api_message = self._gmail_message_metadata(api_id)
+        api_ids = [api_id for api_id in refresh_map.values() if api_id]
+        metadata_by_id = self._gmail_batch_get_metadata(api_ids)
+        for gmail_msgid, api_id in refresh_map.items():
+            api_message = metadata_by_id.get(api_id)
+            if not api_message:
+                continue
             cached = cached_by_msgid.get(gmail_msgid, {})
             uid = cached.get('uid') or api_id
             refreshed[gmail_msgid] = self._gmail_message_from_api_metadata(api_message, uid, folder)
