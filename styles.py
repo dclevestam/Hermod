@@ -171,12 +171,12 @@ window, dialog, popover {
 }
 .folder-connector,
 .folder-connector-last {
-    box-shadow: inset 1px 0 0 0 rgba(166, 173, 179, 0.55);
+    box-shadow: inset 1px 0 0 0 rgba(166, 173, 179, 0.14);
     min-width: 14px;
-    min-height: 34px;
+    min-height: 30px;
 }
 .folder-connector-last {
-    background-image: linear-gradient(to bottom, rgba(166, 173, 179, 0.55) 50%, transparent 50%);
+    background-image: linear-gradient(to bottom, rgba(166, 173, 179, 0.14) 50%, transparent 50%);
     background-size: 1px 100%;
     background-repeat: no-repeat;
     background-position: 0 0;
@@ -256,7 +256,7 @@ window, dialog, popover {
 }
 .navigation-sidebar > row .account-accent-label {
     color: @hermod_fg_muted;
-    font-weight: 500;
+    font-weight: 400;
 }
 .navigation-sidebar > row image {
     color: @hermod_fg_dim;
@@ -269,7 +269,7 @@ window, dialog, popover {
     background: none;
     box-shadow: none;
 }
-/* Hover */
+/* Hover (exclude label-only rows) */
 .navigation-sidebar > row:hover {
     background-color: @hermod_bg_hover;
     color: @hermod_fg;
@@ -280,11 +280,10 @@ window, dialog, popover {
 .navigation-sidebar > row:hover image {
     color: @hermod_fg_muted;
 }
-/* Selected */
+/* Selected — bg + accent icon + fg text + 500 weight; no left-bar per design */
 .navigation-sidebar > row:selected,
 .navigation-sidebar > row.selected {
     background-color: @hermod_bg_hover;
-    box-shadow: inset 2px 0 0 0 @hermod_accent;
     color: @hermod_fg;
 }
 .navigation-sidebar > row:selected:hover,
@@ -299,6 +298,34 @@ window, dialog, popover {
 .navigation-sidebar > row:selected image,
 .navigation-sidebar > row.selected image {
     color: @hermod_accent;
+}
+/* Section labels (MAILBOXES / ACCOUNTS): fully inert, no hover/selected */
+.navigation-sidebar > row.sidebar-section,
+.navigation-sidebar > row.sidebar-section:hover,
+.navigation-sidebar > row.sidebar-section:selected,
+.navigation-sidebar > row.sidebar-section:active,
+.navigation-sidebar > row.sidebar-section.selected {
+    background: transparent;
+    box-shadow: none;
+}
+.navigation-sidebar > row.sidebar-section:hover image,
+.navigation-sidebar > row.sidebar-section:hover .account-accent-label,
+.navigation-sidebar > row.sidebar-section:hover .sidebar-section-label {
+    color: @hermod_fg_faint;
+}
+/* Account header rows (identity label): inert, no hover/selected surface */
+.navigation-sidebar > row.account-header-row,
+.navigation-sidebar > row.account-header-row:hover,
+.navigation-sidebar > row.account-header-row:selected,
+.navigation-sidebar > row.account-header-row:active,
+.navigation-sidebar > row.account-header-row.selected {
+    background: transparent;
+    box-shadow: none;
+    color: @hermod_fg_muted;
+}
+.navigation-sidebar > row.account-header-row:hover .account-accent-label,
+.navigation-sidebar > row.account-header-row:hover image {
+    color: @hermod_fg_muted;
 }
 .message-column-header {
     border-bottom: 1px solid alpha(@hermod_fg, 0.06);
@@ -1069,10 +1096,10 @@ window, dialog, popover {
     font-family: "Geist Mono", ui-monospace, monospace;
     font-size: 10px;
     font-weight: 500;
-    letter-spacing: 0.04em;
-    color: @hermod_fg_dim;
-    background-color: alpha(@hermod_fg_muted, 0.08);
-    border: 1px solid @hermod_border;
+    letter-spacing: 0.06em;
+    color: rgba(242, 241, 237, 0.70);
+    background-color: rgba(0, 0, 0, 0.20);
+    border: none;
     border-radius: 4px;
     padding: 2px 5px;
 }

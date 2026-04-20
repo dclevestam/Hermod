@@ -452,13 +452,14 @@ class UnifiedRow(Gtk.ListBoxRow):
         self.folder_id = folder_id
         self.folder_name = name
         self.backend = None
+        self.add_css_class("folder-row")
         if accent_class:
             self.add_css_class(accent_class)
 
         box = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
-            margin_top=8,
-            margin_bottom=2,
+            margin_top=0,
+            margin_bottom=0,
             margin_start=8,
             margin_end=8,
             spacing=6,
@@ -611,8 +612,8 @@ class SidebarSectionRow(Gtk.ListBoxRow):
         self.add_css_class("sidebar-section")
         box = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
-            margin_top=16,
-            margin_bottom=4,
+            margin_top=6,
+            margin_bottom=2,
             margin_start=14,
             margin_end=14,
         )
@@ -724,7 +725,7 @@ class MoreFoldersRow(Gtk.ListBoxRow):
             orientation=Gtk.Orientation.HORIZONTAL,
             margin_top=0,
             margin_bottom=0,
-            margin_start=16,
+            margin_start=14,
             margin_end=12,
             spacing=5,
         )
@@ -740,7 +741,7 @@ class MoreFoldersRow(Gtk.ListBoxRow):
             )
         )
         box.append(self.chevron)
-        lbl = Gtk.Label(label="More folders", halign=Gtk.Align.START, hexpand=True)
+        lbl = Gtk.Label(label="More", halign=Gtk.Align.START, hexpand=True)
         lbl.add_css_class("account-accent-label")
         lbl.add_css_class("more-folders-label")
         lbl.set_xalign(0.0)
