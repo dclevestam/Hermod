@@ -20,6 +20,9 @@ from email import policy as email_policy
 from email.parser import BytesParser
 
 import google.auth.credentials
+import google_auth_httplib2
+import httplib2
+from concurrent.futures import ThreadPoolExecutor
 from googleapiclient.discovery import build as _gapi_build
 from googleapiclient.errors import HttpError as _GapiHttpError
 
@@ -80,6 +83,9 @@ _RECENT_WINDOW = 100  # Rows used for delta/history refresh and the initial page
 _CACHE_MAX = 1000  # Upper bound on cached/persisted rows per folder.
 _PERSIST_DEBOUNCE_SECS = 0.5
 _GMAIL_BATCH_MAX = 100
+_GMAIL_BATCH_WORKERS = 4
+_GMAIL_BATCH_RETRY_DELAYS = (0.0, 0.5, 1.5)  # Seconds to wait before each attempt.
+_GMAIL_RETRYABLE_STATUSES = frozenset((408, 429, 500, 502, 503, 504))
 
 
 class _HermodGmailCredentials(google.auth.credentials.Credentials):
@@ -231,6 +237,7 @@ class GmailBackend:
         self._cached_token = None
         self._cached_token_expiry = 0.0
         self._gmail_service = None
+        self._gmail_credentials = None
         self._gmail_service_lock = threading.Lock()
         self._gmail_list_memo = {}
         self._gmail_list_memo_lock = threading.Lock()
@@ -1433,6 +1440,7 @@ class GmailBackend:
             # Prime the token cache so the first SDK call has a live token.
             self._token()
             credentials = _HermodGmailCredentials(self)
+            self._gmail_credentials = credentials
             self._gmail_service = _gapi_build(
                 'gmail',
                 'v1',
@@ -1442,42 +1450,53 @@ class GmailBackend:
             return self._gmail_service
 
     def _gmail_batch_get_metadata(self, api_ids):
-        """Fetch metadata for many Gmail message IDs in one batch round-trip.
+        """Fetch metadata for many Gmail message IDs concurrently.
 
-        Returns a ``{api_id: message_dict}`` mapping. Missing entries mean the
-        per-message sub-request failed — callers should treat those as
-        skipped rather than raising.
+        Chunks of ``_GMAIL_BATCH_MAX`` IDs are dispatched across a thread
+        pool; within each chunk the SDK bundles the sub-requests into one
+        HTTP round-trip. Transient failures (429, 5xx) and token expiry
+        (401/403) get retried with exponential backoff up to
+        ``len(_GMAIL_BATCH_RETRY_DELAYS)`` passes. Missing IDs in the
+        returned mapping mean the sub-request ultimately failed — callers
+        should treat those as skipped rather than raising.
         """
         ids = [str(x or '').strip() for x in (api_ids or []) if x]
         ids = [x for x in ids if x]
         if not ids:
             return {}
         service = self._gmail_api_service()
+        credentials = getattr(self, '_gmail_credentials', None)
         results = {}
+        results_lock = threading.Lock()
         pending = list(ids)
-        # One retry pass for sub-requests that transiently fail.
-        for attempt in (0, 1):
+
+        for attempt, delay in enumerate(_GMAIL_BATCH_RETRY_DELAYS):
+            if delay > 0:
+                time.sleep(delay)
+
             failures = []
-            auth_failed = False
+            failures_lock = threading.Lock()
+            auth_failed = threading.Event()
 
-            def _make_callback(aid, failures_list):
-                def _cb(request_id, response, exception):
-                    nonlocal auth_failed
-                    if exception is not None:
-                        status = getattr(exception, 'status_code', None)
-                        if status is None and isinstance(exception, _GapiHttpError):
-                            status = exception.resp.status if exception.resp else None
-                        if status in (401, 403):
-                            auth_failed = True
-                        failures_list.append(aid)
-                        return
-                    if response:
-                        results[aid] = response
-                return _cb
+            def run_chunk(chunk):
+                local_failures = []
 
-            messages_api = service.users().messages()
-            for start in range(0, len(pending), _GMAIL_BATCH_MAX):
-                chunk = pending[start:start + _GMAIL_BATCH_MAX]
+                def _make_cb(aid):
+                    def _cb(_req_id, response, exception):
+                        if exception is not None:
+                            status = getattr(exception, 'status_code', None)
+                            if status is None and isinstance(exception, _GapiHttpError):
+                                status = exception.resp.status if exception.resp else None
+                            if status in (401, 403):
+                                auth_failed.set()
+                            local_failures.append(aid)
+                            return
+                        if response:
+                            with results_lock:
+                                results[aid] = response
+                    return _cb
+
+                messages_api = service.users().messages()
                 batch = service.new_batch_http_request()
                 for aid in chunk:
                     batch.add(
@@ -1487,29 +1506,45 @@ class GmailBackend:
                             format='metadata',
                             metadataHeaders=_GMAIL_METADATA_HEADERS,
                         ),
-                        callback=_make_callback(aid, failures),
+                        callback=_make_cb(aid),
+                    )
+                chunk_http = None
+                if credentials is not None:
+                    chunk_http = google_auth_httplib2.AuthorizedHttp(
+                        credentials, http=httplib2.Http(timeout=_GMAIL_API_TIMEOUT_SECS)
                     )
                 try:
-                    batch.execute()
+                    batch.execute(http=chunk_http)
                 except _GapiHttpError as exc:
-                    # Whole batch failed. If it's an auth error, refresh and
-                    # retry once; otherwise surface via standard notice path.
                     status = exc.resp.status if exc.resp else None
-                    if status in (401, 403) and attempt == 0:
-                        self._invalidate_token()
-                        failures = list(chunk) + failures
-                        continue
-                    raise
+                    if status in (401, 403):
+                        auth_failed.set()
+                        local_failures.extend(aid for aid in chunk if aid not in local_failures)
+                    elif status in _GMAIL_RETRYABLE_STATUSES:
+                        local_failures.extend(aid for aid in chunk if aid not in local_failures)
+                    else:
+                        raise
                 except Exception:
-                    # Unknown whole-batch failure — log and give the retry
-                    # loop a chance to pick remaining ids up serially.
-                    failures.extend(chunk)
+                    local_failures.extend(aid for aid in chunk if aid not in local_failures)
+                with failures_lock:
+                    failures.extend(local_failures)
+
+            chunks = [pending[i:i + _GMAIL_BATCH_MAX] for i in range(0, len(pending), _GMAIL_BATCH_MAX)]
+            if len(chunks) <= 1:
+                if chunks:
+                    run_chunk(chunks[0])
+            else:
+                workers = min(_GMAIL_BATCH_WORKERS, len(chunks))
+                with ThreadPoolExecutor(max_workers=workers) as pool:
+                    for f in [pool.submit(run_chunk, chunk) for chunk in chunks]:
+                        f.result()
 
             if not failures:
                 break
-            if auth_failed and attempt == 0:
+            if auth_failed.is_set():
                 self._invalidate_token()
             pending = failures
+
         return results
 
     def _gmail_header_map(self, api_message):
