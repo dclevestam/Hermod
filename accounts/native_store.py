@@ -29,6 +29,7 @@ try:
         refresh_google_access_token,
         revoke_google_token,
     )
+    from ..accounts.auth.microsoft_native import refresh_ms_access_token
     from ..accounts.auth.oauth_common import OAuthTokenAcquisitionError
 except ImportError:
     from accounts.descriptors import AccountDescriptor
@@ -42,6 +43,7 @@ except ImportError:
         refresh_google_access_token,
         revoke_google_token,
     )
+    from accounts.auth.microsoft_native import refresh_ms_access_token
     from accounts.auth.oauth_common import OAuthTokenAcquisitionError
 
 
@@ -404,16 +406,19 @@ class NativeOAuthAccountSource:
 
     def get_access_token(self, network_ready_fn=None):
         network_ready_fn = network_ready_fn or (lambda: True)
+        cfg = self._oauth_config()
+        provider_for_source = (
+            str(cfg.get("oauth_provider") or "").strip().lower() or "oauth"
+        )
         if not network_ready_fn():
             raise OAuthTokenAcquisitionError(
                 "OAuth token unavailable: network not ready",
                 stage="network preflight",
                 retryable=True,
-                source="google",
+                source=provider_for_source,
             )
-        cfg = self._oauth_config()
-        provider = str(cfg.get("oauth_provider") or "").strip().lower()
-        if provider != "google":
+        provider = provider_for_source
+        if provider not in ("google", "microsoft"):
             raise OAuthTokenAcquisitionError(
                 "Native OAuth provider is not supported",
                 stage="provider lookup",
@@ -424,10 +429,10 @@ class NativeOAuthAccountSource:
         client_secret = str(cfg.get("oauth_client_secret") or "").strip()
         if not client_id:
             raise OAuthTokenAcquisitionError(
-                "Google OAuth client ID is missing",
+                f"{provider.title()} OAuth client ID is missing",
                 stage="client setup",
                 retryable=False,
-                source="google",
+                source=provider,
             )
         bundle = load_native_oauth_token_bundle(self.record.id)
         access_token = str(bundle.get("access_token") or "").strip()
@@ -438,20 +443,23 @@ class NativeOAuthAccountSource:
         refresh_token = str(bundle.get("refresh_token") or "").strip()
         if not refresh_token:
             raise OAuthTokenAcquisitionError(
-                "Google sign-in is missing a refresh token",
+                f"{provider.title()} sign-in is missing a refresh token",
                 stage="refresh token",
                 retryable=False,
-                source="google",
+                source=provider,
             )
-        refreshed = refresh_google_access_token(
-            client_id,
-            refresh_token,
-            client_secret=client_secret,
-        )
+        if provider == "google":
+            refreshed = refresh_google_access_token(
+                client_id,
+                refresh_token,
+                client_secret=client_secret,
+            )
+        else:
+            refreshed = refresh_ms_access_token(client_id, refresh_token)
         merged = dict(bundle)
         merged.update(refreshed)
-        merged.setdefault("provider", "google")
-        merged["refresh_token"] = refresh_token
+        merged.setdefault("provider", provider)
+        merged["refresh_token"] = str(refreshed.get("refresh_token") or refresh_token).strip()
         store_native_oauth_token_bundle(self.record.id, merged)
         return str(merged.get("access_token") or "").strip()
 

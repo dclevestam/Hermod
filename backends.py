@@ -13,6 +13,7 @@ try:
     )
     from .providers.gmail import GmailBackend
     from .providers.imap_smtp import IMAPSMTPBackend
+    from .providers.microsoft import MicrosoftGraphBackend
     from .sync_state import prune_account_states
 except ImportError:
     from accounts.registry import ProviderRegistry
@@ -27,6 +28,7 @@ except ImportError:
     )
     from providers.gmail import GmailBackend
     from providers.imap_smtp import IMAPSMTPBackend
+    from providers.microsoft import MicrosoftGraphBackend
     from sync_state import prune_account_states
 
 
@@ -35,7 +37,7 @@ _SYNC_STATE_PROVIDER_KEYS = {
     'microsoft-graph': 'microsoft',
     'imap-smtp': 'imap',
 }
-_ACTIVE_PROVIDER_KINDS = frozenset({'gmail', 'imap-smtp'})
+_ACTIVE_PROVIDER_KINDS = frozenset({'gmail', 'imap-smtp', 'microsoft-graph'})
 
 
 def reconcile_account_inventory(descriptors=None):
@@ -154,11 +156,13 @@ def describe_sync_policies(backends=None):
 _PROVIDER_REGISTRY = ProviderRegistry()
 _PROVIDER_REGISTRY.register('gmail', GmailBackend)
 _PROVIDER_REGISTRY.register('imap-smtp', IMAPSMTPBackend)
+_PROVIDER_REGISTRY.register('microsoft-graph', MicrosoftGraphBackend)
 
 
 __all__ = [
     'GmailBackend',
     'IMAPSMTPBackend',
+    'MicrosoftGraphBackend',
     'get_backends',
     'network_ready',
     'ensure_network_ready',
