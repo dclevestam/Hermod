@@ -917,14 +917,20 @@ class HermodWindow(
         sync_overlay.add_overlay(self._sync_badge)
 
         compose_inner = Gtk.CenterBox(halign=Gtk.Align.FILL, valign=Gtk.Align.FILL)
-        compose_inner.set_size_request(-1, 34)
+        compose_inner.set_size_request(-1, 40)
         compose_stack = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=8,
             halign=Gtk.Align.CENTER,
             valign=Gtk.Align.CENTER,
         )
-        compose_stack.append(Gtk.Image(icon_name="mail-message-new-symbolic"))
+        compose_stack.append(
+            Gtk.Image(
+                icon_name=_pick_icon_name(
+                    "hermod-pencil-symbolic", "mail-message-new-symbolic"
+                )
+            )
+        )
         compose_lbl = Gtk.Label(label="Compose")
         compose_lbl.add_css_class("sidebar-compose-label")
         compose_stack.append(compose_lbl)
@@ -939,7 +945,7 @@ class HermodWindow(
         compose_overlay.set_halign(Gtk.Align.FILL)
         compose_overlay.set_valign(Gtk.Align.CENTER)
         compose_btn = Gtk.Button(child=compose_inner, tooltip_text="Compose (c)")
-        compose_btn.add_css_class("suggested-action")
+        compose_btn.add_css_class("sidebar-compose-btn")
         compose_btn.add_css_class("sidebar-action-btn")
         compose_btn.set_hexpand(True)
         compose_btn.set_vexpand(False)
@@ -960,7 +966,10 @@ class HermodWindow(
         sidebar_col = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL, width_request=_SIDEBAR_MIN_WIDTH
         )
+        sidebar_col.add_css_class("hermod-sidebar-column")
         sidebar_col.set_size_request(_SIDEBAR_MIN_WIDTH, -1)
+        sidebar_col.set_hexpand(False)
+        sidebar_col.set_halign(Gtk.Align.START)
         sidebar_actions = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=8,
@@ -986,7 +995,11 @@ class HermodWindow(
             orientation=Gtk.Orientation.HORIZONTAL, spacing=8
         )
         sidebar_search.add_css_class("sidebar-search")
-        sidebar_search_icon = Gtk.Image(icon_name="system-search-symbolic")
+        sidebar_search_icon = Gtk.Image(
+            icon_name=_pick_icon_name(
+                "hermod-search-symbolic", "system-search-symbolic"
+            )
+        )
         sidebar_search_icon.add_css_class("sidebar-search-icon")
         sidebar_search.append(sidebar_search_icon)
         self._search_entry = Gtk.Entry(
@@ -1039,16 +1052,23 @@ class HermodWindow(
         sidebar_local_row = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL, spacing=8
         )
-        sidebar_local_dot = Gtk.Box(valign=Gtk.Align.CENTER)
-        sidebar_local_dot.set_size_request(8, 8)
-        sidebar_local_dot.add_css_class("sidebar-status-dot")
-        sidebar_local_dot.add_css_class("sidebar-status-dot-local")
-        sidebar_local_row.append(sidebar_local_dot)
+        sidebar_local_icon = Gtk.Image(
+            icon_name=_pick_icon_name(
+                "hermod-cpu-symbolic", "computer-symbolic"
+            )
+        )
+        sidebar_local_icon.add_css_class("sidebar-local-icon")
+        sidebar_local_row.append(sidebar_local_icon)
         sidebar_local_lbl = Gtk.Label(
-            label="Local mode", halign=Gtk.Align.START, hexpand=True, xalign=0.0
+            label="Local model", halign=Gtk.Align.START, hexpand=True, xalign=0.0
         )
         sidebar_local_lbl.add_css_class("sidebar-status-label")
         sidebar_local_row.append(sidebar_local_lbl)
+        sidebar_local_dot = Gtk.Box(valign=Gtk.Align.CENTER, halign=Gtk.Align.END)
+        sidebar_local_dot.set_size_request(8, 8)
+        sidebar_local_dot.add_css_class("sidebar-status-dot")
+        sidebar_local_dot.add_css_class("sidebar-status-dot-online")
+        sidebar_local_row.append(sidebar_local_dot)
         sidebar_status.append(sidebar_local_row)
         sidebar_col.append(sidebar_status)
         body.append(sidebar_col)
@@ -1240,7 +1260,10 @@ class HermodWindow(
         self._info_actions.set_visible(False)
 
         self._reader_reply_btn = Gtk.Button(
-            icon_name="mail-reply-sender-symbolic", tooltip_text="Reply (r)"
+            icon_name=_pick_icon_name(
+                "hermod-reply-symbolic", "mail-reply-sender-symbolic"
+            ),
+            tooltip_text="Reply (r)",
         )
         self._reader_reply_btn.add_css_class("flat")
         self._reader_reply_btn.add_css_class("reader-action-btn")
@@ -1248,7 +1271,10 @@ class HermodWindow(
         self._info_actions.append(self._reader_reply_btn)
 
         self._reader_reply_all_btn = Gtk.Button(
-            icon_name="mail-reply-all-symbolic", tooltip_text="Reply all (a)"
+            icon_name=_pick_icon_name(
+                "hermod-reply-all-symbolic", "mail-reply-all-symbolic"
+            ),
+            tooltip_text="Reply all (a)",
         )
         self._reader_reply_all_btn.add_css_class("flat")
         self._reader_reply_all_btn.add_css_class("reader-action-btn")
@@ -1258,7 +1284,9 @@ class HermodWindow(
         self._info_actions.append(self._reader_reply_all_btn)
 
         self._reader_forward_btn = Gtk.Button(
-            icon_name="mail-forward-symbolic",
+            icon_name=_pick_icon_name(
+                "hermod-forward-symbolic", "mail-forward-symbolic"
+            ),
             tooltip_text="Forward (f)",
         )
         self._reader_forward_btn.add_css_class("flat")
@@ -1269,7 +1297,10 @@ class HermodWindow(
         self._info_actions.append(self._reader_forward_btn)
 
         self._reader_delete_btn = Gtk.Button(
-            icon_name="user-trash-symbolic", tooltip_text="Delete (d)"
+            icon_name=_pick_icon_name(
+                "hermod-trash-symbolic", "user-trash-symbolic"
+            ),
+            tooltip_text="Delete (d)",
         )
         self._reader_delete_btn.add_css_class("flat")
         self._reader_delete_btn.add_css_class("reader-action-btn")
@@ -1404,6 +1435,14 @@ class HermodWindow(
             orientation=Gtk.Orientation.HORIZONTAL, spacing=6, hexpand=True
         )
         self._smart_reply_btn_box.set_halign(Gtk.Align.START)
+        for chip_label in ("Accept Wed 2pm", "Propose Thu", "Decline"):
+            chip_btn = Gtk.Button(label=chip_label)
+            chip_btn.add_css_class("smart-reply-chip-btn")
+            chip_btn.connect(
+                "clicked",
+                lambda _btn, text=chip_label: self._prefill_reply_with(text),
+            )
+            self._smart_reply_btn_box.append(chip_btn)
         self._smart_reply_bar.append(self._smart_reply_btn_box)
         smart_reply_write_btn = Gtk.Button(label="Write my own")
         smart_reply_write_btn.add_css_class("flat")
@@ -1421,6 +1460,15 @@ class HermodWindow(
             valign=Gtk.Align.FILL,
         )
         self._thread_reply_bar.add_css_class("thread-reply-bar")
+        reply_pencil = Gtk.Image(
+            icon_name=_pick_icon_name(
+                "hermod-pencil-symbolic", "document-edit-symbolic"
+            )
+        )
+        reply_pencil.add_css_class("thread-reply-pencil")
+        reply_pencil.set_valign(Gtk.Align.START)
+        reply_pencil.set_margin_top(10)
+        self._thread_reply_bar.append(reply_pencil)
         reply_scroller = Gtk.ScrolledWindow(
             hscrollbar_policy=Gtk.PolicyType.NEVER,
             vscrollbar_policy=Gtk.PolicyType.AUTOMATIC,
@@ -1524,6 +1572,20 @@ class HermodWindow(
         summary_chip = Gtk.Label(label="LOCAL")
         summary_chip.add_css_class("thread-summary-chip")
         summary_head.append(summary_chip)
+        summary_spacer = Gtk.Box(hexpand=True)
+        summary_head.append(summary_spacer)
+        summary_close = Gtk.Button(
+            icon_name=_pick_icon_name(
+                "hermod-x-symbolic", "window-close-symbolic"
+            ),
+            tooltip_text="Hide summary",
+        )
+        summary_close.add_css_class("flat")
+        summary_close.add_css_class("thread-summary-close")
+        summary_close.connect(
+            "clicked", lambda _: self._thread_summary_banner.set_visible(False)
+        )
+        summary_head.append(summary_close)
         self._thread_summary_banner.append(summary_head)
         self._thread_summary_text = Gtk.Label(
             label="Summary appears when a local model is connected.",

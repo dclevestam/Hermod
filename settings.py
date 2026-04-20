@@ -59,7 +59,7 @@ DAY_VARIANTS = ("paper", "mist", "linen")
 ACCENTS = ("teal", "forest", "gold", "stone")
 DENSITIES = ("comfortable", "balanced", "compact")
 ACCENT_COLORS = {
-    "teal": "#2E6A70",
+    "teal": "#4F8E82",
     "forest": "#3B6B4E",
     "gold": "#B08A3E",
     "stone": "#6F7B82",
@@ -271,12 +271,12 @@ _SETTINGS_CSS = """
     text-transform: uppercase;
 }
 .appearance-segment > button.selected {
-    background: #2e6a70;
-    color: #f2f1ed;
+    background: #4f8e82;
+    color: #E6E9EC;
 }
 .appearance-segment > button:hover:not(.selected) {
-    background: alpha(#f2f1ed, 0.06);
-    color: #f2f1ed;
+    background: alpha(#E6E9EC, 0.06);
+    color: #E6E9EC;
 }
 .appearance-swatch {
     min-width: 28px;
@@ -288,7 +288,7 @@ _SETTINGS_CSS = """
 .appearance-swatch.selected {
     border: 2px solid #f2f1ed;
 }
-.appearance-swatch.accent-teal { background: #2e6a70; }
+.appearance-swatch.accent-teal { background: #4f8e82; }
 .appearance-swatch.accent-forest { background: #3b6b4e; }
 .appearance-swatch.accent-gold { background: #b08a3e; }
 .appearance-swatch.accent-stone { background: #6f7b82; }

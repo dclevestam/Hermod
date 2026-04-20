@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <rect stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" x="2" y="3" width="20" height="5" rx="1" class="transparent-fill foreground-stroke"></rect>
+  <path stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" class="transparent-fill foreground-stroke"></path>
+  <path stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M10 12h4" class="transparent-fill foreground-stroke"></path>
+</svg>

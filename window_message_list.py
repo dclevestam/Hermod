@@ -24,6 +24,7 @@ try:
         _UNIFIED_FLAGGED, _UNIFIED_DRAFTS, _UNIFIED_SENT, _UNIFIED_ARCHIVE,
         _day_group_key, _day_group_label,
         _perf_counter, _log_perf,
+        _pick_icon_name,
     )
     from .window_constants import (
         MESSAGE_LIST_MAX_WIDTH, MESSAGE_LIST_MIN_WIDTH, MESSAGE_PAGE_STEP,
@@ -44,6 +45,7 @@ except ImportError:
         _UNIFIED_FLAGGED, _UNIFIED_DRAFTS, _UNIFIED_SENT, _UNIFIED_ARCHIVE,
         _day_group_key, _day_group_label,
         _perf_counter, _log_perf,
+        _pick_icon_name,
     )
     from window_constants import (
         MESSAGE_LIST_MAX_WIDTH, MESSAGE_LIST_MIN_WIDTH, MESSAGE_PAGE_STEP,
@@ -179,32 +181,32 @@ class MessageListMixin:
 
         self.folder_list.append(SidebarSectionRow('MAILBOXES'))
 
-        self._all_inboxes_row = UnifiedRow(_UNIFIED, 'All Inboxes', 'mail-inbox-symbolic')
+        self._all_inboxes_row = UnifiedRow(_UNIFIED, 'All Inboxes', 'hermod-inbox-symbolic')
         self._folder_rows[(_UNIFIED, _UNIFIED)] = self._all_inboxes_row
         self.folder_list.append(self._all_inboxes_row)
 
-        self._flagged_row = UnifiedRow(_UNIFIED_FLAGGED, 'Flagged', 'starred-symbolic')
+        self._flagged_row = UnifiedRow(_UNIFIED_FLAGGED, 'Flagged', 'hermod-flag-symbolic')
         self._folder_rows[(_UNIFIED_FLAGGED, _UNIFIED_FLAGGED)] = self._flagged_row
         self.folder_list.append(self._flagged_row)
 
-        self._drafts_row = UnifiedRow(_UNIFIED_DRAFTS, 'Drafts', 'document-edit-symbolic')
+        self._drafts_row = UnifiedRow(_UNIFIED_DRAFTS, 'Drafts', 'hermod-pencil-symbolic')
         self._folder_rows[(_UNIFIED_DRAFTS, _UNIFIED_DRAFTS)] = self._drafts_row
         self.folder_list.append(self._drafts_row)
 
-        self._sent_row = UnifiedRow(_UNIFIED_SENT, 'Sent', 'mail-send-symbolic')
+        self._sent_row = UnifiedRow(_UNIFIED_SENT, 'Sent', 'hermod-send-symbolic')
         self._folder_rows[(_UNIFIED_SENT, _UNIFIED_SENT)] = self._sent_row
         self.folder_list.append(self._sent_row)
 
-        self._archive_row = UnifiedRow(_UNIFIED_ARCHIVE, 'Archive', 'mail-archive-symbolic')
+        self._archive_row = UnifiedRow(_UNIFIED_ARCHIVE, 'Archive', 'hermod-archive-symbolic')
         self._folder_rows[(_UNIFIED_ARCHIVE, _UNIFIED_ARCHIVE)] = self._archive_row
         self.folder_list.append(self._archive_row)
 
         if s.get('show_unified_trash'):
-            trash_row = UnifiedRow(_UNIFIED_TRASH, 'Trash', 'user-trash-full-symbolic')
+            trash_row = UnifiedRow(_UNIFIED_TRASH, 'Trash', 'hermod-trash-symbolic')
             self._folder_rows[(_UNIFIED_TRASH, _UNIFIED_TRASH)] = trash_row
             self.folder_list.append(trash_row)
         if s.get('show_unified_spam'):
-            spam_row = UnifiedRow(_UNIFIED_SPAM, 'All Spam', 'mail-mark-junk-symbolic')
+            spam_row = UnifiedRow(_UNIFIED_SPAM, 'All Spam', 'hermod-trash-symbolic')
             self._folder_rows[(_UNIFIED_SPAM, _UNIFIED_SPAM)] = spam_row
             self.folder_list.append(spam_row)
 
@@ -219,13 +221,15 @@ class MessageListMixin:
             header_row.backend = backend
             if expand_by_default:
                 header_row.expanded = True
-                header_row.chevron.set_from_icon_name('pan-up-symbolic')
+                header_row.chevron.set_from_icon_name(
+                    _pick_icon_name('hermod-chevron-up-symbolic', 'pan-up-symbolic')
+                )
             self.folder_list.append(header_row)
 
             folder_rows = []
             folders_list = [
                 entry for entry in backend.FOLDERS
-                if entry[1] not in ('Trash', 'Spam')
+                if entry[1] != 'Spam'
             ]
             for i, (folder_id, name, icon) in enumerate(folders_list):
                 is_last = (i == len(folders_list) - 1)
@@ -339,7 +343,9 @@ class MessageListMixin:
         visible = state['expanded']
         state['header'].expanded = visible
         state['header'].chevron.set_from_icon_name(
-            'pan-up-symbolic' if visible else 'pan-down-symbolic'
+            _pick_icon_name('hermod-chevron-up-symbolic', 'pan-up-symbolic')
+            if visible
+            else _pick_icon_name('hermod-chevron-down-symbolic', 'pan-down-symbolic')
         )
         for row in state['folders']:
             row.set_visible(visible)

@@ -154,7 +154,7 @@ class EmailRow(Gtk.Box):
         avatar.add_css_class("message-row-avatar")
         if accent_class:
             avatar.add_css_class(accent_class)
-        avatar.set_size_request(32, 32)
+        avatar.set_size_request(28, 28)
         outer.append(avatar)
 
         col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1, hexpand=True)
@@ -167,6 +167,7 @@ class EmailRow(Gtk.Box):
             ellipsize=Pango.EllipsizeMode.END,
             max_width_chars=28,
         )
+        sender.add_css_class("message-row-sender")
         self._sender_label = sender
         row1.append(sender)
 
@@ -217,6 +218,7 @@ class EmailRow(Gtk.Box):
         )
         date_lbl.add_css_class("caption")
         date_lbl.add_css_class("dim-label")
+        date_lbl.add_css_class("message-row-date")
         self._date_label = date_lbl
         row1.append(date_lbl)
         col.append(row1)
@@ -228,6 +230,7 @@ class EmailRow(Gtk.Box):
             max_width_chars=50,
         )
         subj.add_css_class("caption")
+        subj.add_css_class("message-row-subject")
         self._subject_label = subj
         self._apply_unread_style()
         col.append(subj)
@@ -464,16 +467,25 @@ class UnifiedRow(Gtk.ListBoxRow):
         strip.set_size_request(4, 18)
         strip.add_css_class("account-accent-strip")
         box.append(strip)
+        if folder_id == "_UNIFIED_":
+            self.add_css_class("all-inboxes-row")
+        name_l = (name or "").lower()
+        folder_l = (folder_id or "").lower()
+        unified_fallback = "hermod-inbox-symbolic"
+        if "flag" in name_l or "flag" in folder_l:
+            unified_fallback = "hermod-flag-symbolic"
+        elif "unread" in name_l or "unread" in folder_l:
+            unified_fallback = "hermod-inbox-symbolic"
+        elif "trash" in name_l or "trash" in folder_l:
+            unified_fallback = "hermod-trash-symbolic"
         box.append(
             Gtk.Image(
                 icon_name=_pick_icon_name(
-                    icon, "mail-inbox-symbolic", "folder-symbolic"
+                    icon, unified_fallback, "mail-inbox-symbolic", "folder-symbolic"
                 ),
                 icon_size=Gtk.IconSize.NORMAL,
             )
         )
-        if folder_id == "_UNIFIED_":
-            self.add_css_class("all-inboxes-row")
         lbl = Gtk.Label(label=name, halign=Gtk.Align.START, hexpand=True)
         lbl.add_css_class("account-accent-label")
         lbl.set_xalign(0.0)
@@ -521,30 +533,45 @@ class FolderRow(Gtk.ListBoxRow):
         )
         box.set_valign(Gtk.Align.FILL)
         if indent:
-            connector = Gtk.Box()
+            connector = Gtk.Box(valign=Gtk.Align.FILL, vexpand=True)
             connector.set_size_request(14, -1)
             connector.add_css_class(
                 "folder-connector-last" if is_last else "folder-connector"
             )
             box.append(connector)
-        name_l = (name or "").lower()
-        fallback = "folder-symbolic"
-        if "inbox" in name_l or "inbox" in (folder_id or "").lower():
-            fallback = "mail-inbox-symbolic"
-        elif "sent" in name_l:
-            fallback = "mail-send-symbolic"
-        elif "draft" in name_l:
-            fallback = "document-edit-symbolic"
-        elif "trash" in name_l:
-            fallback = "user-trash-symbolic"
-        elif "spam" in name_l or "junk" in name_l:
-            fallback = "mail-mark-junk-symbolic"
-        box.append(
-            Gtk.Image(
-                icon_name=_pick_icon_name(icon, fallback, "folder-symbolic"),
-                icon_size=Gtk.IconSize.NORMAL,
+        if not indent:
+            name_l = (name or "").lower()
+            fallback = "hermod-inbox-symbolic"
+            system_fallback = "folder-symbolic"
+            if "inbox" in name_l or "inbox" in (folder_id or "").lower():
+                fallback = "hermod-inbox-symbolic"
+                system_fallback = "mail-inbox-symbolic"
+            elif "sent" in name_l:
+                fallback = "hermod-send-symbolic"
+                system_fallback = "mail-send-symbolic"
+            elif "draft" in name_l:
+                fallback = "hermod-pencil-symbolic"
+                system_fallback = "document-edit-symbolic"
+            elif "trash" in name_l:
+                fallback = "hermod-trash-symbolic"
+                system_fallback = "user-trash-symbolic"
+            elif "archive" in name_l:
+                fallback = "hermod-archive-symbolic"
+                system_fallback = "folder-symbolic"
+            elif "flag" in name_l or "star" in name_l:
+                fallback = "hermod-flag-symbolic"
+                system_fallback = "mail-mark-important-symbolic"
+            elif "spam" in name_l or "junk" in name_l:
+                fallback = "hermod-trash-symbolic"
+                system_fallback = "mail-mark-junk-symbolic"
+            box.append(
+                Gtk.Image(
+                    icon_name=_pick_icon_name(
+                        icon, fallback, system_fallback, "folder-symbolic"
+                    ),
+                    icon_size=Gtk.IconSize.NORMAL,
+                )
             )
-        )
         lbl = Gtk.Label(label=name, halign=Gtk.Align.START, hexpand=True)
         lbl.add_css_class("account-accent-label")
         lbl.set_xalign(0.0)
@@ -645,7 +672,11 @@ class AccountHeaderRow(Gtk.ListBoxRow):
         count_slot.append(self.count_label)
         box.append(count_slot)
 
-        self.chevron = Gtk.Image(icon_name="pan-down-symbolic")
+        self.chevron = Gtk.Image(
+            icon_name=_pick_icon_name(
+                "hermod-chevron-down-symbolic", "pan-down-symbolic"
+            )
+        )
         self.chevron.add_css_class("account-header-chevron")
         box.append(self.chevron)
         self.set_child(box)
@@ -703,7 +734,11 @@ class MoreFoldersRow(Gtk.ListBoxRow):
         connector.add_css_class("folder-connector-last")
         box.append(connector)
         self._connector = connector
-        self.chevron = Gtk.Image(icon_name="pan-end-symbolic")
+        self.chevron = Gtk.Image(
+            icon_name=_pick_icon_name(
+                "hermod-chevron-symbolic", "pan-end-symbolic"
+            )
+        )
         box.append(self.chevron)
         lbl = Gtk.Label(label="More folders", halign=Gtk.Align.START, hexpand=True)
         lbl.add_css_class("account-accent-label")
@@ -723,7 +758,13 @@ class MoreFoldersRow(Gtk.ListBoxRow):
             "folder-connector" if self.expanded else "folder-connector-last"
         )
         self.chevron.set_from_icon_name(
-            "pan-down-symbolic" if self.expanded else "pan-end-symbolic"
+            _pick_icon_name(
+                "hermod-chevron-down-symbolic", "pan-down-symbolic"
+            )
+            if self.expanded
+            else _pick_icon_name(
+                "hermod-chevron-symbolic", "pan-end-symbolic"
+            )
         )
 
 

@@ -691,6 +691,11 @@ class ReaderMixin:
         buffer = self._thread_reply_view.get_buffer()
         buffer.set_text("")
 
+    def _prefill_reply_with(self, text):
+        buffer = self._thread_reply_view.get_buffer()
+        buffer.set_text(text or "")
+        self._thread_reply_view.grab_focus()
+
     def _on_thread_reply_send(self, _button=None):
         if not self._thread_view_active or not self._current_thread_messages:
             return
