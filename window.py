@@ -911,27 +911,28 @@ class HermodWindow(
         sync_overlay.add_overlay(self._sync_badge)
 
         compose_inner = Gtk.CenterBox(halign=Gtk.Align.FILL, valign=Gtk.Align.FILL)
-        compose_inner.set_size_request(-1, 40)
+        compose_inner.set_size_request(-1, 30)
         compose_stack = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
-            spacing=8,
-            halign=Gtk.Align.CENTER,
+            spacing=10,
+            halign=Gtk.Align.START,
             valign=Gtk.Align.CENTER,
         )
+        compose_stack.set_margin_start(4)
         compose_stack.append(
             Gtk.Image(
                 icon_name=_pick_icon_name(
                     "hermod-pencil-symbolic", "mail-message-new-symbolic"
-                )
+                ),
+                pixel_size=14,
             )
         )
         compose_lbl = Gtk.Label(label="Compose")
         compose_lbl.add_css_class("sidebar-compose-label")
         compose_stack.append(compose_lbl)
-        compose_inner.set_center_widget(compose_stack)
+        compose_inner.set_start_widget(compose_stack)
         compose_chip = Gtk.Label(label="Ctrl N", valign=Gtk.Align.CENTER)
         compose_chip.add_css_class("sidebar-compose-chip")
-        compose_chip.set_margin_end(8)
         compose_inner.set_end_widget(compose_chip)
         compose_overlay = Gtk.Overlay()
         compose_overlay.set_hexpand(True)

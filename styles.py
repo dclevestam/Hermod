@@ -1028,8 +1028,8 @@ window, dialog, popover {
     border-radius: 10px;
     color: @hermod_accent_fg;
     box-shadow: none;
-    min-height: 34px;
-    padding: 0 12px;
+    min-height: 30px;
+    padding: 0 10px;
 }
 .sidebar-compose-btn:hover {
     background-color: shade(@hermod_accent, 1.10);
