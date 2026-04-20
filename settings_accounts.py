@@ -175,6 +175,14 @@ def _default_google_oauth_client_secret():
     return str(os.environ.get("HERMOD_GOOGLE_CLIENT_SECRET") or "").strip()
 
 
+_HERMOD_MICROSOFT_CLIENT_ID = "c055f8b6-a3b4-4b7d-86d3-b5a234252022"
+
+
+def _default_microsoft_oauth_client_id():
+    env = str(os.environ.get("HERMOD_MICROSOFT_CLIENT_ID") or "").strip()
+    return env or _HERMOD_MICROSOFT_CLIENT_ID
+
+
 def _provider_profile(provider_key):
     provider_key = str(provider_key or "imap-smtp").strip().lower() or "imap-smtp"
     profiles = {

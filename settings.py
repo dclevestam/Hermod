@@ -42,6 +42,7 @@ DEFAULTS = {
     "disk_cache_budget_mb": 64,
     "google_oauth_client_id": "",
     "google_oauth_client_secret": "",
+    "microsoft_oauth_client_id": "",
     "theme_mode": "night",
     "day_variant": "paper",
     "accent": "teal",
