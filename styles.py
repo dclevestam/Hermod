@@ -5,54 +5,46 @@ CSS = """
    Kept as @define-color so Adwaita widgets (buttons, entries, popovers)
    inherit the palette automatically.
    ═════════════════════════════════════════════════════════════ */
-@define-color hermod_bg              #0F1419;
-@define-color hermod_bg_elevated     #12181D;
-@define-color hermod_bg_hover        #18202A;
-@define-color hermod_surface_card    #151B20;
-@define-color hermod_surface_sunken  #0B1014;
-@define-color hermod_surface_reader  #12181D;
+@define-color hermod_bg              #0B0F12;
+@define-color hermod_bg_elevated     #0F1417;
+@define-color hermod_bg_hover        #141A1E;
+@define-color hermod_surface_card    #11171B;
+@define-color hermod_surface_sunken  #090C0F;
+@define-color hermod_surface_reader  #0B0F12;
 
-@define-color hermod_fg              #E6E9EC;
-@define-color hermod_fg_muted        #8B949E;
-@define-color hermod_fg_dim          alpha(#8B949E, 0.56);
-@define-color hermod_fg_faint        alpha(#8B949E, 0.34);
+@define-color hermod_fg              #F2F1ED;
+@define-color hermod_fg_muted        #A6ADB3;
+@define-color hermod_fg_dim          alpha(#A6ADB3, 0.56);
+@define-color hermod_fg_faint        alpha(#A6ADB3, 0.34);
 
-@define-color hermod_border          alpha(#8B949E, 0.10);
-@define-color hermod_border_strong   alpha(#8B949E, 0.18);
-@define-color hermod_border_faint    alpha(#8B949E, 0.05);
+@define-color hermod_border          alpha(#A6ADB3, 0.08);
+@define-color hermod_border_strong   alpha(#A6ADB3, 0.14);
+@define-color hermod_border_faint    alpha(#A6ADB3, 0.04);
 
-@define-color hermod_accent          #4F8E82;
-@define-color hermod_accent_weak     alpha(#4F8E82, 0.16);
-@define-color hermod_accent_fg       #E6E9EC;
+@define-color hermod_accent          #2E6A70;
+@define-color hermod_accent_weak     alpha(#2E6A70, 0.16);
+@define-color hermod_accent_fg       #F2F1ED;
 
-@define-color hermod_success         #6FA48A;
+@define-color hermod_success         #6F9B73;
 @define-color hermod_warning         #C9A869;
 @define-color hermod_danger          #C76D63;
 
 /* Override Adwaita's own accent so buttons/entries pick up Hermod's teal. */
-@define-color accent_color           #4F8E82;
-@define-color accent_bg_color        #4F8E82;
-@define-color accent_fg_color        #E6E9EC;
+@define-color accent_color           #2E6A70;
+@define-color accent_bg_color        #2E6A70;
+@define-color accent_fg_color        #F2F1ED;
 
 /* Base typography — Geist (body) + Geist Mono (metadata), bundled in
    assets/fonts/ and registered via fonts.py. */
-window, dialog, popover, .app-window {
+window, dialog, popover {
     font-family: "Geist", "Inter", -apple-system, system-ui, "Cantarell", sans-serif;
     font-size: 13px;
     letter-spacing: -0.005em;
 }
 
-.hermod-mono,
 .mono,
-.kbd,
 .eyebrow,
-.eyebrow-cinzel,
-.msg-time,
-.thread-msg-time,
-.reader-meta,
-.pinned-sub,
-.countdown-lbl,
-.sync-meta {
+.reader-meta {
     font-family: "Geist Mono", ui-monospace, "SF Mono", "Menlo", "Consolas", monospace;
     letter-spacing: 0;
 }
@@ -102,13 +94,13 @@ window, dialog, popover, .app-window {
 /* Selected: 2px accent left bar, subtle bg tint */
 .message-list-view .email-row.selected {
     background-image: none;
-    background-color: rgba(79, 142, 130, 0.10);
-    box-shadow: inset 2px 0 0 0 #4f8e82;
-    border-bottom-color: rgba(79, 142, 130, 0.18);
+    background-color: rgba(46, 106, 112, 0.10);
+    box-shadow: inset 2px 0 0 0 #2e6a70;
+    border-bottom-color: rgba(46, 106, 112, 0.18);
 }
 .message-list-view row:hover .email-row.selected {
     background-image: none;
-    background-color: rgba(79, 142, 130, 0.14);
+    background-color: rgba(46, 106, 112, 0.14);
 }
 .thread-indicator {
     background-color: alpha(@hermod_fg, 0.06);
@@ -129,28 +121,30 @@ window, dialog, popover, .app-window {
     color: @accent_fg_color;
 }
 .folder-count {
-    color: alpha(@window_fg_color, 0.45);
-    font-size: 0.72em;
-    font-weight: 600;
+    color: @hermod_fg_faint;
+    font-size: 11px;
+    font-weight: 500;
     min-width: 10px;
     font-variant-numeric: tabular-nums;
     margin-right: 4px;
 }
 .folder-count-dim {
-    color: alpha(@hermod_fg_muted, 0.26);
+    color: @hermod_fg_faint;
 }
 .all-inboxes-row {
     font-weight: 600;
 }
 .all-inboxes-row .folder-count {
-    color: alpha(@hermod_fg_muted, 0.74);
-    font-weight: 700;
+    color: @hermod_fg_faint;
+    font-weight: 500;
 }
-.navigation-sidebar row:selected .folder-count {
-    color: @accent_fg_color;
+.navigation-sidebar row:selected .folder-count,
+.navigation-sidebar row.selected .folder-count {
+    color: @hermod_fg_muted;
 }
-.navigation-sidebar row:selected .folder-count-dim {
-    color: alpha(@accent_fg_color, 0.70);
+.navigation-sidebar row:selected .folder-count-dim,
+.navigation-sidebar row.selected .folder-count-dim {
+    color: @hermod_fg_dim;
 }
 .account-header {
     font-size: 0.84em;
@@ -170,19 +164,19 @@ window, dialog, popover, .app-window {
     color: alpha(@window_fg_color, 0.55);
 }
 .folder-row {
-    min-height: 34px;
+    min-height: 30px;
 }
 .account-header-row {
-    min-height: 40px;
+    min-height: 32px;
 }
 .folder-connector,
 .folder-connector-last {
-    box-shadow: inset 1px 0 0 0 rgba(139, 148, 158, 0.55);
+    box-shadow: inset 1px 0 0 0 rgba(166, 173, 179, 0.55);
     min-width: 14px;
     min-height: 34px;
 }
 .folder-connector-last {
-    background-image: linear-gradient(to bottom, rgba(139, 148, 158, 0.55) 50%, transparent 50%);
+    background-image: linear-gradient(to bottom, rgba(166, 173, 179, 0.55) 50%, transparent 50%);
     background-size: 1px 100%;
     background-repeat: no-repeat;
     background-position: 0 0;
@@ -191,7 +185,7 @@ window, dialog, popover, .app-window {
 .email-actions {
     margin-left: 14px;
     background-color: #e53935;
-    border-radius: 12px 0 0 12px;
+    border-radius: 10px 0 0 10px;
     padding: 0 6px 0 10px;
     min-height: 38px;
     box-shadow: -2px 0 8px alpha(black, 0.12);
@@ -253,32 +247,62 @@ window, dialog, popover, .app-window {
     font-size: 0.88em;
     font-weight: 500;
 }
+/* Sidebar row base: muted text, dim icon, tight radius. */
+.navigation-sidebar > row {
+    margin: 0 8px;
+    border-radius: 6px;
+    color: @hermod_fg_muted;
+    transition: background-color 120ms ease, color 120ms ease;
+}
+.navigation-sidebar > row .account-accent-label {
+    color: @hermod_fg_muted;
+    font-weight: 500;
+}
+.navigation-sidebar > row image {
+    color: @hermod_fg_dim;
+}
 /* Suppress Adwaita's native sidebar row selected/hover backgrounds */
 .navigation-sidebar row:selected,
-.navigation-sidebar row:selected:hover {
+.navigation-sidebar row:selected:hover,
+.navigation-sidebar row.selected,
+.navigation-sidebar row.selected:hover {
     background: none;
     box-shadow: none;
 }
-.navigation-sidebar row:hover {
-    background-color: alpha(@hermod_fg, 0.04);
+/* Hover */
+.navigation-sidebar > row:hover {
+    background-color: @hermod_bg_hover;
+    color: @hermod_fg;
 }
-/* Selected sidebar row: 2px accent left bar only, no bg tint */
+.navigation-sidebar > row:hover .account-accent-label {
+    color: @hermod_fg;
+}
+.navigation-sidebar > row:hover image {
+    color: @hermod_fg_muted;
+}
+/* Selected */
 .navigation-sidebar > row:selected,
 .navigation-sidebar > row.selected {
-    background-color: transparent;
+    background-color: @hermod_bg_hover;
     box-shadow: inset 2px 0 0 0 @hermod_accent;
+    color: @hermod_fg;
 }
 .navigation-sidebar > row:selected:hover,
 .navigation-sidebar > row.selected:hover {
-    background-color: alpha(@hermod_fg, 0.04);
+    background-color: @hermod_bg_hover;
 }
 .navigation-sidebar > row:selected .account-accent-label,
 .navigation-sidebar > row.selected .account-accent-label {
     color: @hermod_fg;
-    font-weight: 600;
+    font-weight: 500;
+}
+.navigation-sidebar > row:selected image,
+.navigation-sidebar > row.selected image {
+    color: @hermod_accent;
 }
 .message-column-header {
     border-bottom: 1px solid alpha(@hermod_fg, 0.06);
+    padding: 18px 20px 14px;
 }
 .message-column-eyebrow {
     font-family: "Geist Mono", ui-monospace, monospace;
@@ -294,22 +318,23 @@ window, dialog, popover, .app-window {
     color: alpha(@window_fg_color, 0.52);
 }
 .message-filter-segmented {
-    background-color: alpha(#11171b, 0.86);
-    border: 1px solid alpha(@hermod_fg, 0.08);
-    border-radius: 10px;
-    padding: 2px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0;
 }
 .message-filter-segmented .message-filter-chip {
-    min-height: 22px;
-    padding: 2px 10px;
-    border: none;
-    border-radius: 8px;
+    min-height: 24px;
+    padding: 0 10px;
+    border: 1px solid alpha(@hermod_fg, 0.08);
+    border-radius: 999px;
     background: transparent;
-    color: alpha(@window_fg_color, 0.62);
+    color: @hermod_fg_muted;
     font-family: "Geist", -apple-system, system-ui, sans-serif;
     font-size: 0.82em;
     font-weight: 500;
     box-shadow: none;
+    margin: 0 2px;
 }
 .message-filter-segmented .message-filter-chip:hover {
     color: alpha(@window_fg_color, 0.92);
@@ -318,8 +343,9 @@ window, dialog, popover, .app-window {
 .message-filter-segmented .message-filter-chip.selected,
 .message-filter-segmented .message-filter-chip:checked {
     color: @hermod_fg;
-    background-color: alpha(@accent_color, 0.22);
-    box-shadow: inset 0 0 0 1px alpha(@accent_color, 0.34);
+    background-color: @hermod_accent_weak;
+    border-color: alpha(@accent_color, 0.28);
+    box-shadow: none;
 }
 .day-group-row {
     background: transparent;
@@ -337,20 +363,6 @@ window, dialog, popover, .app-window {
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: alpha(@window_fg_color, 0.48);
-}
-.search-bar-box {
-    border-bottom: 1px solid alpha(@hermod_fg, 0.08);
-    padding: 6px 8px 6px;
-}
-.search-entry-shell {
-    background-color: alpha(#11171b, 0.94);
-    border: 1px solid alpha(@hermod_fg, 0.10);
-    border-radius: 13px;
-    min-height: 34px;
-}
-.sorting-toolbar {
-    padding: 4px 8px 8px;
-    border-bottom: 1px solid alpha(@hermod_fg, 0.08);
 }
 .sorting-toggle {
     min-width: 26px;
@@ -371,7 +383,7 @@ window, dialog, popover, .app-window {
 .sorting-toggle.active {
     background-color: alpha(#141a1e, 0.98);
     color: @hermod_fg;
-    border-color: alpha(#4f8e82, 0.26);
+    border-color: alpha(#2e6a70, 0.26);
 }
 .load-older-toolbar {
     min-height: 26px;
@@ -395,7 +407,7 @@ window, dialog, popover, .app-window {
     background-color: transparent;
 }
 .startup-status-card {
-    border-radius: 28px;
+    border-radius: 14px;
     border: 1px solid alpha(@hermod_fg, 0.08);
     background-color: alpha(#11171b, 0.95);
     box-shadow: 0 18px 34px alpha(@window_fg_color, 0.12);
@@ -407,7 +419,7 @@ window, dialog, popover, .app-window {
 .startup-status-orb {
     min-width: 78px;
     min-height: 78px;
-    border-radius: 26px;
+    border-radius: 14px;
     background-image: linear-gradient(180deg, alpha(@accent_color, 0.22), alpha(@accent_color, 0.08));
     box-shadow: inset 0 0 0 1px alpha(@accent_color, 0.24);
 }
@@ -440,7 +452,7 @@ window, dialog, popover, .app-window {
 }
 .startup-status-progress progress {
     border-radius: 999px;
-    background-image: linear-gradient(90deg, alpha(#4f8e82, 0.95), alpha(#24362e, 0.82));
+    background-image: linear-gradient(90deg, alpha(#2e6a70, 0.95), alpha(#24362e, 0.82));
 }
 .startup-status-summary {
     color: @hermod_fg;
@@ -513,7 +525,7 @@ window, dialog, popover, .app-window {
     background-color: alpha(@hermod_fg_muted, 0.18);
 }
 .startup-status-row.state-checking .startup-status-strip {
-    background-color: alpha(#4f8e82, 0.86);
+    background-color: alpha(#2e6a70, 0.86);
 }
 .startup-status-row.state-ready .startup-status-strip {
     background-color: alpha(#6f9b73, 0.92);
@@ -552,11 +564,15 @@ window, dialog, popover, .app-window {
     padding: 0 16px;
 }
 .hermod-header {
-    background: transparent;
-    border-bottom: 1px solid alpha(@hermod_fg_muted, 0.08);
+    background: linear-gradient(180deg, #131A1E 0%, #0E1418 100%);
+    border-bottom: 1px solid @hermod_border;
     box-shadow: none;
-    min-height: 44px;
-    padding: 0 12px;
+    min-height: 46px;
+    padding: 0 10px 0 14px;
+}
+.hermod-header windowhandle,
+.hermod-header windowhandle > box {
+    background: transparent;
 }
 .hermod-header-brand-row {
     padding: 0 4px;
@@ -569,46 +585,51 @@ window, dialog, popover, .app-window {
 }
 .hermod-header-brand-label {
     font-family: "Geist Mono", ui-monospace, monospace;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.22em;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
-    color: alpha(@hermod_fg, 0.78);
+    color: @hermod_fg;
 }
 .hermod-header-separator {
-    background: alpha(@hermod_fg_muted, 0.18);
+    background: rgba(166, 173, 179, 0.14);
     min-width: 1px;
 }
 .hermod-header-crumb-title {
     font-family: "Geist", "Inter", sans-serif;
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: -0.01em;
-    color: alpha(@hermod_fg, 0.88);
+    font-size: 12px;
+    font-weight: 400;
+    color: @hermod_fg_muted;
 }
 .hermod-header-crumb-subtitle {
     font-family: "Geist", "Inter", sans-serif;
     font-size: 12px;
     font-weight: 400;
-    color: alpha(@hermod_fg, 0.48);
+    color: alpha(@hermod_fg_muted, 0.62);
     margin-left: 2px;
 }
 .hermod-header-sync,
 .hermod-header-settings {
-    -gtk-icon-size: 16px;
-    min-height: 30px;
-    min-width: 30px;
-    padding: 0 6px;
-    border-radius: 7px;
-    color: alpha(@hermod_fg, 0.76);
+    -gtk-icon-size: 14px;
+    min-height: 26px;
+    min-width: 26px;
+    margin: 0 -2px;
+    padding: 0 4px;
+    border-radius: 8px;
+    color: @hermod_fg_muted;
     background: transparent;
     border: 1px solid transparent;
     box-shadow: none;
 }
+.hermod-header-sync image,
+.hermod-header-settings image {
+    -gtk-icon-style: symbolic;
+    opacity: 0.82;
+}
 .hermod-header-sync:hover,
 .hermod-header-settings:hover {
-    background: alpha(@hermod_fg, 0.06);
-    border-color: alpha(@hermod_fg_muted, 0.12);
+    background: @hermod_bg_hover;
+    border-color: @hermod_border;
     color: @hermod_fg;
 }
 .welcome-header-mark {
@@ -656,12 +677,12 @@ window, dialog, popover, .app-window {
     border: none;
     padding: 2px 0;
     font-size: 12.5px;
-    color: #4f8e82;
+    color: #2e6a70;
     box-shadow: none;
 }
 .welcome-more:hover {
     background: transparent;
-    color: shade(#4f8e82, 1.18);
+    color: shade(#2e6a70, 1.18);
 }
 .provider-row-tile {
     padding: 0;
@@ -678,7 +699,7 @@ window, dialog, popover, .app-window {
 }
 .provider-row-tile:focus {
     outline: none;
-    box-shadow: 0 0 0 2px alpha(#4f8e82, 0.40);
+    box-shadow: 0 0 0 2px alpha(#2e6a70, 0.40);
 }
 .provider-glyph {
     min-width: 34px;
@@ -750,38 +771,10 @@ window, dialog, popover, .app-window {
 .welcome-wash {
     background: transparent;
 }
-.welcome-firefly {
-    min-width: 4px;
-    min-height: 4px;
-    border-radius: 999px;
-    background-color: alpha(@hermod_fg, 0.92);
-    box-shadow: 0 0 10px alpha(@hermod_fg, 0.20), 0 0 20px alpha(#4f8e82, 0.12);
-    animation: hermod-firefly-twinkle 6.5s ease-in-out infinite;
-}
-.welcome-firefly.firefly-a { opacity: 0.90; }
-.welcome-firefly.firefly-b { animation-delay: -1.4s; }
-.welcome-firefly.firefly-b { opacity: 0.70; }
-.welcome-firefly.firefly-c { animation-delay: -2.8s; }
-.welcome-firefly.firefly-c { opacity: 0.80; }
-.welcome-firefly.firefly-d { animation-delay: -4.1s; }
-.welcome-firefly.firefly-d { opacity: 0.60; }
-.welcome-firefly.firefly-e { animation-delay: -0.7s; }
-.welcome-firefly.firefly-e { opacity: 0.70; }
-@keyframes hermod-firefly-twinkle {
-    0% { transform: scale(0.82); opacity: 0.24; }
-    45% { transform: scale(1.00); opacity: 0.88; }
-    100% { transform: scale(0.82); opacity: 0.24; }
-}
-.welcome-stage {
-    min-height: 0;
-}
-.welcome-hero {
-    min-height: 0;
-}
 .welcome-mark {
     min-width: 64px;
     min-height: 64px;
-    border-radius: 16px;
+    border-radius: 14px;
     border: 1px solid alpha(@hermod_fg_muted, 0.14);
     background: #11171b;
     padding: 12px;
@@ -809,31 +802,10 @@ window, dialog, popover, .app-window {
     line-height: 1.50;
     color: alpha(@hermod_fg_muted, 0.88);
 }
-.welcome-pledge {
-    margin-top: 18px;
-}
-.welcome-pledge-item {
-    color: alpha(@hermod_fg_muted, 0.72);
-    font-size: 11.5px;
-    font-weight: 500;
-}
-.welcome-pledge-text {
-    font-family: "Geist", -apple-system, system-ui, sans-serif;
-    letter-spacing: -0.005em;
-    color: alpha(@hermod_fg_muted, 0.72);
-}
-.welcome-pledge-check {
-    color: alpha(#6f9b73, 0.96);
-    min-width: 12px;
-    min-height: 12px;
-}
-.onboarding-provider-grid {
-    margin-top: 28px;
-}
 .provider-tile {
     min-width: 84px;
     min-height: 84px;
-    border-radius: 18px;
+    border-radius: 14px;
     border: 1px solid transparent;
     background: transparent;
     box-shadow: none;
@@ -860,11 +832,6 @@ window, dialog, popover, .app-window {
     min-height: 28px;
     color: currentColor;
 }
-.onboarding-account-bullet {
-    min-width: 14px;
-    min-height: 14px;
-    color: #ffffff;
-}
 .provider-logo-badge {
     min-width: 28px;
     min-height: 28px;
@@ -877,8 +844,7 @@ window, dialog, popover, .app-window {
     font-size: 0.84em;
     font-weight: 800;
 }
-.welcome-close-icon,
-.onboarding-open-icon {
+.welcome-close-icon {
     min-width: 18px;
     min-height: 18px;
     color: #ffffff;
@@ -896,13 +862,9 @@ window, dialog, popover, .app-window {
 .onboarding-accounts-list {
     padding: 2px 0 0;
 }
-.onboarding-accounts-empty {
-    color: alpha(@hermod_fg_muted, 0.68);
-    font-size: 0.92em;
-}
 .onboarding-account-row {
     padding: 12px 14px;
-    border-radius: 12px;
+    border-radius: 10px;
     background: alpha(#f5f0e6, 0.04);
     border: 1px solid alpha(#f5f0e6, 0.08);
 }
@@ -960,7 +922,7 @@ window, dialog, popover, .app-window {
     background: transparent;
 }
 .onboarding-modal-frame {
-    border-radius: 18px;
+    border-radius: 14px;
     border: 1px solid alpha(@hermod_fg_muted, 0.14);
     background: #0f1417;
     box-shadow: 0 18px 46px alpha(black, 0.35);
@@ -1015,29 +977,8 @@ window, dialog, popover, .app-window {
     line-height: 1.38;
     color: alpha(@hermod_fg_muted, 0.78);
 }
-.search-entry-shell:focus-within {
-    border-color: alpha(#4f8e82, 0.22);
-    box-shadow: none;
-}
-.search-entry-tab {
-    background: transparent;
-    border: none;
-    box-shadow: none;
-    outline: none;
-    min-height: 0;
-    padding: 0px 34px 0px 9px;
-}
-.search-entry-tab:focus,
-.search-entry-tab:focus-within {
-    border: none;
-    box-shadow: none;
-    outline: none;
-}
-.search-entry-icon {
-    color: alpha(@hermod_fg_muted, 0.58);
-}
 .sidebar-actions {
-    padding: 12px 10px 8px;
+    padding: 4px 12px 10px;
 }
 .sidebar-action-btn {
     padding-top: 0px;
@@ -1046,29 +987,29 @@ window, dialog, popover, .app-window {
 .sidebar-compose-btn {
     background-color: @hermod_accent;
     background-image: none;
-    border: 1px solid alpha(@hermod_accent, 0.80);
+    border: none;
     border-radius: 10px;
-    color: #F4FAF8;
+    color: @hermod_accent_fg;
     box-shadow: none;
-    min-height: 40px;
+    min-height: 34px;
+    padding: 0 12px;
 }
 .sidebar-compose-btn:hover {
-    background-color: shade(@hermod_accent, 1.08);
-    border-color: alpha(@hermod_accent, 1.0);
+    background-color: shade(@hermod_accent, 1.10);
 }
 .sidebar-compose-btn:active {
     background-color: shade(@hermod_accent, 0.92);
 }
 .sidebar-compose-btn .sidebar-compose-label {
-    color: #F4FAF8;
+    color: @hermod_accent_fg;
 }
 .sidebar-compose-btn .sidebar-compose-chip {
-    color: rgba(244, 250, 248, 0.82);
-    background-color: rgba(0, 0, 0, 0.22);
-    border: 1px solid rgba(244, 250, 248, 0.20);
+    color: rgba(242, 241, 237, 0.70);
+    background-color: rgba(0, 0, 0, 0.20);
+    border: none;
 }
 .sidebar-compose-btn image {
-    color: #F4FAF8;
+    color: @hermod_accent_fg;
 }
 .sidebar-action-btn.action-feedback {
     box-shadow: inset 0 0 0 1px alpha(@accent_color, 0.34);
@@ -1078,32 +1019,35 @@ window, dialog, popover, .app-window {
 }
 .sidebar-compose-label {
     font-family: "Geist", -apple-system, system-ui, sans-serif;
-    font-size: 0.96em;
+    font-size: 12.5px;
     font-weight: 600;
     letter-spacing: -0.005em;
 }
 .sidebar-compose-chip {
     font-family: "Geist Mono", ui-monospace, monospace;
-    font-size: 0.72em;
+    font-size: 10px;
     font-weight: 500;
-    letter-spacing: 0.08em;
-    color: alpha(@window_fg_color, 0.72);
-    background-color: alpha(#000000, 0.22);
-    border: 1px solid alpha(@hermod_fg, 0.14);
-    border-radius: 6px;
-    padding: 2px 7px;
+    letter-spacing: 0.06em;
+    color: rgba(242, 241, 237, 0.70);
+    background-color: rgba(0, 0, 0, 0.20);
+    border: none;
+    border-radius: 4px;
+    padding: 2px 5px;
     margin-left: 6px;
 }
 .sidebar-search {
-    margin: 0 10px 8px;
-    padding: 4px 10px;
-    background-color: @hermod_surface_card;
-    border: 1px solid alpha(@hermod_fg, 0.10);
+    margin: 0 12px 12px;
+    padding: 0 10px;
+    background: transparent;
+    border: 1px solid @hermod_border;
     border-radius: 10px;
-    min-height: 36px;
+    min-height: 30px;
+}
+.sidebar-search:hover {
+    background-color: @hermod_bg_hover;
 }
 .sidebar-search-icon {
-    color: alpha(@hermod_fg_muted, 0.72);
+    color: @hermod_fg_dim;
 }
 .sidebar-search-entry {
     background-color: transparent;
@@ -1111,9 +1055,9 @@ window, dialog, popover, .app-window {
     box-shadow: none;
     outline: none;
     color: @hermod_fg;
-    font-size: 0.88em;
+    font-size: 12px;
     padding: 0;
-    min-height: 24px;
+    min-height: 22px;
 }
 .sidebar-search-entry:focus,
 .sidebar-search-entry:focus-within {
@@ -1123,44 +1067,48 @@ window, dialog, popover, .app-window {
 }
 .sidebar-search-kbd {
     font-family: "Geist Mono", ui-monospace, monospace;
-    font-size: 0.68em;
+    font-size: 10px;
     font-weight: 500;
-    letter-spacing: 0.06em;
-    color: alpha(@hermod_fg_muted, 0.80);
-    background-color: alpha(@hermod_fg, 0.08);
-    border: 1px solid alpha(@hermod_fg, 0.12);
-    border-radius: 6px;
-    padding: 1px 7px;
+    letter-spacing: 0.04em;
+    color: @hermod_fg_dim;
+    background-color: alpha(@hermod_fg_muted, 0.08);
+    border: 1px solid @hermod_border;
+    border-radius: 4px;
+    padding: 2px 5px;
 }
 .sidebar-status {
-    padding: 12px 16px 14px;
-    border-top: 1px solid alpha(@hermod_fg, 0.06);
+    padding: 8px 12px 2px;
+    border-top: none;
 }
 .sidebar-status > box {
-    min-height: 22px;
+    min-height: 28px;
+    padding: 0 10px;
+    background-color: @hermod_surface_card;
+    border: 1px solid @hermod_border;
+    border-radius: 10px;
+    margin-bottom: 6px;
 }
 .sidebar-status-dot {
     border-radius: 999px;
+    min-width: 6px;
+    min-height: 6px;
 }
 .sidebar-status-dot-online {
-    background-color: #5BB07A;
-    box-shadow: 0 0 6px rgba(91, 176, 122, 0.4);
-}
-.sidebar-status-dot-local {
-    background-color: #6F7B82;
+    background-color: @hermod_success;
+    box-shadow: 0 0 6px alpha(@hermod_success, 0.5);
 }
 .sidebar-status-label {
-    font-size: 0.82em;
-    color: alpha(@hermod_fg_muted, 0.82);
+    font-size: 11px;
+    color: @hermod_fg_muted;
 }
 .sidebar-status-age {
-    font-size: 0.78em;
-    color: alpha(@hermod_fg_muted, 0.60);
+    font-size: 11px;
+    color: @hermod_fg_faint;
     font-variant-numeric: tabular-nums;
 }
 .sidebar-local-icon {
-    color: alpha(@hermod_fg_muted, 0.62);
-    -gtk-icon-size: 13px;
+    color: @hermod_fg_muted;
+    -gtk-icon-size: 12px;
 }
 .thread-summary-banner {
     margin: 8px 18px 0;
@@ -1182,7 +1130,7 @@ window, dialog, popover, .app-window {
     font-weight: 600;
     letter-spacing: 0.10em;
     color: #9ED7DC;
-    background-color: rgba(79, 142, 130, 0.24);
+    background-color: rgba(46, 106, 112, 0.24);
     border-radius: 5px;
     padding: 1px 6px;
 }
@@ -1211,7 +1159,7 @@ window, dialog, popover, .app-window {
     font-weight: 600;
     letter-spacing: 0.10em;
     color: #9ED7DC;
-    background-color: rgba(79, 142, 130, 0.24);
+    background-color: rgba(46, 106, 112, 0.24);
     border-radius: 5px;
     padding: 1px 6px;
 }
@@ -1269,7 +1217,7 @@ window, dialog, popover, .app-window {
     min-height: 28px;
     border-radius: 999px;
     background-color: #2A323A;
-    color: #E6E9EC;
+    color: #F2F1ED;
     font-size: 0.72em;
     font-weight: 600;
     letter-spacing: 0.01em;
@@ -1362,12 +1310,6 @@ window, dialog, popover, .app-window {
     background-color: alpha(@hermod_fg, 0.28);
     border-radius: 999px;
 }
-.sync-auto-label {
-    font-size: 0.60em;
-    font-weight: 700;
-    letter-spacing: 0.07em;
-    color: alpha(@hermod_fg_muted, 0.62);
-}
 .sync-auto-value {
     font-size: 0.76em;
     font-weight: 800;
@@ -1426,7 +1368,7 @@ window, dialog, popover, .app-window {
     min-height: 62px;
     background-color: alpha(#11171b, 0.92);
     border: 1px solid alpha(@hermod_fg, 0.10);
-    border-radius: 12px;
+    border-radius: 10px;
     padding: 8px 10px;
 }
 .thread-reply-send {
@@ -1443,14 +1385,11 @@ window, dialog, popover, .app-window {
 .message-info-bar {
     border-bottom: 1px solid alpha(@hermod_fg, 0.06);
     background-color: @hermod_surface_reader;
-    padding: 18px 22px 16px;
+    padding: 20px 32px 16px;
     min-height: 72px;
 }
 .message-info-top {
     min-height: 32px;
-}
-.message-info-top-row {
-    min-height: 20px;
 }
 .message-info-actions {
     min-width: 118px;
@@ -1503,18 +1442,6 @@ window, dialog, popover, .app-window {
     border: 1px solid alpha(@hermod_fg, 0.10);
     color: alpha(@hermod_fg, 0.82);
 }
-.thread-tab {
-    border-radius: 999px;
-    padding: 0px 14px;
-    min-height: 28px;
-    background-color: alpha(#11171b, 0.90);
-    border: 1px solid alpha(@hermod_fg, 0.10);
-    transition: all 120ms ease;
-}
-.thread-tab:hover {
-    background-color: alpha(#141a1e, 0.96);
-    border-color: alpha(@hermod_fg, 0.18);
-}
 .thread-msg-count {
     font-size: 0.76em;
     font-weight: 800;
@@ -1522,13 +1449,10 @@ window, dialog, popover, .app-window {
     font-variant-numeric: tabular-nums;
 }
 .thread-info-button.active {
-    background-color: rgba(79, 142, 130, 0.18);
+    background-color: rgba(46, 106, 112, 0.18);
     color: @hermod_fg;
-    border-color: rgba(79, 142, 130, 0.28);
+    border-color: rgba(46, 106, 112, 0.28);
     box-shadow: none;
-}
-.thread-info-senders {
-    margin-top: 5px;
 }
 .message-info-sender-line {
     color: alpha(@hermod_fg_muted, 0.82);
@@ -1547,22 +1471,11 @@ window, dialog, popover, .app-window {
     color: alpha(@hermod_fg_muted, 0.84);
     line-height: 1.10;
 }
-.message-info-accent {
-    min-width: 4px;
-    min-height: 24px;
-    border-radius: 999px;
-}
 .message-info-date {
     font-size: 0.80em;
     font-weight: 400;
     color: alpha(@hermod_fg_muted, 0.80);
     line-height: 1.10;
-}
-.message-info-title {
-    font-size: 0.88em;
-    font-weight: 700;
-    color: @hermod_fg;
-    letter-spacing: 0.01em;
 }
 .message-info-meta {
     font-size: 0.78em;
@@ -1574,10 +1487,9 @@ window, dialog, popover, .app-window {
     border-radius: 0;
 }
 .hermod-sidebar-column {
-    background-color: @hermod_surface_sunken;
-}
-.thread-sidebar-dim {
-    background-color: alpha(#0b0f12, 0.10);
+    background-image: linear-gradient(180deg, #0D1215 0%, #0A0E11 100%);
+    border-right: 1px solid @hermod_border;
+    padding: 10px 0 12px;
 }
 .thread-sidebar {
     border-left: 1px solid alpha(@hermod_fg, 0.08);
@@ -1588,12 +1500,13 @@ window, dialog, popover, .app-window {
     padding: 6px 0px 8px;
 }
 .thread-sidebar-row {
-    border-radius: 12px;
-    margin: 3px 10px;
-    padding: 7px 10px;
+    border-radius: 0;
+    margin: 0;
+    padding: 10px 14px;
+    border-bottom: 1px solid @hermod_border_faint;
 }
 .thread-sidebar-row:selected {
-    background-color: rgba(79, 142, 130, 0.14);
+    background-color: rgba(46, 106, 112, 0.14);
 }
 .thread-sidebar-row:hover {
     background-color: alpha(@hermod_fg, 0.04);
@@ -1653,25 +1566,14 @@ window, dialog, popover, .app-window {
     box-shadow: none;
 }
 .message-column {
-    background-color: alpha(#0f1417, 0.96);
-    border-radius: 16px;
-    border: 1px solid alpha(@hermod_fg, 0.08);
+    background-color: @hermod_bg;
+    border-radius: 0;
+    border: none;
+    border-right: 1px solid @hermod_border;
 }
 .attachment-chip {
     border-radius: 8px;
     border: 1px solid alpha(@hermod_fg, 0.10);
-}
-.countdown-lbl {
-    font-family: monospace;
-    font-variant-numeric: tabular-nums;
-    font-size: 0.72em;
-    color: alpha(@hermod_fg_muted, 0.48);
-    min-width: 54px;
-}
-.countdown-hint {
-    font-size: 0.62em;
-    color: alpha(@hermod_fg_muted, 0.42);
-    line-height: 1.0;
 }
 .command-palette {
     background-color: transparent;
@@ -1718,7 +1620,7 @@ window, dialog, popover, .app-window {
     letter-spacing: 0.04em;
 }
 .command-palette-chip-local {
-    background-color: rgba(79, 142, 130, 0.22);
+    background-color: rgba(46, 106, 112, 0.22);
     color: #9ED7DC;
 }
 .command-palette-kbd {
@@ -1761,7 +1663,7 @@ window, dialog, popover, .app-window {
 """
 
 ACCENT_PALETTE = {
-    "teal":   {"base": "#4F8E82", "weak": "rgba(79,142,130,0.16)"},
+    "teal":   {"base": "#2E6A70", "weak": "rgba(46,106,112,0.16)"},
     "forest": {"base": "#3B6B4E", "weak": "rgba(59,107,78,0.16)"},
     "gold":   {"base": "#B08A3E", "weak": "rgba(176,138,62,0.16)"},
     "stone":  {"base": "#6F7B82", "weak": "rgba(111,123,130,0.16)"},
@@ -1895,22 +1797,6 @@ def build_theme_override_css(theme="night", day_variant="paper", accent="teal", 
 .startup-status-issues-title {{
     color: alpha({muted}, 0.68);
 }}
-.search-bar-box {{
-    border-bottom: 1px solid alpha({fg}, 0.08);
-}}
-.search-entry-shell {{
-    background-color: {card};
-    border: 1px solid alpha({fg}, 0.10);
-}}
-.search-entry-shell:focus-within {{
-    border-color: alpha({base}, 0.30);
-}}
-.search-entry-icon {{
-    color: alpha({muted}, 0.58);
-}}
-.sorting-toolbar {{
-    border-bottom: 1px solid alpha({fg}, 0.08);
-}}
 .sorting-toggle {{
     color: alpha({muted}, 0.80);
     background-color: alpha({card}, 0.90);
@@ -1980,14 +1866,8 @@ def build_theme_override_css(theme="night", day_variant="paper", accent="teal", 
 .message-info-meta {{
     color: alpha({muted}, 0.72);
 }}
-.message-info-title {{
-    color: {fg};
-}}
 .reading-pane-shell {{
     background-color: {reader};
-}}
-.thread-sidebar-dim {{
-    background-color: alpha({fg}, 0.04);
 }}
 .thread-sidebar {{
     border-left: 1px solid alpha({fg}, 0.08);
@@ -2028,20 +1908,6 @@ def build_theme_override_css(theme="night", day_variant="paper", accent="teal", 
     background-color: alpha({card}, 0.90);
     border: 1px solid alpha({fg}, 0.10);
     color: alpha({fg}, 0.82);
-}}
-.thread-tab {{
-    background-color: alpha({card}, 0.90);
-    border: 1px solid alpha({fg}, 0.10);
-}}
-.thread-tab:hover {{
-    background-color: {hover};
-    border-color: alpha({fg}, 0.18);
-}}
-.countdown-lbl {{
-    color: alpha({muted}, 0.48);
-}}
-.countdown-hint {{
-    color: alpha({muted}, 0.42);
 }}
 .thread-info-button.active {{
     background-color: alpha({base}, 0.12);
@@ -2208,7 +2074,7 @@ def build_compose_account_css(backends=None):
     parts.append(
         """
 .compose-account-popover {
-    border-radius: 12px;
+    border-radius: 10px;
 }
 .compose-account-popover listbox {
     background: transparent;
@@ -2266,7 +2132,7 @@ def build_window_account_css(backends=None):
     for i, color in enumerate(ACCOUNT_PALETTE):
         cls = account_class_for_index(i)
         glow = _hex_to_rgba(color, 0.14)
-        connector = "rgba(139, 148, 158, 0.32)"
+        connector = "rgba(166, 173, 179, 0.32)"
         acct_bg = _hex_to_rgba(color, 0.09)
         parts.append(
             f"""
@@ -2337,7 +2203,6 @@ def _build_shared_account_accent_css():
 .account-color-preview.{cls},
 .account-color-chip.{cls},
 .onboarding-account-row.{cls} .onboarding-account-accent,
-.message-info-accent.{cls},
 .thread-sidebar-row.{cls} .thread-sidebar-strip {{
     background-color: {strong};
 }}

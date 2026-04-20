@@ -19,7 +19,7 @@ COMPOSE_CSS = """
     background:
         radial-gradient(circle at 50% 0%, alpha(@hermod_accent, 0.04), transparent 30%),
         @hermod_bg_elevated;
-    border-radius: 18px;
+    border-radius: 14px;
 }
 .compose-header-meta {
     padding: 10px 16px 8px;

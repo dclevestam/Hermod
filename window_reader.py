@@ -620,7 +620,7 @@ class ReaderMixin:
         if getattr(self, "_smart_reply_bar", None) is not None:
             self._smart_reply_bar.set_visible(True)
         if getattr(self, "_thread_summary_banner", None) is not None:
-            self._thread_summary_banner.set_visible(len(thread_msgs) > 1)
+            self._thread_summary_banner.set_visible(False)
         if len(thread_msgs) > 1:
             if getattr(self, "_thread_messages_count_lbl", None) is not None:
                 self._thread_messages_count_lbl.set_label(str(len(thread_msgs)))
@@ -994,7 +994,7 @@ class ReaderMixin:
         self.webview.set_background_color(rgba)
 
     def _get_email_css(self, text_color):
-        link = "#74a48d"
+        link = "#2E6A70"
         return (
             """<style>
 html { background-color: transparent; }

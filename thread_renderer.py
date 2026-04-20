@@ -33,15 +33,14 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
         records: List of dicts with 'msg', 'body_text', 'sender_color', 'sender_lane', 'selected', 'attachments'.
         attachments: Collected attachments for the whole thread.
         is_self_fn: Callable(msg) -> bool — True if the message sender is the current account.
-        theme: kept for call-site compat; reader body always uses the light
-               surface since emails are authored for a white background.
+        theme: kept for call-site compat; the reader surface now uses the
+               dark hermod_surface_reader token to match the unified-dark
+               target design.
     """
-    # Email body surface is always light in both Night and Day themes — the
-    # design prototype's Night inbox screenshot shows white reader body with
-    # dark text. Only the surrounding app chrome themes dark.
-    page_bg = '#ffffff'
-    text = '#1b2024'
-    subtext = '#5a6670'
+    page_bg = '#0B0F12'
+    text = '#F2F1ED'
+    subtext = '#A6ADB3'
+    separator = 'rgba(166, 173, 179, 0.08)'
     ordered_records = list(records)
     bubbles = []
     last_day = None
@@ -57,8 +56,8 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
         body_text = html_lib.escape(record.get('body_text') or '(no content)')
         is_self = is_self_fn(msg)
         r, g, b = record.get('sender_color') or _thread_palette(sender_email or sender_name)
-        bubble_bg = f'rgba({r}, {g}, {b}, 0.18)'
-        bubble_border = f'rgba({r}, {g}, {b}, 0.28)'
+        bubble_bg = 'transparent'
+        bubble_border = 'transparent'
         bubble_text = f'rgb({r}, {g}, {b})'
         align_class = 'self' if is_self else 'other'
         if record.get('selected'):
@@ -169,31 +168,26 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
                 margin: 0 auto;
             }}
             .bubble {{
-                max-width: 78%;
-                border-radius: 20px;
-                border: 1px solid var(--bubble-border);
-                background: var(--bubble-bg);
-                color: var(--bubble-text);
-                padding: 12px 13px 11px;
-                margin: 0 0 12px;
-                box-shadow: 0 1px 2px rgba(0,0,0,0.10);
+                max-width: none;
+                border-radius: 0;
+                border: 0;
+                background: transparent;
+                color: {text};
+                padding: 14px 4px 18px 0;
+                margin: 0;
+                box-shadow: none;
+                border-bottom: 1px solid {separator};
             }}
-            .bubble.self {{
-                max-width: 74%;
-                margin-left: auto;
-                margin-right: 4px;
-                border-top-right-radius: 6px;
-                border-bottom-right-radius: 6px;
+            .bubble:last-child {{
+                border-bottom: 0;
             }}
-            .bubble.other {{
-                max-width: 78%;
-                margin-right: auto;
-                margin-left: calc(4px + (var(--sender-lane, 0) * 10px));
-                border-top-left-radius: 6px;
-                border-bottom-left-radius: 6px;
+            .bubble.self, .bubble.other {{
+                max-width: none;
+                margin: 0;
             }}
             .bubble.selected {{
-                box-shadow: 0 0 0 1px rgba(116, 164, 141, 0.36), 0 0 0 5px rgba(116, 164, 141, 0.10);
+                box-shadow: inset 2px 0 0 0 rgba(46, 106, 112, 0.9);
+                padding-left: 10px;
             }}
             .bubble-head {{
                 display: flex;
@@ -214,12 +208,7 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
                 gap: 8px;
             }}
             .bubble-strip {{
-                width: 4px;
-                min-width: 4px;
-                height: 16px;
-                border-radius: 999px;
-                background: var(--bubble-accent);
-                flex: none;
+                display: none;
             }}
             .bubble-avatar {{
                 width: 26px;
@@ -239,7 +228,7 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
             }}
             .bubble-sender {{
                 font-weight: 700;
-                color: var(--bubble-accent);
+                color: {text};
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;

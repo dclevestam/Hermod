@@ -197,12 +197,6 @@ class _HeaderTitleStrip(Gtk.Box):
         )
         self.add_css_class("hermod-header-brand-row")
 
-        mark_path = hermod_app_icon_path()
-        mark = Gtk.Image.new_from_file(str(mark_path))
-        mark.set_pixel_size(18)
-        mark.add_css_class("hermod-header-mark")
-        self.append(mark)
-
         brand = Gtk.Label(label="HERMOD")
         brand.add_css_class("hermod-header-brand-label")
         brand.set_valign(Gtk.Align.CENTER)
@@ -1601,7 +1595,7 @@ class HermodWindow(
             self._thread_summary_banner, self._message_info_bar
         )
 
-        viewer_shell = Gtk.Frame(vexpand=True, hexpand=True, margin_top=5)
+        viewer_shell = Gtk.Frame(vexpand=True, hexpand=True)
         viewer_shell.add_css_class("reading-pane-shell")
         viewer_shell.set_child(self._viewer_stack)
         right.set_end_child(viewer_shell)

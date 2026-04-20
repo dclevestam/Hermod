@@ -699,7 +699,7 @@ class WelcomeScreen(Gtk.Box):
         for index, backend in enumerate(backends):
             row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
             row.add_css_class("onboarding-account-row")
-            color = _backend_color(backend) or "#74a48d"
+            color = _backend_color(backend) or "#2E6A70"
             apply_accent_css_class(row, color, index)
             bullet_icon = _build_provider_icon(
                 _backend_logo_path(backend), "onboarding-account-bullet"
