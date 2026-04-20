@@ -104,6 +104,13 @@ class HermodApp(Adw.Application):
     def _on_shutdown(self, _):
         self._poll_stop.set()
         self._poll_wake.set()
+        for backend in self.backends or []:
+            if getattr(backend, '_persist_timer', None) is None:
+                continue
+            try:
+                backend._persist_sync_state(immediate=True)
+            except Exception:
+                pass
 
     def _on_window_suspended(self, window, _pspec):
         self._poll_suspended = window.props.suspended

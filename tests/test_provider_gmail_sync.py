@@ -92,6 +92,8 @@ class GmailBackendSyncTests(unittest.TestCase):
         backend._gmail_service_lock = threading.Lock()
         backend._gmail_list_memo = {}
         backend._gmail_list_memo_lock = threading.Lock()
+        backend._persist_timer = None
+        backend._persist_timer_lock = threading.Lock()
         return backend
 
     def test_gmail_label_bridge_handles_localized_special_folders(self):
@@ -736,6 +738,7 @@ class GmailBackendSyncTests(unittest.TestCase):
 
         with mock.patch.object(gmail_module, 'set_account_state') as set_state:
             backend._update_folder_sync_state('[Gmail]/Sent Mail', messages=sent_messages, history_id='history-sent')
+            backend._persist_sync_state(immediate=True)
 
         provider, identity, state = set_state.call_args.args
         self.assertEqual(provider, 'gmail')

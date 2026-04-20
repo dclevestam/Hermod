@@ -76,7 +76,9 @@ except ImportError:
 _GMAIL_SMTP_TIMEOUT_SECS = 20
 _GMAIL_API_TIMEOUT_SECS = 10
 _GMAIL_TOKEN_CACHE_TTL_SECS = 3300
-_SYNC_RECENT_MESSAGES_LIMIT = 100
+_RECENT_WINDOW = 100  # Rows used for delta/history refresh and the initial page.
+_CACHE_MAX = 1000  # Upper bound on cached/persisted rows per folder.
+_PERSIST_DEBOUNCE_SECS = 0.5
 _GMAIL_BATCH_MAX = 100
 
 
@@ -232,6 +234,8 @@ class GmailBackend:
         self._gmail_service_lock = threading.Lock()
         self._gmail_list_memo = {}
         self._gmail_list_memo_lock = threading.Lock()
+        self._persist_timer = None
+        self._persist_timer_lock = threading.Lock()
         self._gmail_last_health_event = None
         self._sync_health = SyncHealthState(
             provider='gmail',
@@ -243,7 +247,7 @@ class GmailBackend:
     def _serialize_sync_messages(self, messages):
         return serialize_sync_messages(
             messages,
-            limit=_SYNC_RECENT_MESSAGES_LIMIT,
+            limit=_CACHE_MAX,
             default_folder='INBOX',
             default_thread_source='gmail-imap',
             extra_keys=('gmail_msgid',),
@@ -252,7 +256,7 @@ class GmailBackend:
     def _deserialize_sync_messages(self, messages):
         return deserialize_sync_messages(
             messages,
-            limit=_SYNC_RECENT_MESSAGES_LIMIT,
+            limit=_CACHE_MAX,
             default_folder='INBOX',
             provider_name='gmail',
             identity=self.identity,
@@ -283,7 +287,28 @@ class GmailBackend:
         notices = self.consume_sync_notices()
         return notices[0] if notices else None
 
-    def _persist_sync_state(self):
+    def _persist_sync_state(self, immediate=False):
+        if immediate:
+            with self._persist_timer_lock:
+                timer = self._persist_timer
+                self._persist_timer = None
+            if timer is not None:
+                timer.cancel()
+            self._persist_sync_state_now()
+            return
+        with self._persist_timer_lock:
+            if self._persist_timer is not None:
+                self._persist_timer.cancel()
+            timer = threading.Timer(
+                _PERSIST_DEBOUNCE_SECS, self._persist_sync_state_now
+            )
+            timer.daemon = True
+            self._persist_timer = timer
+            timer.start()
+
+    def _persist_sync_state_now(self):
+        with self._persist_timer_lock:
+            self._persist_timer = None
         with self._sync_lock:
             folders = {}
             if self._cached_inbox_messages or self._inbox_history_id:
@@ -327,7 +352,7 @@ class GmailBackend:
                         key=lambda item: item.get('date') or datetime.now(timezone.utc),
                         reverse=True,
                     )
-                    self._cached_inbox_messages = ordered[:_SYNC_RECENT_MESSAGES_LIMIT]
+                    self._cached_inbox_messages = ordered[:_CACHE_MAX]
                 if history_id is not None:
                     self._inbox_history_id = history_id
             else:
@@ -338,7 +363,7 @@ class GmailBackend:
                         key=lambda item: item.get('date') or datetime.now(timezone.utc),
                         reverse=True,
                     )
-                    folder_state['messages'] = ordered[:_SYNC_RECENT_MESSAGES_LIMIT]
+                    folder_state['messages'] = ordered[:_CACHE_MAX]
                 if history_id is not None:
                     folder_state['history_id'] = history_id
         self._persist_sync_state()
@@ -1608,12 +1633,12 @@ class GmailBackend:
                 return None
             for gmail_msgid, refreshed in refreshed_by_msgid.items():
                 current_by_msgid[gmail_msgid] = refreshed
-        target_count = min(_SYNC_RECENT_MESSAGES_LIMIT, max(limit, len(cached_messages)))
+        target_count = min(_CACHE_MAX, max(limit, len(cached_messages)))
         merged = sorted(
             current_by_msgid.values(),
             key=lambda item: item.get('date') or datetime.now(timezone.utc),
             reverse=True,
-        )[:_SYNC_RECENT_MESSAGES_LIMIT]
+        )[:_CACHE_MAX]
         if len(merged) < target_count:
             merged = self._top_up_cached_folder_messages(folder, merged, target_count)
         self._update_folder_sync_state(folder, messages=merged, history_id=history_probe.get('history_id'))
@@ -1682,7 +1707,7 @@ class GmailBackend:
 
     def fetch_messages(self, folder='INBOX', limit=50):
         sync_label = self._gmail_partial_sync_label(folder)
-        use_partial_sync_cache = bool(sync_label) and int(limit) <= _SYNC_RECENT_MESSAGES_LIMIT
+        use_partial_sync_cache = bool(sync_label) and int(limit) <= _RECENT_WINDOW
         history_probe = None
         api_available = self._gmail_probe_api_now()
         api_exc = None
@@ -1697,7 +1722,7 @@ class GmailBackend:
                 if refreshed is not None:
                     self._gmail_mark_api_ready('Ready')
                     return refreshed
-        internal_limit = max(limit, _SYNC_RECENT_MESSAGES_LIMIT) if sync_label else limit
+        internal_limit = max(limit, _RECENT_WINDOW) if sync_label else limit
         if api_available:
             try:
                 api_messages = self._gmail_api_fetch_messages(folder, internal_limit)
@@ -1797,7 +1822,7 @@ class GmailBackend:
                 for msg in cached_messages
                 if msg.get('gmail_msgid')
             }
-            refreshed = self._refresh_cached_folder_messages(folder, history_probe, _SYNC_RECENT_MESSAGES_LIMIT)
+            refreshed = self._refresh_cached_folder_messages(folder, history_probe, _RECENT_WINDOW)
             if refreshed is None:
                 refreshed = self._folder_cached_messages(folder)
                 self._update_folder_sync_state(
@@ -1855,7 +1880,7 @@ class GmailBackend:
         for folder in folders:
             previous = self._folder_cached_messages(folder)
             try:
-                refreshed = self._gmail_imap_fetch_messages(folder, _SYNC_RECENT_MESSAGES_LIMIT)
+                refreshed = self._gmail_imap_fetch_messages(folder, _RECENT_WINDOW)
             except Exception:
                 continue
             previous_uids = {msg.get('uid') for msg in previous if msg.get('uid')}
