@@ -230,6 +230,8 @@ class GmailBackend:
         self._cached_token_expiry = 0.0
         self._gmail_service = None
         self._gmail_service_lock = threading.Lock()
+        self._gmail_list_memo = {}
+        self._gmail_list_memo_lock = threading.Lock()
         self._gmail_last_health_event = None
         self._sync_health = SyncHealthState(
             provider='gmail',
@@ -716,6 +718,26 @@ class GmailBackend:
         messages.sort(key=lambda item: _aware_utc_datetime(item.get('date')))
         return messages
 
+    def _gmail_list_memo_entry(self, folder):
+        with self._gmail_list_memo_lock:
+            entry = self._gmail_list_memo.get(folder)
+            if entry is None:
+                entry = {
+                    'refs': [],
+                    'next_token': None,
+                    'exhausted': False,
+                    'metadata_cache': {},
+                }
+                self._gmail_list_memo[folder] = entry
+            return entry
+
+    def _gmail_list_memo_reset(self, folder=None):
+        with self._gmail_list_memo_lock:
+            if folder is None:
+                self._gmail_list_memo.clear()
+            else:
+                self._gmail_list_memo.pop(folder, None)
+
     def _gmail_api_fetch_messages(self, folder='INBOX', limit=50):
         label_id = self._gmail_api_label_id_for_folder(folder)
         if not label_id:
@@ -724,50 +746,47 @@ class GmailBackend:
         if limit <= 0:
             return []
 
-        page_token = None
-        message_refs = []
+        memo = self._gmail_list_memo_entry(folder)
         page_size = min(max(limit, 20), 100)
         query_base = {
             'labelIds': [label_id],
             'maxResults': page_size,
-            'fields': 'messages(id,threadId,labelIds,snippet,internalDate),nextPageToken',
+            'fields': 'messages(id),nextPageToken',
         }
-        while len(message_refs) < limit:
+        while len(memo['refs']) < limit and not memo['exhausted']:
             query = dict(query_base)
-            if page_token:
-                query['pageToken'] = page_token
+            if memo['next_token']:
+                query['pageToken'] = memo['next_token']
             data = self._gmail_api_request('/users/me/messages', query=query)
-            refs = data.get('messages', [])
-            if not refs:
-                break
-            message_refs.extend(refs)
-            page_token = data.get('nextPageToken')
-            if not page_token:
+            refs = data.get('messages') or []
+            for ref in refs:
+                api_id = str((ref or {}).get('id') or '').strip()
+                if api_id and api_id not in memo['metadata_cache']:
+                    memo['refs'].append(api_id)
+            next_token = data.get('nextPageToken')
+            memo['next_token'] = next_token
+            if not next_token or not refs:
+                memo['exhausted'] = True
                 break
 
-        if not message_refs:
+        api_ids = list(memo['refs'][:limit])
+        if not api_ids:
             return []
 
-        message_refs = message_refs[:limit]
-        api_ids = []
-        for ref in message_refs:
-            api_id = str((ref or {}).get('id') or '').strip()
-            if api_id:
-                api_ids.append(api_id)
+        missing = [api_id for api_id in api_ids if api_id not in memo['metadata_cache']]
+        if missing:
+            fetched = self._gmail_batch_get_metadata(missing)
+            for api_id, api_message in fetched.items():
+                if not api_message:
+                    continue
+                row = self._gmail_api_message_to_row(
+                    api_message,
+                    folder=folder,
+                    uid=api_id,
+                )
+                memo['metadata_cache'][api_id] = row
 
-        metadata_by_id = self._gmail_batch_get_metadata(api_ids)
-
-        messages = []
-        for api_id in api_ids:
-            api_message = metadata_by_id.get(api_id)
-            if not api_message:
-                continue
-            messages.append(self._gmail_api_message_to_row(
-                api_message,
-                folder=folder,
-                uid=api_id,
-            ))
-
+        messages = [memo['metadata_cache'][api_id] for api_id in api_ids if api_id in memo['metadata_cache']]
         messages.sort(key=lambda item: _aware_utc_datetime(item.get('date')), reverse=True)
         return messages[:limit]
 
@@ -1598,6 +1617,7 @@ class GmailBackend:
         if len(merged) < target_count:
             merged = self._top_up_cached_folder_messages(folder, merged, target_count)
         self._update_folder_sync_state(folder, messages=merged, history_id=history_probe.get('history_id'))
+        self._gmail_list_memo_reset(folder)
         return merged[:limit]
 
     def _refresh_cached_inbox_messages(self, history_probe, limit):

@@ -88,6 +88,10 @@ class GmailBackendSyncTests(unittest.TestCase):
         backend._cached_token = None
         backend._cached_token_expiry = 0.0
         backend._gmail_last_health_event = None
+        backend._gmail_service = None
+        backend._gmail_service_lock = threading.Lock()
+        backend._gmail_list_memo = {}
+        backend._gmail_list_memo_lock = threading.Lock()
         return backend
 
     def test_gmail_label_bridge_handles_localized_special_folders(self):
@@ -302,6 +306,9 @@ class GmailBackendSyncTests(unittest.TestCase):
             self.fail(f'unexpected api path {path}')
 
         backend._gmail_api_request = api_request
+        backend._gmail_batch_get_metadata = lambda ids: {
+            aid: api_request(f'/users/me/messages/{aid}') for aid in ids
+        }
         backend._update_folder_sync_state = lambda folder, messages=None, history_id=None: update_calls.append(
             (folder, [msg['uid'] for msg in (messages or [])], history_id)
         )
@@ -526,6 +533,9 @@ class GmailBackendSyncTests(unittest.TestCase):
                     {'name': 'Message-ID', 'value': '<updated@example.com>'},
                 ],
             },
+        }
+        backend._gmail_batch_get_metadata = lambda ids: {
+            aid: backend._gmail_message_metadata(aid) for aid in ids
         }
         backend._get_imap = lambda: self.fail('IMAP lookup should not run')
 
