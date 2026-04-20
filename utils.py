@@ -367,7 +367,7 @@ def _thread_inline_image_records(html, attachments, max_images=4):
 # ── GTK widget helpers ────────────────────────────────────────────────────────
 
 def _make_count_slot():
-    slot = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, width_request=34, halign=Gtk.Align.END)
+    slot = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, width_request=24, halign=Gtk.Align.END)
     slot.set_hexpand(False)
     return slot
 

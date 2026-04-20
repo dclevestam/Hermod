@@ -460,14 +460,10 @@ class UnifiedRow(Gtk.ListBoxRow):
             orientation=Gtk.Orientation.HORIZONTAL,
             margin_top=0,
             margin_bottom=0,
-            margin_start=8,
-            margin_end=8,
-            spacing=6,
+            margin_start=10,
+            margin_end=10,
+            spacing=10,
         )
-        strip = Gtk.Box(valign=Gtk.Align.CENTER)
-        strip.set_size_request(4, 18)
-        strip.add_css_class("account-accent-strip")
-        box.append(strip)
         if folder_id == "_UNIFIED_":
             self.add_css_class("all-inboxes-row")
         name_l = (name or "").lower()
@@ -479,14 +475,13 @@ class UnifiedRow(Gtk.ListBoxRow):
             unified_fallback = "hermod-inbox-symbolic"
         elif "trash" in name_l or "trash" in folder_l:
             unified_fallback = "hermod-trash-symbolic"
-        box.append(
-            Gtk.Image(
-                icon_name=_pick_icon_name(
-                    icon, unified_fallback, "mail-inbox-symbolic", "folder-symbolic"
-                ),
-                icon_size=Gtk.IconSize.NORMAL,
-            )
+        icon_img = Gtk.Image(
+            icon_name=_pick_icon_name(
+                icon, unified_fallback, "mail-inbox-symbolic", "folder-symbolic"
+            ),
+            pixel_size=14,
         )
+        box.append(icon_img)
         lbl = Gtk.Label(label=name, halign=Gtk.Align.START, hexpand=True)
         lbl.add_css_class("account-accent-label")
         lbl.set_xalign(0.0)
@@ -524,13 +519,15 @@ class FolderRow(Gtk.ListBoxRow):
         if accent_class:
             self.add_css_class(accent_class)
 
+        if indent:
+            self.add_css_class("folder-row-nested")
         box = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             margin_top=0,
             margin_bottom=0,
-            margin_start=22 if indent else 14,
-            margin_end=12,
-            spacing=5,
+            margin_start=22 if indent else 10,
+            margin_end=10,
+            spacing=10,
         )
         box.set_valign(Gtk.Align.FILL)
         if indent:
@@ -570,7 +567,7 @@ class FolderRow(Gtk.ListBoxRow):
                     icon_name=_pick_icon_name(
                         icon, fallback, system_fallback, "folder-symbolic"
                     ),
-                    icon_size=Gtk.IconSize.NORMAL,
+                    pixel_size=14,
                 )
             )
         lbl = Gtk.Label(label=name, halign=Gtk.Align.START, hexpand=True)
@@ -637,9 +634,9 @@ class AccountHeaderRow(Gtk.ListBoxRow):
             orientation=Gtk.Orientation.HORIZONTAL,
             margin_top=0,
             margin_bottom=0,
-            margin_start=8,
-            margin_end=8,
-            spacing=5,
+            margin_start=10,
+            margin_end=10,
+            spacing=10,
         )
         box.set_valign(Gtk.Align.FILL)
         status_dot = Gtk.Box(valign=Gtk.Align.CENTER)
@@ -718,6 +715,7 @@ class MoreFoldersRow(Gtk.ListBoxRow):
         self.loaded = False
         self.expanded = False
         self.add_css_class("folder-row")
+        self.add_css_class("folder-row-nested")
         if accent_class:
             self.add_css_class(accent_class)
 
@@ -726,21 +724,15 @@ class MoreFoldersRow(Gtk.ListBoxRow):
             margin_top=0,
             margin_bottom=0,
             margin_start=22,
-            margin_end=12,
-            spacing=5,
+            margin_end=10,
+            spacing=10,
         )
         box.set_valign(Gtk.Align.FILL)
-        connector = Gtk.Box()
+        connector = Gtk.Box(valign=Gtk.Align.FILL, vexpand=True)
         connector.set_size_request(14, -1)
         connector.add_css_class("folder-connector-last")
         box.append(connector)
         self._connector = connector
-        self.chevron = Gtk.Image(
-            icon_name=_pick_icon_name(
-                "hermod-chevron-symbolic", "pan-end-symbolic"
-            )
-        )
-        box.append(self.chevron)
         lbl = Gtk.Label(label="More", halign=Gtk.Align.START, hexpand=True)
         lbl.add_css_class("account-accent-label")
         lbl.add_css_class("more-folders-label")
@@ -749,6 +741,14 @@ class MoreFoldersRow(Gtk.ListBoxRow):
         box.append(lbl)
         self.spinner = Gtk.Spinner()
         box.append(self.spinner)
+        self.chevron = Gtk.Image(
+            icon_name=_pick_icon_name(
+                "hermod-chevron-symbolic", "pan-end-symbolic"
+            ),
+            pixel_size=12,
+        )
+        self.chevron.add_css_class("more-folders-chevron")
+        box.append(self.chevron)
         self.set_child(box)
 
     def set_expanded(self, expanded):

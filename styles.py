@@ -126,7 +126,7 @@ window, dialog, popover {
     font-weight: 500;
     min-width: 10px;
     font-variant-numeric: tabular-nums;
-    margin-right: 4px;
+    margin-right: 0;
 }
 .folder-count-dim {
     color: @hermod_fg_faint;
@@ -160,8 +160,11 @@ window, dialog, popover {
     color: alpha(@error_color, 0.95);
 }
 .more-folders-label {
-    font-size: 0.84em;
-    color: alpha(@window_fg_color, 0.55);
+    color: @hermod_fg_dim;
+}
+.more-folders-chevron {
+    color: @hermod_fg_faint;
+    -gtk-icon-size: 12px;
 }
 .folder-row {
     min-height: 30px;
@@ -245,7 +248,14 @@ window, dialog, popover {
 }
 .account-accent-label {
     font-size: 0.88em;
-    font-weight: 500;
+    font-weight: 400;
+}
+.folder-row .account-accent-label {
+    font-size: 0.86em;
+}
+.folder-row.folder-row-nested .account-accent-label,
+.more-folders-label {
+    font-size: 0.82em;
 }
 /* Sidebar row base: muted text, dim icon, tight radius. */
 .navigation-sidebar > row {
