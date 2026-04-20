@@ -10,6 +10,7 @@ from gi.repository import Gtk, GLib, Gdk
 
 try:
     from .backends import network_ready, is_transient_network_error
+    from .command_palette import CommandPalette
     from .compose import ComposeView
     from .settings import get_settings
     from .widgets import (
@@ -29,6 +30,7 @@ try:
     )
 except ImportError:
     from backends import network_ready, is_transient_network_error
+    from command_palette import CommandPalette
     from compose import ComposeView
     from settings import get_settings
     from widgets import (
@@ -221,7 +223,10 @@ class MessageListMixin:
             self.folder_list.append(header_row)
 
             folder_rows = []
-            folders_list = list(backend.FOLDERS)
+            folders_list = [
+                entry for entry in backend.FOLDERS
+                if entry[1] not in ('Trash', 'Spam')
+            ]
             for i, (folder_id, name, icon) in enumerate(folders_list):
                 is_last = (i == len(folders_list) - 1)
                 row = FolderRow(folder_id, name, icon, indent=True, accent_class=accent_class, is_last=is_last)
@@ -837,6 +842,9 @@ class MessageListMixin:
         if mods:
             if keyval == Gdk.KEY_F5:
                 self._on_sync()
+                return True
+            if state & Gdk.ModifierType.CONTROL_MASK and keyval in (Gdk.KEY_k, Gdk.KEY_K):
+                self._open_command_palette()
                 return True
             return False
 

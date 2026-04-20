@@ -772,6 +772,17 @@ class HermodWindow(
             )
         return GLib.SOURCE_CONTINUE
 
+    def _open_command_palette(self):
+        palette = getattr(self, "_command_palette", None)
+        if palette is None:
+            try:
+                from command_palette import CommandPalette
+            except ImportError:
+                from .command_palette import CommandPalette
+            palette = CommandPalette(self)
+            self._command_palette = palette
+        palette.open()
+
     def _build_ui(self):
         app_root = Adw.ToolbarView()
 
@@ -971,6 +982,24 @@ class HermodWindow(
         sidebar_actions.append(compose_overlay)
         sidebar_col.append(sidebar_actions)
 
+        sidebar_search = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=8
+        )
+        sidebar_search.add_css_class("sidebar-search")
+        sidebar_search_icon = Gtk.Image(icon_name="system-search-symbolic")
+        sidebar_search_icon.add_css_class("sidebar-search-icon")
+        sidebar_search.append(sidebar_search_icon)
+        self._search_entry = Gtk.Entry(
+            placeholder_text="Search mail…", hexpand=True
+        )
+        self._search_entry.add_css_class("sidebar-search-entry")
+        self._search_entry.connect("changed", self._on_search_changed)
+        sidebar_search.append(self._search_entry)
+        sidebar_search_kbd = Gtk.Label(label="Ctrl K")
+        sidebar_search_kbd.add_css_class("sidebar-search-kbd")
+        sidebar_search.append(sidebar_search_kbd)
+        sidebar_col.append(sidebar_search)
+
         sidebar_scroll = Gtk.ScrolledWindow(
             hscrollbar_policy=Gtk.PolicyType.NEVER,
             width_request=_SIDEBAR_MIN_WIDTH,
@@ -1050,26 +1079,6 @@ class HermodWindow(
         list_col.append(column_header)
         self._message_column_header = column_header
 
-        search_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True)
-        search_box.add_css_class("search-bar-box")
-        search_overlay = Gtk.Overlay(hexpand=True)
-        search_overlay.add_css_class("search-entry-shell")
-        search_overlay.set_halign(Gtk.Align.FILL)
-        self._search_entry = Gtk.Entry(
-            placeholder_text="Search sender, subject…",
-            hexpand=True,
-        )
-        self._search_entry.add_css_class("search-entry-tab")
-        self._search_entry.connect("changed", self._on_search_changed)
-        search_overlay.set_child(self._search_entry)
-        search_icon = Gtk.Image(icon_name="system-search-symbolic")
-        search_icon.add_css_class("search-entry-icon")
-        search_icon.set_halign(Gtk.Align.END)
-        search_icon.set_valign(Gtk.Align.CENTER)
-        search_icon.set_margin_end(10)
-        search_overlay.add_overlay(search_icon)
-        search_box.append(search_overlay)
-
         # Legacy sort / unread state lives on invisible stub widgets so existing
         # callers (tests, keyboard shortcuts) keep working without cluttering the
         # redesigned column header.
@@ -1102,8 +1111,7 @@ class HermodWindow(
         )
         self._sync_unread_toggle_button()
 
-        self._search_bar = search_box
-        list_col.append(self._search_bar)
+        self._search_bar = None
 
         self._list_stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
 
@@ -1198,6 +1206,16 @@ class HermodWindow(
         self._reader_reply_btn.add_css_class("reader-action-btn")
         self._reader_reply_btn.connect("clicked", lambda _: self._on_current_reply())
         self._info_actions.append(self._reader_reply_btn)
+
+        self._reader_reply_all_btn = Gtk.Button(
+            icon_name="mail-reply-all-symbolic", tooltip_text="Reply all (a)"
+        )
+        self._reader_reply_all_btn.add_css_class("flat")
+        self._reader_reply_all_btn.add_css_class("reader-action-btn")
+        self._reader_reply_all_btn.connect(
+            "clicked", lambda _: self._on_current_reply_all()
+        )
+        self._info_actions.append(self._reader_reply_all_btn)
 
         self._reader_forward_btn = Gtk.Button(
             icon_name="mail-forward-symbolic",

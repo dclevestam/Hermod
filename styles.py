@@ -10,6 +10,7 @@ CSS = """
 @define-color hermod_bg_hover        #141A1E;
 @define-color hermod_surface_card    #11171B;
 @define-color hermod_surface_sunken  #090C0F;
+@define-color hermod_surface_reader  #141A1E;
 
 @define-color hermod_fg              #F2F1ED;
 @define-color hermod_fg_muted        #A6ADB3;
@@ -1048,6 +1049,44 @@ window, dialog, popover, .app-window {
     padding: 2px 7px;
     margin-left: 6px;
 }
+.sidebar-search {
+    margin: 0 10px 8px;
+    padding: 4px 10px;
+    background-color: alpha(@hermod_fg, 0.06);
+    border: 1px solid alpha(@hermod_fg, 0.10);
+    border-radius: 10px;
+    min-height: 34px;
+}
+.sidebar-search-icon {
+    color: alpha(@hermod_fg_muted, 0.72);
+}
+.sidebar-search-entry {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    outline: none;
+    color: @hermod_fg;
+    font-size: 0.88em;
+    padding: 0;
+    min-height: 24px;
+}
+.sidebar-search-entry:focus,
+.sidebar-search-entry:focus-within {
+    background-color: transparent;
+    outline: none;
+    box-shadow: none;
+}
+.sidebar-search-kbd {
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 0.68em;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    color: alpha(@hermod_fg_muted, 0.80);
+    background-color: alpha(@hermod_fg, 0.08);
+    border: 1px solid alpha(@hermod_fg, 0.12);
+    border-radius: 6px;
+    padding: 1px 7px;
+}
 .sidebar-section {
     background: transparent;
 }
@@ -1179,7 +1218,7 @@ window, dialog, popover, .app-window {
 }
 .message-info-bar {
     border-bottom: 1px solid alpha(@hermod_fg, 0.06);
-    background-color: alpha(#0f1417, 0.96);
+    background-color: @hermod_surface_reader;
     padding: 18px 22px 16px;
     min-height: 72px;
 }
@@ -1306,7 +1345,7 @@ window, dialog, popover, .app-window {
     color: alpha(@hermod_fg_muted, 0.72);
 }
 .reading-pane-shell {
-    background-color: alpha(#0b0f12, 0.96);
+    background-color: @hermod_surface_reader;
     border: none;
     border-radius: 0;
 }
@@ -1407,6 +1446,91 @@ window, dialog, popover, .app-window {
     color: alpha(@hermod_fg_muted, 0.42);
     line-height: 1.0;
 }
+.command-palette {
+    background-color: transparent;
+}
+.command-palette-shell {
+    background-color: @hermod_bg_elevated;
+    border: 1px solid alpha(@hermod_fg, 0.12);
+    border-radius: 14px;
+    box-shadow: 0 24px 56px rgba(0, 0, 0, 0.45);
+    padding: 0;
+}
+.command-palette-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid alpha(@hermod_fg, 0.08);
+}
+.command-palette-icon {
+    color: alpha(@hermod_fg_muted, 0.72);
+}
+.command-palette-entry {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    color: @hermod_fg;
+    font-size: 1.05em;
+    padding: 2px 0;
+    min-height: 26px;
+}
+.command-palette-entry:focus,
+.command-palette-entry:focus-within {
+    background-color: transparent;
+    outline: none;
+    box-shadow: none;
+}
+.command-palette-chips {
+    margin: 0 4px;
+}
+.command-palette-chip {
+    background-color: alpha(@hermod_fg, 0.08);
+    color: alpha(@hermod_fg, 0.75);
+    border-radius: 999px;
+    padding: 2px 9px;
+    font-size: 0.70em;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+.command-palette-chip-local {
+    background-color: rgba(46, 106, 112, 0.22);
+    color: #9ED7DC;
+}
+.command-palette-kbd {
+    background-color: alpha(@hermod_fg, 0.08);
+    color: alpha(@hermod_fg_muted, 0.85);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 0.70em;
+    font-family: monospace;
+}
+.command-palette-list {
+    background-color: transparent;
+    padding: 6px 6px 8px;
+}
+.command-palette-list > row {
+    background-color: transparent;
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin: 1px 4px;
+}
+.command-palette-list > row:selected,
+.command-palette-list > row:hover {
+    background-color: alpha(@hermod_fg, 0.08);
+}
+.command-palette-row-title {
+    font-size: 0.92em;
+    font-weight: 700;
+    color: @hermod_fg;
+}
+.command-palette-row-subtitle {
+    font-size: 0.78em;
+    color: alpha(@hermod_fg_muted, 0.72);
+}
+.command-palette-footer {
+    padding: 10px 16px 12px;
+    border-top: 1px solid alpha(@hermod_fg, 0.08);
+    font-size: 0.74em;
+    color: alpha(@hermod_fg_muted, 0.72);
+}
 """
 
 ACCENT_PALETTE = {
@@ -1423,6 +1547,7 @@ DAY_PALETTES = {
         "hover":    "#EDECE6",
         "card":     "#FFFFFF",
         "sunken":   "#E8E7E1",
+        "reader":   "#FDFCF8",
         "fg":       "#14181B",
         "fg_muted": "#5A636A",
     },
@@ -1432,6 +1557,7 @@ DAY_PALETTES = {
         "hover":    "#E1E7EB",
         "card":     "#FFFFFF",
         "sunken":   "#D9E0E5",
+        "reader":   "#F8FBFD",
         "fg":       "#0E1418",
         "fg_muted": "#506068",
     },
@@ -1441,6 +1567,7 @@ DAY_PALETTES = {
         "hover":    "#E7E1D4",
         "card":     "#FFFFFF",
         "sunken":   "#DFD9CB",
+        "reader":   "#FBF8F1",
         "fg":       "#1A1714",
         "fg_muted": "#635A4E",
     },
@@ -1471,6 +1598,7 @@ def build_theme_override_css(theme="night", day_variant="paper", accent="teal", 
         hover   = day["hover"]
         card    = day["card"]
         sunken  = day["sunken"]
+        reader  = day["reader"]
         fg      = day["fg"]
         muted   = day["fg_muted"]
 
@@ -1479,6 +1607,7 @@ def build_theme_override_css(theme="night", day_variant="paper", accent="teal", 
         parts.append(f"@define-color hermod_bg_hover {hover};")
         parts.append(f"@define-color hermod_surface_card {card};")
         parts.append(f"@define-color hermod_surface_sunken {sunken};")
+        parts.append(f"@define-color hermod_surface_reader {reader};")
         parts.append(f"@define-color hermod_fg {fg};")
         parts.append(f"@define-color hermod_fg_muted {muted};")
         parts.append(f"@define-color hermod_accent_fg #FFFFFF;")
@@ -1607,7 +1736,7 @@ def build_theme_override_css(theme="night", day_variant="paper", accent="teal", 
 }}
 .message-info-bar {{
     border-bottom: 1px solid alpha({fg}, 0.08);
-    background-color: alpha({elev}, 0.96);
+    background-color: {reader};
 }}
 .message-info-subject {{
     color: {fg};
@@ -1628,7 +1757,7 @@ def build_theme_override_css(theme="night", day_variant="paper", accent="teal", 
     color: {fg};
 }}
 .reading-pane-shell {{
-    background-color: {bg};
+    background-color: {reader};
 }}
 .thread-sidebar-dim {{
     background-color: alpha({fg}, 0.04);
