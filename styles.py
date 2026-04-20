@@ -224,6 +224,19 @@ window, dialog, popover {
     color: @hermod_fg;
     border-color: alpha(@hermod_fg, 0.18);
 }
+.load-more-row.loading button,
+.load-more-row.loading button:hover,
+.load-more-row button:disabled {
+    opacity: 1;
+    background-color: alpha(#11171b, 0.88);
+    color: alpha(@hermod_fg_muted, 0.78);
+    border-color: alpha(@hermod_fg, 0.10);
+}
+.load-more-row spinner {
+    min-width: 12px;
+    min-height: 12px;
+    color: alpha(@hermod_fg_muted, 0.78);
+}
 .account-accent-strip {
     border-radius: 999px;
     min-width: 4px;

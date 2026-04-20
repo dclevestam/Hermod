@@ -85,6 +85,17 @@ class LoadMoreListItem(MailListItem):
     def __init__(self, label="Load more"):
         super().__init__("load_more")
         self.label = label
+        self.loading = False
+
+    def bind_widget(self, widget):
+        super().bind_widget(widget)
+        if hasattr(widget, "set_loading"):
+            widget.set_loading(self.loading)
+
+    def set_loading(self, loading):
+        self.loading = bool(loading)
+        if self.widget is not None and hasattr(self.widget, "set_loading"):
+            self.widget.set_loading(self.loading)
 
 
 class DayGroupListItem(MailListItem):
@@ -319,19 +330,56 @@ class LoadMoreRow(Gtk.Box):
     def __init__(self, label, on_activate):
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL)
         self._selected = False
+        self._default_label = label
+        self._loading = False
         self.add_css_class("load-more-row")
         self.set_margin_top(6)
         self.set_margin_bottom(10)
         self.set_margin_start(10)
         self.set_margin_end(10)
 
-        button = Gtk.Button(label=label)
+        button = Gtk.Button()
         button.add_css_class("flat")
         button.set_halign(Gtk.Align.CENTER)
         button.set_hexpand(True)
-        button.connect("clicked", lambda *_: on_activate())
+
+        content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        content.set_halign(Gtk.Align.CENTER)
+        spinner = Gtk.Spinner()
+        spinner.set_visible(False)
+        label_widget = Gtk.Label(label=label)
+        content.append(spinner)
+        content.append(label_widget)
+        button.set_child(content)
+
+        def _handle_click(*_):
+            if self._loading:
+                return
+            on_activate()
+
+        button.connect("clicked", _handle_click)
         self._button = button
+        self._spinner = spinner
+        self._label = label_widget
         self.append(button)
+
+    def set_loading(self, loading):
+        loading = bool(loading)
+        if loading == self._loading:
+            return
+        self._loading = loading
+        if loading:
+            self._label.set_label("Loading…")
+            self._spinner.set_visible(True)
+            self._spinner.start()
+            self._button.set_sensitive(False)
+            self.add_css_class("loading")
+        else:
+            self._spinner.stop()
+            self._spinner.set_visible(False)
+            self._label.set_label(self._default_label)
+            self._button.set_sensitive(True)
+            self.remove_css_class("loading")
 
     def set_selected(self, selected):
         self._selected = bool(selected)

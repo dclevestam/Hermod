@@ -162,6 +162,13 @@ class MessageListMixin:
             return
         if getattr(self, '_message_loading', False):
             return
+        store = getattr(self, '_message_store', None)
+        if store is not None:
+            for index in range(store.get_n_items()):
+                item = store.get_item(index)
+                if isinstance(item, LoadMoreListItem):
+                    item.set_loading(True)
+                    break
         if getattr(self, '_email_scroll', None) is not None:
             adj = self._email_scroll.get_vadjustment()
             if adj is not None:
