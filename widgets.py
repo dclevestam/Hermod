@@ -528,7 +528,7 @@ class FolderRow(Gtk.ListBoxRow):
             orientation=Gtk.Orientation.HORIZONTAL,
             margin_top=0,
             margin_bottom=0,
-            margin_start=14 if indent else 14,
+            margin_start=22 if indent else 14,
             margin_end=12,
             spacing=5,
         )
@@ -725,7 +725,7 @@ class MoreFoldersRow(Gtk.ListBoxRow):
             orientation=Gtk.Orientation.HORIZONTAL,
             margin_top=0,
             margin_bottom=0,
-            margin_start=14,
+            margin_start=22,
             margin_end=12,
             spacing=5,
         )

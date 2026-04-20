@@ -2159,32 +2159,38 @@ def build_window_account_css(backends=None):
     for i, color in enumerate(ACCOUNT_PALETTE):
         cls = account_class_for_index(i)
         glow = _hex_to_rgba(color, 0.14)
-        connector = "rgba(166, 173, 179, 0.32)"
-        acct_bg = _hex_to_rgba(color, 0.09)
+        connector = "rgba(166, 173, 179, 0.14)"
         parts.append(
             f"""
 .email-row.{cls} {{
     background-image: linear-gradient(to left, {glow}, rgba(0,0,0,0));
 }}
-.navigation-sidebar row.{cls} .account-accent-label {{
+.navigation-sidebar row.{cls}.folder-row .account-accent-label {{
+    color: @hermod_fg_dim;
+}}
+.navigation-sidebar row.{cls}.folder-row:hover .account-accent-label {{
+    color: @hermod_fg_muted;
+}}
+.navigation-sidebar row.{cls}.folder-row:selected .account-accent-label,
+.navigation-sidebar row.{cls}.folder-row.selected .account-accent-label {{
     color: @hermod_fg;
 }}
 .navigation-sidebar row.{cls}.account-section-header {{
-    background-color: {acct_bg};
-    border-radius: 7px;
+    background-color: transparent;
+    border-radius: 6px;
 }}
 .navigation-sidebar row.{cls}.account-section-header .account-accent-label {{
-    color: @hermod_fg;
+    color: @hermod_fg_muted;
+    font-weight: 500;
 }}
 .navigation-sidebar row.{cls}.account-section-header .folder-count {{
-    color: @hermod_fg;
+    color: @hermod_fg_faint;
 }}
 .navigation-sidebar row.{cls}.account-section-header .account-health-icon {{
-    color: alpha(@hermod_fg, 0.92);
+    color: alpha(@hermod_fg_muted, 0.88);
 }}
 .navigation-sidebar row.{cls}.account-section-header .folder-count-dim {{
-    color: @hermod_fg_muted;
-    opacity: 0.82;
+    color: @hermod_fg_dim;
 }}
 .navigation-sidebar row.{cls} .folder-connector {{
     box-shadow: inset 1px 0 0 0 {connector};
