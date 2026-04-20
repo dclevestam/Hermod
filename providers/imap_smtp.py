@@ -891,6 +891,10 @@ class IMAPSMTPBackend:
             counts['trash'] = self.get_unread_count('Trash')
         if reconcile_counts or 'Spam' in changed_folders:
             counts['spam'] = self.get_unread_count('Spam')
+        if reconcile_counts or 'Drafts' in changed_folders:
+            counts['drafts'] = self.get_unread_count('Drafts')
+        if reconcile_counts or 'Sent' in changed_folders:
+            counts['sent'] = self.get_unread_count('Sent')
         notice = self.consume_sync_notices()
         return {
             'account': self.identity,

@@ -2,6 +2,7 @@ import base64
 import collections
 import json
 import html as html_lib
+import os
 import re
 import sys
 import threading
@@ -49,6 +50,7 @@ try:
         FolderRow,
         AccountHeaderRow,
         MoreFoldersRow,
+        SidebarSectionRow,
         StartupStatusPanel,
         MailListItem,
         MessageListItem,
@@ -127,6 +129,7 @@ except ImportError:
         FolderRow,
         AccountHeaderRow,
         MoreFoldersRow,
+        SidebarSectionRow,
         StartupStatusPanel,
         MailListItem,
         MessageListItem,
@@ -177,6 +180,70 @@ except ImportError:
 # ── Main window ───────────────────────────────────────────────────────────────
 
 
+class _HeaderTitleStrip(Gtk.Box):
+    """Left-packed header content: `H HERMOD` wordmark + folder crumb.
+
+    Exposes ``set_title`` / ``set_subtitle`` so existing call sites
+    (`window_message_list.py`) continue to work unchanged; the title
+    becomes the folder crumb and the subtitle becomes a small muted
+    suffix after it.
+    """
+
+    def __init__(self):
+        super().__init__(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            spacing=10,
+            valign=Gtk.Align.CENTER,
+        )
+        self.add_css_class("hermod-header-brand-row")
+
+        mark_path = hermod_app_icon_path()
+        mark = Gtk.Image.new_from_file(str(mark_path))
+        mark.set_pixel_size(18)
+        mark.add_css_class("hermod-header-mark")
+        self.append(mark)
+
+        brand = Gtk.Label(label="HERMOD")
+        brand.add_css_class("hermod-header-brand-label")
+        brand.set_valign(Gtk.Align.CENTER)
+        self.append(brand)
+
+        self._separator = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+        self._separator.add_css_class("hermod-header-separator")
+        self._separator.set_margin_top(6)
+        self._separator.set_margin_bottom(6)
+        self._separator.set_margin_start(2)
+        self._separator.set_margin_end(2)
+        self.append(self._separator)
+
+        self._title_lbl = Gtk.Label(label="", halign=Gtk.Align.START, xalign=0.0)
+        self._title_lbl.add_css_class("hermod-header-crumb-title")
+        self._title_lbl.set_ellipsize(Pango.EllipsizeMode.END)
+        self._title_lbl.set_valign(Gtk.Align.CENTER)
+        self.append(self._title_lbl)
+
+        self._subtitle_lbl = Gtk.Label(label="", halign=Gtk.Align.START, xalign=0.0)
+        self._subtitle_lbl.add_css_class("hermod-header-crumb-subtitle")
+        self._subtitle_lbl.set_ellipsize(Pango.EllipsizeMode.END)
+        self._subtitle_lbl.set_valign(Gtk.Align.CENTER)
+        self._subtitle_lbl.set_visible(False)
+        self.append(self._subtitle_lbl)
+
+    def _refresh_separator_visibility(self):
+        has_crumb = bool(self._title_lbl.get_text()) or self._subtitle_lbl.get_visible()
+        self._separator.set_visible(has_crumb)
+
+    def set_title(self, text):
+        self._title_lbl.set_label(text or "")
+        self._refresh_separator_visibility()
+
+    def set_subtitle(self, text):
+        text = (text or "").strip()
+        self._subtitle_lbl.set_label(text)
+        self._subtitle_lbl.set_visible(bool(text))
+        self._refresh_separator_visibility()
+
+
 class HermodWindow(
     MailboxControllerMixin,
     MessageListCacheMixin,
@@ -197,9 +264,16 @@ class HermodWindow(
         self._account_state = {}
         self._search_text = ""
         self._unread_counts = collections.defaultdict(
-            lambda: {"inbox": 0, "trash": 0, "spam": 0}
+            lambda: {
+                "inbox": 0, "trash": 0, "spam": 0,
+                "drafts": 0, "sent": 0, "archive": 0, "flagged": 0,
+            }
         )
         self._all_inboxes_row = None
+        self._flagged_row = None
+        self._drafts_row = None
+        self._sent_row = None
+        self._archive_row = None
         self._syncing = False
         self._sync_in_flight = False
         self._body_cache = collections.OrderedDict()
@@ -251,6 +325,8 @@ class HermodWindow(
         self._pending_list_scroll_value = None
         self._sort_order = "newest"
         self._show_unread_only = False
+        self._filter_mode = "unified"
+        self._filter_segmented_buttons = {}
         self._unread_filter_had_results = False
         self._thread_sidebar_open = False
         self._active_thread_id = None
@@ -265,7 +341,8 @@ class HermodWindow(
         self._setup_shortcuts()
         self.connect("close-request", self._on_close_request)
 
-        if self.backends:
+        force_welcome = os.environ.get("HERMOD_FORCE_WELCOME") == "1"
+        if self.backends and not force_welcome:
             self._select_initial_folder_row()
             self._show_app_root()
         else:
@@ -275,9 +352,20 @@ class HermodWindow(
         self._diag_watchdog_id = GLib.timeout_add_seconds(5, self._diag_watchdog_tick)
 
     def _apply_css(self):
+        s = get_settings()
+        forced = os.environ.get("HERMOD_FORCE_THEME")
+        theme = (forced or s.get("theme_mode") or "night").lower()
+        try:
+            sm = Adw.StyleManager.get_default()
+            sm.set_color_scheme(
+                Adw.ColorScheme.FORCE_LIGHT if theme == "day" else Adw.ColorScheme.FORCE_DARK
+            )
+        except Exception:
+            pass
         theme_css = self._build_theme_override_css()
         provider = Gtk.CssProvider()
-        provider.load_from_string(CSS + self._account_css + theme_css)
+        full_css = CSS + self._account_css + theme_css
+        provider.load_from_string(full_css)
         if getattr(self, "_style_provider", None) is not None:
             try:
                 Gtk.StyleContext.remove_provider_for_display(
@@ -292,8 +380,9 @@ class HermodWindow(
 
     def _build_theme_override_css(self):
         s = get_settings()
+        forced = os.environ.get("HERMOD_FORCE_THEME")
         return build_theme_override_css(
-            theme=s.get("theme_mode") or "night",
+            theme=(forced or s.get("theme_mode") or "night").lower(),
             day_variant=s.get("day_variant") or "paper",
             accent=s.get("accent") or "teal",
             density=s.get("density") or "balanced",
@@ -394,11 +483,6 @@ class HermodWindow(
         target_row = None
         if selected_backend_id is not None and selected_folder is not None:
             target_row = self._folder_rows.get((selected_backend_id, selected_folder))
-        if target_row is None and len(self.backends) == 1:
-            backend = self.backends[0]
-            target_row = self._folder_rows.get(
-                (backend.identity, backend.FOLDERS[0][0])
-            )
         if target_row is None and self._all_inboxes_row is not None:
             target_row = self._all_inboxes_row
         if target_row is None and self.backends:
@@ -417,6 +501,42 @@ class HermodWindow(
         root_stack = getattr(self, "_root_mode_stack", None)
         if root_stack is not None:
             root_stack.set_visible_child_name("app")
+
+    def _present_settings_modal(self):
+        content = getattr(self, "_app_settings_content", None)
+        if content is None:
+            return
+        win = getattr(self, "_settings_window", None)
+        if win is None:
+            win = Gtk.Window(transient_for=self, modal=True)
+            win.set_decorated(False)
+            win.set_default_size(1020, 680)
+            win.add_css_class("preferences-window")
+            parent = content.get_parent()
+            if parent is not None:
+                try:
+                    parent.remove(content)
+                except Exception:
+                    pass
+            win.set_child(content)
+            win.connect("close-request", self._on_settings_modal_close_request)
+            self._settings_window = win
+        show_main = getattr(content, "show_accounts_main", None)
+        if callable(show_main):
+            show_main()
+        select_pane = getattr(content, "select_pane", None)
+        if callable(select_pane):
+            select_pane("accounts")
+        win.present()
+
+    def _close_settings_modal(self):
+        win = getattr(self, "_settings_window", None)
+        if win is not None:
+            win.set_visible(False)
+
+    def _on_settings_modal_close_request(self, _win):
+        self._close_settings_modal()
+        return True
 
     def _show_welcome_settings_view(self):
         header = getattr(self, "_header_bar", None)
@@ -656,16 +776,33 @@ class HermodWindow(
         app_root = Adw.ToolbarView()
 
         header = Adw.HeaderBar()
+        header.add_css_class("hermod-header")
         header.set_hexpand(True)
         self._header_bar = header
-        self.title_widget = Adw.WindowTitle(title="Hermod", subtitle="")
-        header.set_title_widget(self.title_widget)
+        self.title_widget = _HeaderTitleStrip()
+        # Empty centered title so the brand strip we pack on the left
+        # is the only textual content in the header.
+        header.set_title_widget(Gtk.Box())
+        header.pack_start(self.title_widget)
 
-        # ── Left side: settings ──
-        hamburger = Gtk.Button(icon_name="open-menu-symbolic", tooltip_text="Settings")
-        hamburger.connect("clicked", self._on_settings)
-        self._settings_btn = hamburger
-        header.pack_start(hamburger)
+        # ── Right side: sync indicator + settings gear ──
+        self._header_sync_btn = Gtk.Button(
+            icon_name="view-refresh-symbolic", tooltip_text="Sync now (F5)"
+        )
+        self._header_sync_btn.add_css_class("flat")
+        self._header_sync_btn.add_css_class("hermod-header-sync")
+        self._header_sync_btn.connect("clicked", self._on_sync)
+        settings_btn = Gtk.Button(
+            icon_name="emblem-system-symbolic", tooltip_text="Settings"
+        )
+        settings_btn.add_css_class("flat")
+        settings_btn.add_css_class("hermod-header-settings")
+        settings_btn.connect("clicked", self._on_settings)
+        self._settings_btn = settings_btn
+        # pack_end stacks right-to-left — settings sits closest to CSD,
+        # sync sits immediately to its left.
+        header.pack_end(settings_btn)
+        header.pack_end(self._header_sync_btn)
 
         # Sync control: refresh icon on the left, background status on the right.
         online_box = Gtk.Box(
@@ -769,7 +906,7 @@ class HermodWindow(
         sync_overlay.add_overlay(self._sync_badge)
 
         compose_inner = Gtk.CenterBox(halign=Gtk.Align.FILL, valign=Gtk.Align.FILL)
-        compose_inner.set_size_request(-1, 30)
+        compose_inner.set_size_request(-1, 34)
         compose_stack = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=8,
@@ -781,6 +918,10 @@ class HermodWindow(
         compose_lbl.add_css_class("sidebar-compose-label")
         compose_stack.append(compose_lbl)
         compose_inner.set_center_widget(compose_stack)
+        compose_chip = Gtk.Label(label="Ctrl N", valign=Gtk.Align.CENTER)
+        compose_chip.add_css_class("sidebar-compose-chip")
+        compose_chip.set_margin_end(8)
+        compose_inner.set_end_widget(compose_chip)
         compose_overlay = Gtk.Overlay()
         compose_overlay.set_hexpand(True)
         compose_overlay.set_vexpand(False)
@@ -820,11 +961,13 @@ class HermodWindow(
         sidebar_actions.set_size_request(_SIDEBAR_MIN_WIDTH, -1)
         sidebar_actions.set_hexpand(False)
         sidebar_actions.set_vexpand(False)
-        sync_overlay.set_hexpand(True)
-        sync_overlay.set_halign(Gtk.Align.FILL)
         compose_overlay.set_hexpand(True)
         compose_overlay.set_halign(Gtk.Align.FILL)
-        sidebar_actions.append(sync_overlay)
+        # Sync moved into the main header (sub-phase A); the sync widget
+        # constructed above stays alive but unparented so the state
+        # plumbing in window_message_list.py (ONLINE/SYNCING/OFFLINE
+        # label, new-mail badge) keeps working without a second visible
+        # sync surface in the sidebar.
         sidebar_actions.append(compose_overlay)
         sidebar_col.append(sidebar_actions)
 
@@ -854,6 +997,59 @@ class HermodWindow(
         list_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, width_request=380)
         list_col.add_css_class("message-column")
 
+        # Column header: eyebrow + meta + segmented Unified/Unread/Flagged filter.
+        column_header = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True, spacing=4)
+        column_header.add_css_class("message-column-header")
+        column_header.set_margin_top(14)
+        column_header.set_margin_bottom(8)
+        column_header.set_margin_start(16)
+        column_header.set_margin_end(14)
+
+        header_top = Gtk.CenterBox(hexpand=True)
+        eyebrow_lbl = Gtk.Label(label="ALL INBOXES", halign=Gtk.Align.START, xalign=0.0)
+        eyebrow_lbl.add_css_class("message-column-eyebrow")
+        header_top.set_start_widget(eyebrow_lbl)
+        self._message_col_eyebrow = eyebrow_lbl
+
+        filter_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        filter_row.add_css_class("message-filter-segmented")
+        filter_row.set_valign(Gtk.Align.CENTER)
+        self._filter_segmented_buttons = {}
+        filter_specs = (
+            ("unified", "Unified"),
+            ("unread", "Unread"),
+            ("flagged", "Flagged"),
+        )
+        group_leader = None
+        for mode_key, caption in filter_specs:
+            btn = Gtk.ToggleButton(label=caption)
+            btn.add_css_class("message-filter-chip")
+            btn.add_css_class("flat")
+            if group_leader is None:
+                group_leader = btn
+                btn.set_active(True)
+                btn.add_css_class("selected")
+            else:
+                btn.set_group(group_leader)
+            btn.connect(
+                "toggled",
+                lambda b, key=mode_key: (
+                    self.set_filter_mode(key) if b.get_active() else None
+                ),
+            )
+            self._filter_segmented_buttons[mode_key] = btn
+            filter_row.append(btn)
+        header_top.set_end_widget(filter_row)
+        column_header.append(header_top)
+
+        meta_lbl = Gtk.Label(label="", halign=Gtk.Align.START, xalign=0.0)
+        meta_lbl.add_css_class("message-column-meta")
+        column_header.append(meta_lbl)
+        self._message_col_meta = meta_lbl
+
+        list_col.append(column_header)
+        self._message_column_header = column_header
+
         search_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True)
         search_box.add_css_class("search-bar-box")
         search_overlay = Gtk.Overlay(hexpand=True)
@@ -874,14 +1070,9 @@ class HermodWindow(
         search_overlay.add_overlay(search_icon)
         search_box.append(search_overlay)
 
-        # Sorting / paging toolbar
-        controls_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        controls_box.add_css_class("sorting-toolbar")
-        controls_box.set_hexpand(True)
-        spacer = Gtk.Box()
-        spacer.set_hexpand(True)
-        controls_box.append(spacer)
-
+        # Legacy sort / unread state lives on invisible stub widgets so existing
+        # callers (tests, keyboard shortcuts) keep working without cluttering the
+        # redesigned column header.
         self._load_older_btn = Gtk.Button(label="Load older")
         self._load_older_btn.add_css_class("load-older-toolbar")
         self._load_older_btn.add_css_class("flat")
@@ -889,7 +1080,6 @@ class HermodWindow(
         self._load_older_btn.connect(
             "clicked", lambda *_: self._on_load_more_requested()
         )
-        controls_box.append(self._load_older_btn)
 
         self._sort_toggle_btn = Gtk.Button()
         self._sort_toggle_btn.add_css_class("sorting-toggle")
@@ -897,8 +1087,8 @@ class HermodWindow(
         self._sort_toggle_icon = Gtk.Image()
         self._sort_toggle_btn.set_child(self._sort_toggle_icon)
         self._sort_toggle_btn.connect("clicked", lambda _: self._toggle_sort_order())
+        self._sort_toggle_btn.set_visible(False)
         self._sync_sort_toggle_button()
-        controls_box.append(self._sort_toggle_btn)
 
         self._unread_toggle_btn = Gtk.ToggleButton()
         self._unread_toggle_btn.add_css_class("sorting-toggle")
@@ -906,12 +1096,11 @@ class HermodWindow(
         self._unread_toggle_icon = Gtk.Image(icon_name="mail-unread-symbolic")
         self._unread_toggle_btn.set_child(self._unread_toggle_icon)
         self._unread_toggle_btn.set_tooltip_text("Unread only")
+        self._unread_toggle_btn.set_visible(False)
         self._unread_toggle_btn.connect(
             "toggled", lambda btn: self._toggle_unread_only(btn.get_active())
         )
-        controls_box.append(self._unread_toggle_btn)
         self._sync_unread_toggle_button()
-        search_box.append(controls_box)
 
         self._search_bar = search_box
         list_col.append(self._search_bar)
@@ -974,48 +1163,70 @@ class HermodWindow(
 
         self._message_info_bar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self._message_info_bar.add_css_class("message-info-bar")
+        self._message_info_bar.add_css_class("reader-header")
         self._message_info_top = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=10,
             halign=Gtk.Align.FILL,
-            valign=Gtk.Align.CENTER,
+            valign=Gtk.Align.START,
         )
         self._message_info_top.add_css_class("message-info-top")
         self._message_info_accent = Gtk.Box()
         self._message_info_accent.set_visible(False)
         self._message_info_subject = Gtk.Label(halign=Gtk.Align.START, xalign=0)
         self._message_info_subject.add_css_class("message-info-subject")
-        self._message_info_subject.set_wrap(False)
+        self._message_info_subject.add_css_class("reader-subject")
+        self._message_info_subject.set_wrap(True)
+        self._message_info_subject.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        self._message_info_subject.set_lines(2)
         self._message_info_subject.set_ellipsize(Pango.EllipsizeMode.END)
         self._message_info_subject.set_hexpand(True)
+        self._message_info_subject.set_valign(Gtk.Align.START)
         self._message_info_top.append(self._message_info_subject)
 
-        # Action toolbar
-        self._info_actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        self._info_actions.set_valign(Gtk.Align.CENTER)
+        # Top-right action cluster: reply / reply-all / forward, then
+        # secondary actions (Original, thread-toggle, delete).
+        self._info_actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+        self._info_actions.add_css_class("reader-actions")
+        self._info_actions.set_valign(Gtk.Align.START)
         self._info_actions.set_visible(False)
 
-        for icon, tip, cb in [
-            ("mail-reply-sender-symbolic", "Reply (r)", "reply"),
-            ("mail-reply-all-symbolic", "Reply All (a)", "reply-all"),
-            ("user-trash-symbolic", "Delete (d)", "delete"),
-        ]:
-            btn = Gtk.Button(icon_name=icon, tooltip_text=tip)
-            btn.add_css_class("flat")
-            if cb == "reply":
-                btn.connect("clicked", lambda _: self._on_current_reply())
-            elif cb == "reply-all":
-                btn.connect("clicked", lambda _: self._on_current_reply_all())
-            elif cb == "delete":
-                btn.connect("clicked", lambda _: self._on_current_delete())
-            self._info_actions.append(btn)
+        self._reader_reply_btn = Gtk.Button(
+            icon_name="mail-reply-sender-symbolic", tooltip_text="Reply (r)"
+        )
+        self._reader_reply_btn.add_css_class("flat")
+        self._reader_reply_btn.add_css_class("reader-action-btn")
+        self._reader_reply_btn.connect("clicked", lambda _: self._on_current_reply())
+        self._info_actions.append(self._reader_reply_btn)
+
+        self._reader_forward_btn = Gtk.Button(
+            icon_name="mail-forward-symbolic",
+            tooltip_text="Forward (f)",
+        )
+        self._reader_forward_btn.add_css_class("flat")
+        self._reader_forward_btn.add_css_class("reader-action-btn")
+        self._reader_forward_btn.connect(
+            "clicked", lambda _: self._on_current_forward()
+        )
+        self._info_actions.append(self._reader_forward_btn)
+
+        self._reader_delete_btn = Gtk.Button(
+            icon_name="user-trash-symbolic", tooltip_text="Delete (d)"
+        )
+        self._reader_delete_btn.add_css_class("flat")
+        self._reader_delete_btn.add_css_class("reader-action-btn")
+        self._reader_delete_btn.connect(
+            "clicked", lambda _: self._on_current_delete()
+        )
+        self._info_actions.append(self._reader_delete_btn)
+
         self._message_info_top.append(self._info_actions)
 
         self._message_info_actions = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
             spacing=6,
             halign=Gtk.Align.END,
-            valign=Gtk.Align.CENTER,
+            valign=Gtk.Align.START,
         )
         self._message_info_actions.add_css_class("message-info-actions")
         self._message_info_original_btn = Gtk.Button(label="Original")
@@ -1052,25 +1263,38 @@ class HermodWindow(
         self._message_info_top.append(self._message_info_actions)
         self._message_info_bar.append(self._message_info_top)
 
+        # New reader meta line: "N messages · participants" (threads) or
+        # "sender · date" (single message). Replaces the older sender + date
+        # + size/attachment stack from the pre-design layout.
+        self._reader_meta_lbl = Gtk.Label(halign=Gtk.Align.START, xalign=0)
+        self._reader_meta_lbl.add_css_class("reader-meta")
+        self._reader_meta_lbl.set_wrap(False)
+        self._reader_meta_lbl.set_ellipsize(Pango.EllipsizeMode.END)
+        self._reader_meta_lbl.set_hexpand(True)
+        self._message_info_bar.append(self._reader_meta_lbl)
+
+        # Legacy sender / date / meta labels stay in the widget tree (so
+        # existing callers that poke their labels keep working) but are
+        # hidden behind the new `reader-meta` summary.
         self._message_info_sender = Gtk.Label(halign=Gtk.Align.START, xalign=0)
         self._message_info_sender.add_css_class("message-info-sender")
         self._message_info_sender.add_css_class("message-info-sender-line")
         self._message_info_sender.set_wrap(False)
         self._message_info_sender.set_ellipsize(Pango.EllipsizeMode.END)
         self._message_info_sender.set_hexpand(True)
-        self._message_info_bar.append(self._message_info_sender)
+        self._message_info_sender.set_visible(False)
 
         self._message_info_date = Gtk.Label(halign=Gtk.Align.START, xalign=0)
         self._message_info_date.add_css_class("message-info-date")
         self._message_info_date.set_wrap(False)
         self._message_info_date.set_ellipsize(Pango.EllipsizeMode.END)
-        self._message_info_bar.append(self._message_info_date)
+        self._message_info_date.set_visible(False)
 
         self._message_info_meta = Gtk.Label(halign=Gtk.Align.START, xalign=0)
         self._message_info_meta.add_css_class("message-info-meta")
         self._message_info_meta.set_wrap(False)
         self._message_info_meta.set_ellipsize(Pango.EllipsizeMode.END)
-        self._message_info_bar.append(self._message_info_meta)
+        self._message_info_meta.set_visible(False)
         self._message_info_bar.set_visible(False)
 
         self.webview.set_settings(wk_settings)
@@ -1139,7 +1363,10 @@ class HermodWindow(
             from .settings import build_settings_content
         except ImportError:
             from settings import build_settings_content
-        self._app_settings_content = build_settings_content(self)
+        self._settings_window = None
+        self._app_settings_content = build_settings_content(
+            self, on_close=self._close_settings_modal, scrollable=False
+        )
         self._welcome_settings_content = self._build_welcome_settings_content()
         self._welcome_settings_shell = WelcomeSettingsShell(
             self._welcome_settings_content,
@@ -1165,7 +1392,6 @@ class HermodWindow(
         )
         self._viewer_stack.add_named(self._startup_status_panel, "startup-status")
         self._viewer_stack.add_named(viewer_box, "viewer")
-        self._viewer_stack.add_named(self._app_settings_content, "settings")
         self._viewer_stack.add_named(self._compose_holder, "compose")
         self._viewer_stack.set_visible_child_name(
             "startup-status" if self._startup_status_active else "viewer"
@@ -1221,10 +1447,28 @@ class HermodWindow(
             self._welcome_settings_shell, "welcome-settings"
         )
         self._root_mode_stack.add_named(app_root, "app")
+        force_welcome = os.environ.get("HERMOD_FORCE_WELCOME") == "1"
         self._root_mode_stack.set_visible_child_name(
-            "app" if self._has_accounts() else "welcome"
+            "welcome" if force_welcome or not self._has_accounts() else "app"
         )
         self.set_content(self._root_mode_stack)
+
+        force_settings = os.environ.get("HERMOD_FORCE_SETTINGS")
+        if (
+            force_settings
+            and self._has_accounts()
+            and hasattr(self, "_show_settings_view")
+        ):
+            GLib.idle_add(self._show_settings_view)
+            pane_id = force_settings if force_settings != "1" else None
+            if pane_id and self._app_settings_content is not None:
+                content = self._app_settings_content
+                def _switch():
+                    selector = getattr(content, "select_pane", None)
+                    if callable(selector):
+                        selector(pane_id)
+                    return False
+                GLib.idle_add(_switch)
 
         self._content_paned.set_position(
             max(
@@ -1395,6 +1639,10 @@ class HermodWindow(
     def _on_current_reply_all(self):
         if self._active_email_row:
             self._on_reply_all(self._active_email_row.msg)
+
+    def _on_current_forward(self):
+        if self._active_email_row:
+            self._on_forward(self._active_email_row.msg)
 
     def _on_current_delete(self):
         if self._active_email_row:

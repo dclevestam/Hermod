@@ -17,22 +17,19 @@ FONT_SIZE_OPTIONS = [12, 14, 16, 18, 24]
 COMPOSE_CSS = """
 .compose-shell {
     background:
-        radial-gradient(circle at 50% 0%, alpha(#2e6a70, 0.04), transparent 30%),
-        linear-gradient(180deg, alpha(white, 0.015), alpha(white, 0.00)),
-        alpha(#0f1417, 0.96);
+        radial-gradient(circle at 50% 0%, alpha(@hermod_accent, 0.04), transparent 30%),
+        @hermod_bg_elevated;
     border-radius: 18px;
 }
 .compose-header-meta {
     padding: 10px 16px 8px;
-    border-bottom: 1px solid alpha(#f2f1ed, 0.08);
-    background:
-        linear-gradient(180deg, alpha(white, 0.02), alpha(white, 0.00)),
-        alpha(#11171b, 0.94);
+    border-bottom: 1px solid alpha(@hermod_fg, 0.08);
+    background: @hermod_surface_card;
 }
 .compose-header-summary {
     font-size: 0.84em;
     line-height: 1.0;
-    color: alpha(#a6adb3, 0.82);
+    color: alpha(@hermod_fg_muted, 0.82);
     min-height: 18px;
     padding-top: 0px;
     padding-bottom: 0px;
@@ -49,7 +46,7 @@ COMPOSE_CSS = """
     font-weight: 500;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: alpha(#a6adb3, 0.72);
+    color: alpha(@hermod_fg_muted, 0.72);
     margin-bottom: 4px;
 }
 .compose-field-line {
@@ -71,19 +68,17 @@ COMPOSE_CSS = """
     font-weight: 500;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: alpha(#a6adb3, 0.72);
+    color: alpha(@hermod_fg_muted, 0.72);
 }
 .compose-from-value {
     font-size: 0.9em;
-    color: #f2f1ed;
+    color: @hermod_fg;
     font-weight: 500;
 }
 .compose-operator-bar {
     padding: 8px 10px 9px;
-    background:
-        linear-gradient(180deg, alpha(white, 0.02), alpha(white, 0.00)),
-        alpha(#11171b, 0.96);
-    border-top: 1px solid alpha(#f2f1ed, 0.08);
+    background: @hermod_surface_card;
+    border-top: 1px solid alpha(@hermod_fg, 0.08);
 }
 .compose-style-dropdown {
     min-width: 86px;
@@ -103,20 +98,20 @@ COMPOSE_CSS = """
     letter-spacing: 0.01em;
     padding: 0px 14px;
     border-radius: 10px;
-    background: #2e6a70;
-    color: #f2f1ed;
-    border: 1px solid alpha(#2e6a70, 0.85);
+    background: @hermod_accent;
+    color: @hermod_accent_fg;
+    border: 1px solid alpha(@hermod_accent, 0.85);
 }
 .compose-send-btn:hover {
-    background: shade(#2e6a70, 1.08);
+    background: shade(@hermod_accent, 1.08);
 }
 .compose-send-btn:active {
-    background: shade(#2e6a70, 0.92);
+    background: shade(@hermod_accent, 0.92);
 }
 .compose-body-shell {
     background:
-        radial-gradient(circle at 50% 0%, alpha(#2e6a70, 0.03), transparent 32%),
-        alpha(#0b0f12, 0.96);
+        radial-gradient(circle at 50% 0%, alpha(@hermod_accent, 0.03), transparent 32%),
+        @hermod_bg;
 }
 .compose-bcc-toggle {
     min-height: 24px;
@@ -134,16 +129,16 @@ COMPOSE_CSS = """
     min-width: 32px;
     border-radius: 8px;
     padding: 0;
-    background: alpha(#11171b, 0.90);
-    color: alpha(#f2f1ed, 0.84);
-    border: 1px solid alpha(#f2f1ed, 0.08);
+    background: alpha(@hermod_surface_card, 0.90);
+    color: alpha(@hermod_fg, 0.84);
+    border: 1px solid alpha(@hermod_fg, 0.08);
 }
 .compose-operator-action:hover {
-    background: alpha(#141a1e, 0.96);
+    background: @hermod_bg_hover;
 }
 .compose-discard {
     background: rgba(199, 109, 99, 0.14);
-    color: rgba(242, 239, 232, 0.96);
+    color: @hermod_fg;
 }
 .compose-discard:hover {
     background: rgba(199, 109, 99, 0.22);
@@ -155,7 +150,7 @@ COMPOSE_CSS = """
 .compose-attach-chip {
     border-radius: 999px;
     padding: 3px 8px;
-    background: alpha(#f2f1ed, 0.06);
+    background: alpha(@hermod_fg, 0.06);
     font-size: 0.85em;
 }
 .compose-attach-chip-remove {
@@ -179,7 +174,7 @@ def _rgba_to_hex(rgba):
 
 
 class ComposeView(Gtk.Box):
-    def __init__(self, parent, backend, backends=None, reply_to=None, reply_all=False, on_close=None):
+    def __init__(self, parent, backend, backends=None, reply_to=None, reply_all=False, forward_from=None, on_close=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, vexpand=True, hexpand=True)
         self._parent = parent
         self._on_close = on_close
@@ -205,10 +200,17 @@ class ComposeView(Gtk.Box):
         self._snapshot_cache = None
         self._dirty_check_id = None
         self._reply_to_msg = reply_to
+        self._forward_from_msg = forward_from
         self._apply_css()
 
         is_reply = reply_to is not None
-        self._title = 'Reply' if is_reply else 'New Message'
+        is_forward = forward_from is not None
+        if is_forward:
+            self._title = 'Forward'
+        elif is_reply:
+            self._title = 'Reply'
+        else:
+            self._title = 'New Message'
 
         toolbar = Adw.ToolbarView()
         shell = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
@@ -329,6 +331,14 @@ class ComposeView(Gtk.Box):
                 subj = 'Re: ' + subj
             self.subject_entry.set_text(subj)
             self.body.grab_focus()
+        elif is_forward:
+            subj = forward_from.get('subject', '')
+            if not subj.lower().startswith('fwd:') and not subj.lower().startswith('fw:'):
+                subj = 'Fwd: ' + subj
+            self.subject_entry.set_text(subj)
+            self._prefill_forward_body(forward_from)
+            self._load_forward_attachments(forward_from)
+            self.to_entry.grab_focus()
         else:
             self.to_entry.grab_focus()
 
@@ -341,6 +351,91 @@ class ComposeView(Gtk.Box):
 
     def get_title(self):
         return self._title
+
+    def _prefill_forward_body(self, msg):
+        sender = msg.get('sender_name') or msg.get('sender_email') or ''
+        sender_email = msg.get('sender_email') or ''
+        if sender and sender_email and sender != sender_email:
+            attribution_from = f'{sender} <{sender_email}>'
+        else:
+            attribution_from = sender or sender_email or '(unknown sender)'
+        date = msg.get('received_date_display') or msg.get('received_date') or ''
+        subject = msg.get('subject', '')
+        original = msg.get('body_text') or msg.get('snippet') or ''
+        lines = [
+            '',
+            '',
+            '---------- Forwarded message ----------',
+            f'From: {attribution_from}',
+        ]
+        if date:
+            lines.append(f'Date: {date}')
+        if subject:
+            lines.append(f'Subject: {subject}')
+        lines.append('')
+        for line in str(original).splitlines() or ['']:
+            lines.append(f'> {line}' if line else '>')
+        text = '\n'.join(lines) + '\n'
+        self._buffer.set_text(text)
+        start = self._buffer.get_start_iter()
+        self._buffer.place_cursor(start)
+
+    def _load_forward_attachments(self, msg):
+        attachments = msg.get('attachments') or []
+        if not attachments:
+            return
+        backend = msg.get('backend_obj') or self.backend
+        if backend is None:
+            return
+        uid = msg.get('uid')
+        folder = msg.get('folder')
+
+        def fetch(att):
+            data = b''
+            try:
+                if hasattr(backend, 'fetch_attachment_data') and att.get('attachment_id'):
+                    data = backend.fetch_attachment_data(uid, att, folder) or b''
+                if not data and hasattr(backend, 'fetch_body') and uid is not None:
+                    try:
+                        _text, _html, fetched = backend.fetch_body(uid, folder)
+                    except Exception:
+                        fetched = []
+                    for f in fetched or []:
+                        matches_id = (
+                            att.get('attachment_id')
+                            and f.get('attachment_id') == att.get('attachment_id')
+                        )
+                        matches_name = (
+                            f.get('name') == att.get('name')
+                            and f.get('content_type') == att.get('content_type')
+                        )
+                        if matches_id or matches_name:
+                            data = f.get('data', b'') or b''
+                            break
+            except Exception:
+                data = b''
+            if not data:
+                return
+            GLib.idle_add(self._append_forward_attachment, att, data)
+
+        for att in attachments:
+            if not att.get('name'):
+                continue
+            threading.Thread(target=fetch, args=(att,), daemon=True).start()
+
+    def _append_forward_attachment(self, att, data):
+        name = att.get('name') or 'attachment'
+        content_type = att.get('content_type') or 'application/octet-stream'
+        size = int(att.get('size') or len(data) or 0)
+        self._attachments.append({
+            'name': name,
+            'data': data,
+            'content_type': content_type,
+            'size': size,
+        })
+        self._add_attachment_chip(name, len(self._attachments) - 1)
+        self._note_compose_change()
+        return False
 
     def _build_style_controls(self):
         controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)

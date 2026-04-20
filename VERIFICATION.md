@@ -83,8 +83,9 @@ Use this checklist in a live GTK session.
 - [ ] Sidebar unread counts appear only after the startup screen closes
 
 ## Welcome / onboarding
-- [ ] With `HERMOD_FORCE_WELCOME=1`, the welcome screen renders with its own titlebar ("H HERMOD" brand) and flat left photo panel
-- [ ] No banding visible on the photo panel, search shell, reading pane, or sidebar
+- [ ] With `HERMOD_FORCE_WELCOME=1`, the welcome screen renders with its own titlebar ("H HERMOD" brand) and the forest/aurora photo panel on the left
+- [ ] The photo panel shows a soft teal glow toward the top-left fading into deep forest green at the bottom, with no visible stepping/banding
+- [ ] No banding visible on the search shell, reading pane, or sidebar
 - [ ] Provider tile grid shows Gmail, Proton, Outlook, Other (IMAP/SMTP) as row tiles with colored letter glyphs
 - [ ] "Show all 8 providers" link opens the More Providers modal without a double titlebar
 - [ ] More Providers modal lists all eight providers and has an ADD ACCOUNT eyebrow + single close button

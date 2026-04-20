@@ -13,12 +13,15 @@ try:
     from .compose import ComposeView
     from .settings import get_settings
     from .widgets import (
-        EmailRow, AccountHeaderRow, FolderRow, LoadMoreListItem, LoadMoreRow,
-        MessageListItem, MoreFoldersRow, UnifiedRow,
+        DayGroupListItem, DayGroupRow, EmailRow, AccountHeaderRow, FolderRow,
+        LoadMoreListItem, LoadMoreRow, MessageListItem, MoreFoldersRow,
+        SidebarSectionRow, UnifiedRow,
     )
     from .snapshot_cache import snapshot_result_applicable
     from .utils import (
         _UNIFIED, _UNIFIED_TRASH, _UNIFIED_SPAM,
+        _UNIFIED_FLAGGED, _UNIFIED_DRAFTS, _UNIFIED_SENT, _UNIFIED_ARCHIVE,
+        _day_group_key, _day_group_label,
         _perf_counter, _log_perf,
     )
     from .window_constants import (
@@ -29,12 +32,15 @@ except ImportError:
     from compose import ComposeView
     from settings import get_settings
     from widgets import (
-        EmailRow, AccountHeaderRow, FolderRow, LoadMoreListItem, LoadMoreRow,
-        MessageListItem, MoreFoldersRow, UnifiedRow,
+        DayGroupListItem, DayGroupRow, EmailRow, AccountHeaderRow, FolderRow,
+        LoadMoreListItem, LoadMoreRow, MessageListItem, MoreFoldersRow,
+        SidebarSectionRow, UnifiedRow,
     )
     from snapshot_cache import snapshot_result_applicable
     from utils import (
         _UNIFIED, _UNIFIED_TRASH, _UNIFIED_SPAM,
+        _UNIFIED_FLAGGED, _UNIFIED_DRAFTS, _UNIFIED_SENT, _UNIFIED_ARCHIVE,
+        _day_group_key, _day_group_label,
         _perf_counter, _log_perf,
     )
     from window_constants import (
@@ -169,15 +175,49 @@ class MessageListMixin:
     def _populate_sidebar(self):
         s = get_settings()
 
+        self.folder_list.append(SidebarSectionRow('MAILBOXES'))
+
         self._all_inboxes_row = UnifiedRow(_UNIFIED, 'All Inboxes', 'mail-inbox-symbolic')
         self._folder_rows[(_UNIFIED, _UNIFIED)] = self._all_inboxes_row
         self.folder_list.append(self._all_inboxes_row)
 
+        self._flagged_row = UnifiedRow(_UNIFIED_FLAGGED, 'Flagged', 'starred-symbolic')
+        self._folder_rows[(_UNIFIED_FLAGGED, _UNIFIED_FLAGGED)] = self._flagged_row
+        self.folder_list.append(self._flagged_row)
+
+        self._drafts_row = UnifiedRow(_UNIFIED_DRAFTS, 'Drafts', 'document-edit-symbolic')
+        self._folder_rows[(_UNIFIED_DRAFTS, _UNIFIED_DRAFTS)] = self._drafts_row
+        self.folder_list.append(self._drafts_row)
+
+        self._sent_row = UnifiedRow(_UNIFIED_SENT, 'Sent', 'mail-send-symbolic')
+        self._folder_rows[(_UNIFIED_SENT, _UNIFIED_SENT)] = self._sent_row
+        self.folder_list.append(self._sent_row)
+
+        self._archive_row = UnifiedRow(_UNIFIED_ARCHIVE, 'Archive', 'mail-archive-symbolic')
+        self._folder_rows[(_UNIFIED_ARCHIVE, _UNIFIED_ARCHIVE)] = self._archive_row
+        self.folder_list.append(self._archive_row)
+
+        if s.get('show_unified_trash'):
+            trash_row = UnifiedRow(_UNIFIED_TRASH, 'Trash', 'user-trash-full-symbolic')
+            self._folder_rows[(_UNIFIED_TRASH, _UNIFIED_TRASH)] = trash_row
+            self.folder_list.append(trash_row)
+        if s.get('show_unified_spam'):
+            spam_row = UnifiedRow(_UNIFIED_SPAM, 'All Spam', 'mail-mark-junk-symbolic')
+            self._folder_rows[(_UNIFIED_SPAM, _UNIFIED_SPAM)] = spam_row
+            self.folder_list.append(spam_row)
+
+        if self.backends:
+            self.folder_list.append(SidebarSectionRow('ACCOUNTS'))
+
+        expand_by_default = len(self.backends) == 1
         for backend in self.backends:
             accent_class = self._account_class_for(backend.identity)
             header_row = AccountHeaderRow(backend.identity, accent_class=accent_class)
             header_row.set_label(getattr(backend, 'presentation_name', '') or backend.identity)
             header_row.backend = backend
+            if expand_by_default:
+                header_row.expanded = True
+                header_row.chevron.set_from_icon_name('pan-up-symbolic')
             self.folder_list.append(header_row)
 
             folder_rows = []
@@ -186,14 +226,14 @@ class MessageListMixin:
                 is_last = (i == len(folders_list) - 1)
                 row = FolderRow(folder_id, name, icon, indent=True, accent_class=accent_class, is_last=is_last)
                 row.backend = backend
-                row.set_visible(False)
+                row.set_visible(expand_by_default)
                 self._folder_rows[(backend.identity, folder_id)] = row
                 self.folder_list.append(row)
                 folder_rows.append(row)
 
             more_row = MoreFoldersRow(accent_class=accent_class)
             more_row.backend = backend
-            more_row.set_visible(False)
+            more_row.set_visible(expand_by_default)
             self.folder_list.append(more_row)
 
             self._account_state[backend.identity] = {
@@ -201,19 +241,9 @@ class MessageListMixin:
                 'folders': folder_rows,
                 'more_row': more_row,
                 'extra': [],
-                'expanded': False,
+                'expanded': expand_by_default,
             }
             self._render_account_health(backend.identity)
-
-        if s.get('show_unified_trash') or s.get('show_unified_spam'):
-            if s.get('show_unified_trash'):
-                trash_row = UnifiedRow(_UNIFIED_TRASH, 'All Trash', 'user-trash-full-symbolic')
-                self._folder_rows[(_UNIFIED_TRASH, _UNIFIED_TRASH)] = trash_row
-                self.folder_list.append(trash_row)
-            if s.get('show_unified_spam'):
-                spam_row = UnifiedRow(_UNIFIED_SPAM, 'All Spam', 'mail-mark-junk-symbolic')
-                self._folder_rows[(_UNIFIED_SPAM, _UNIFIED_SPAM)] = spam_row
-                self.folder_list.append(spam_row)
 
     def _setup_shortcuts(self):
         key_ctrl = Gtk.EventControllerKey()
@@ -304,7 +334,7 @@ class MessageListMixin:
         visible = state['expanded']
         state['header'].expanded = visible
         state['header'].chevron.set_from_icon_name(
-            'pan-down-symbolic' if visible else 'pan-end-symbolic'
+            'pan-up-symbolic' if visible else 'pan-down-symbolic'
         )
         for row in state['folders']:
             row.set_visible(visible)
@@ -314,33 +344,73 @@ class MessageListMixin:
             row.set_visible(extra_visible)
 
     def _toggle_more_folders(self, more_row):
+        import os, sys
+        debug = os.environ.get('HERMOD_DEBUG_FOLDERS')
         identity = more_row.backend.identity
-        state = self._account_state[identity]
+        if debug:
+            print(f"[folders] _toggle_more_folders identity={identity} loaded={more_row.loaded} expanded={getattr(more_row, 'expanded', None)}", file=sys.stderr, flush=True)
+        state = self._account_state.get(identity)
+        if state is None:
+            if debug:
+                print(f"[folders] _toggle_more_folders ABORT: no state for {identity}", file=sys.stderr, flush=True)
+            return
         if not more_row.loaded:
             if more_row.spinner.get_spinning():
                 return
             more_row.spinner.set_spinning(True)
+            done_event = threading.Event()
+            result_holder = {'folders': None, 'error': None}
 
             def fetch():
                 try:
-                    folders = more_row.backend.fetch_all_folders()
-                    GLib.idle_add(self._on_extra_folders_loaded, more_row, folders)
-                except Exception:
-                    GLib.idle_add(lambda: more_row.spinner.set_spinning(False))
+                    result_holder['folders'] = more_row.backend.fetch_all_folders()
+                    if debug:
+                        print(f"[folders] fetch_all_folders returned {len(result_holder['folders'] or [])} folders for {identity}", file=sys.stderr, flush=True)
+                except Exception as exc:
+                    result_holder['error'] = exc
+                    if debug:
+                        print(f"[folders] fetch_all_folders EXCEPTION: {exc!r}", file=sys.stderr, flush=True)
+                finally:
+                    done_event.set()
 
             threading.Thread(target=fetch, daemon=True).start()
+
+            def watchdog():
+                # Give the backend ~12s; if it hasn't returned, clear the spinner
+                # and surface a toast so the user isn't staring at a silent hang.
+                if not done_event.wait(12.0):
+                    if debug:
+                        print(f"[folders] fetch_all_folders TIMEOUT for {identity}", file=sys.stderr, flush=True)
+                    GLib.idle_add(lambda: (more_row.spinner.set_spinning(False), self._show_toast and self._show_toast('Loading folders is taking too long.')))
+                    return
+                if result_holder['error'] is not None:
+                    GLib.idle_add(lambda: (more_row.spinner.set_spinning(False), self._show_toast and self._show_toast('Could not load extra folders.')))
+                    return
+                GLib.idle_add(self._on_extra_folders_loaded, more_row, result_holder['folders'])
+
+            threading.Thread(target=watchdog, daemon=True).start()
             return
         more_row.set_expanded(not more_row.expanded)
         for row in state['extra']:
             row.set_visible(more_row.expanded)
 
     def _on_extra_folders_loaded(self, more_row, folders):
+        import os, sys
+        debug = os.environ.get('HERMOD_DEBUG_FOLDERS')
         identity = more_row.backend.identity
-        state = self._account_state[identity]
+        state = self._account_state.get(identity)
         more_row.spinner.set_spinning(False)
+        if state is None:
+            if debug:
+                print(f"[folders] _on_extra_folders_loaded ABORT: no state for {identity}", file=sys.stderr, flush=True)
+            return
         if not folders:
+            if debug:
+                print(f"[folders] _on_extra_folders_loaded: no extra folders for {identity}, hiding More row", file=sys.stderr, flush=True)
             more_row.set_visible(False)
             return
+        if debug:
+            print(f"[folders] _on_extra_folders_loaded: inserting {len(folders)} extra folders for {identity}", file=sys.stderr, flush=True)
         more_row.loaded = True
         more_row.set_expanded(True)
         insert_pos = more_row.get_index() + 1
@@ -357,13 +427,21 @@ class MessageListMixin:
             insert_pos += 1
             new_rows.append(row)
         state['extra'] = new_rows
+        if debug:
+            print(f"[folders] _on_extra_folders_loaded: DONE inserting {len(new_rows)} rows", file=sys.stderr, flush=True)
 
     def _setup_email_list_item(self, _factory, list_item):
         list_item.connect('notify::selected', self._on_email_list_item_selected_changed)
 
     def _bind_email_list_item(self, _factory, list_item):
         item = list_item.get_item()
-        if isinstance(item, MessageListItem):
+        if isinstance(item, DayGroupListItem):
+            child = DayGroupRow(item.label)
+            list_item.set_selectable(False)
+            list_item.set_activatable(False)
+        elif isinstance(item, MessageListItem):
+            list_item.set_selectable(True)
+            list_item.set_activatable(True)
             child = EmailRow(
                 item.msg,
                 self._on_reply,
@@ -372,6 +450,8 @@ class MessageListMixin:
                 accent_class=item.accent_class,
             )
         elif isinstance(item, LoadMoreListItem):
+            list_item.set_selectable(False)
+            list_item.set_activatable(True)
             child = LoadMoreRow(item.label, self._on_load_more_requested)
         else:
             child = Gtk.Box()
@@ -401,6 +481,8 @@ class MessageListMixin:
 
     def _on_email_list_activated(self, _list_view, position):
         item = self._visible_message_item(position)
+        if isinstance(item, DayGroupListItem):
+            return
         if isinstance(item, LoadMoreListItem):
             self._on_load_more_requested()
         elif isinstance(item, MessageListItem):
@@ -430,10 +512,25 @@ class MessageListMixin:
             self.current_folder = row.folder_id
             self._set_context_title(row.folder_name, '')
             if row.folder_id == _UNIFIED:
+                self.set_filter_mode('unified')
                 self._load_unified_inbox()
+            elif row.folder_id == _UNIFIED_FLAGGED:
+                self.set_filter_mode('flagged')
+                self._load_unified_inbox()
+            elif row.folder_id == _UNIFIED_DRAFTS:
+                self.set_filter_mode('unified')
+                self._load_unified_folder('Drafts')
+            elif row.folder_id == _UNIFIED_SENT:
+                self.set_filter_mode('unified')
+                self._load_unified_folder('Sent')
+            elif row.folder_id == _UNIFIED_ARCHIVE:
+                self.set_filter_mode('unified')
+                self._load_unified_folder('Archive')
             elif row.folder_id == _UNIFIED_TRASH:
+                self.set_filter_mode('unified')
                 self._load_unified_folder('Trash')
             elif row.folder_id == _UNIFIED_SPAM:
+                self.set_filter_mode('unified')
                 self._load_unified_folder('Spam')
         elif isinstance(row, FolderRow):
             self.current_backend = row.backend
@@ -457,6 +554,11 @@ class MessageListMixin:
 
     def _commit_email_selection(self, row):
         self._startup_autoselect_pending = False
+        # Explicit user selection always dismisses the startup overlay —
+        # otherwise the reader body would render into a hidden stack child
+        # while the "Starting mail" panel keeps covering the viewer.
+        if getattr(self, '_startup_status_active', False) and hasattr(self, '_clear_startup_status_view'):
+            self._clear_startup_status_view()
         prev = getattr(self, '_active_email_row', None)
         if prev is not None and prev is not row and prev.widget is not None:
             prev.widget.set_selected(False)
@@ -515,6 +617,14 @@ class MessageListMixin:
         preserve_key = self._selected_message_key()
         if self.current_folder == _UNIFIED:
             self._load_unified_inbox(preserve_selected_key=preserve_key, sync_complete_callback=self._finish_sync)
+        elif self.current_folder == _UNIFIED_FLAGGED:
+            self._load_unified_inbox(preserve_selected_key=preserve_key, sync_complete_callback=self._finish_sync)
+        elif self.current_folder == _UNIFIED_DRAFTS:
+            self._load_unified_folder('Drafts', preserve_selected_key=preserve_key, sync_complete_callback=self._finish_sync)
+        elif self.current_folder == _UNIFIED_SENT:
+            self._load_unified_folder('Sent', preserve_selected_key=preserve_key, sync_complete_callback=self._finish_sync)
+        elif self.current_folder == _UNIFIED_ARCHIVE:
+            self._load_unified_folder('Archive', preserve_selected_key=preserve_key, sync_complete_callback=self._finish_sync)
         elif self.current_folder == _UNIFIED_TRASH:
             self._load_unified_folder('Trash', preserve_selected_key=preserve_key, sync_complete_callback=self._finish_sync)
         elif self.current_folder == _UNIFIED_SPAM:
@@ -531,12 +641,11 @@ class MessageListMixin:
             self._present_compose(ComposeView(self, backend, self.backends, on_close=self._close_inline_compose))
 
     def _on_settings(self, _=None):
-        if self._viewer_stack.get_visible_child_name() == 'settings':
-            self._show_mail_view()
-        elif self._compose_active():
-            self._request_leave_compose(self._show_mail_view)
-        else:
-            self._show_settings_view()
+        win = getattr(self, '_settings_window', None)
+        if win is not None and win.get_visible():
+            self._close_settings_modal()
+            return
+        self._show_settings_view()
 
     def _on_reply(self, msg):
         if self._compose_active():
@@ -559,6 +668,21 @@ class MessageListMixin:
                     self.backends,
                     reply_to=msg,
                     reply_all=True,
+                    on_close=self._close_inline_compose,
+                )
+            )
+
+    def _on_forward(self, msg):
+        if self._compose_active():
+            return
+        backend = msg.get('backend_obj') or self.current_backend
+        if backend:
+            self._present_compose(
+                ComposeView(
+                    self,
+                    backend,
+                    self.backends,
+                    forward_from=msg,
                     on_close=self._close_inline_compose,
                 )
             )
@@ -586,24 +710,15 @@ class MessageListMixin:
         if self._viewer_stack.get_visible_child_name() != 'settings':
             self.title_widget.set_title(self._content_title)
             self.title_widget.set_subtitle('No Network Connection' if self._network_offline else self._content_subtitle)
+        self._refresh_message_meta()
 
     def _show_settings_view(self):
         if hasattr(self, '_has_accounts') and not self._has_accounts():
             if hasattr(self, '_show_welcome_settings_view'):
                 self._show_welcome_settings_view()
             return
-
-        def _show():
-            self._viewer_stack.set_visible_child_name('settings')
-            self._settings_btn.set_icon_name('go-previous-symbolic')
-            self._settings_btn.set_tooltip_text('Back')
-            self.title_widget.set_title('Settings')
-            self.title_widget.set_subtitle('')
-
-        if self._compose_active():
-            self._request_leave_compose(_show)
-            return
-        _show()
+        if hasattr(self, '_present_settings_modal'):
+            self._present_settings_modal()
 
     def _show_mail_view(self):
         if hasattr(self, '_has_accounts') and not self._has_accounts():
@@ -615,7 +730,7 @@ class MessageListMixin:
         else:
             self._clear_startup_status_view()
             self._viewer_stack.set_visible_child_name('viewer')
-        self._settings_btn.set_icon_name('open-menu-symbolic')
+        self._settings_btn.set_icon_name('emblem-system-symbolic')
         self._settings_btn.set_tooltip_text('Settings')
         self.title_widget.set_title(self._content_title)
         self.title_widget.set_subtitle('No Network Connection' if self._network_offline else self._content_subtitle)
@@ -686,9 +801,24 @@ class MessageListMixin:
         self._update_message_empty_state()
 
     def _email_filter(self, item, *_args):
+        if isinstance(item, DayGroupListItem):
+            followers = getattr(item, 'followers', None) or []
+            if not followers:
+                return True
+            return any(self._message_passes_filters(follower.msg) for follower in followers)
+        if isinstance(item, LoadMoreListItem):
+            return True
         if not isinstance(item, MessageListItem):
             return True
-        msg = item.msg
+        return self._message_passes_filters(item.msg)
+
+    def _message_passes_filters(self, msg):
+        mode = getattr(self, '_filter_mode', 'unified')
+        if mode == 'unread' and msg.get('is_read', True):
+            return False
+        if mode == 'flagged' and not msg.get('is_flagged', False):
+            return False
+        # Legacy toggle preserved for tests / external callers.
         if getattr(self, '_show_unread_only', False) and msg.get('is_read', True):
             return False
         return self._message_matches_search(msg)
@@ -737,6 +867,11 @@ class MessageListMixin:
             if row:
                 self._on_reply_all(row.msg)
             return True
+        if key == 'f':
+            row = self._selected_message_row()
+            if row:
+                self._on_forward(row.msg)
+            return True
         if key == 'd':
             row = self._selected_message_row()
             if row:
@@ -760,6 +895,15 @@ class MessageListMixin:
             next_index = 0
         else:
             next_index = max(0, min(count - 1, current_index + delta))
+        # Skip over day-group headers so keyboard navigation lands on a message.
+        step = 1 if delta >= 0 else -1
+        probe = next_index
+        while 0 <= probe < count and isinstance(
+            self._visible_message_item(probe), DayGroupListItem
+        ):
+            probe += step
+        if 0 <= probe < count:
+            next_index = probe
         self._set_selected_visible_index(next_index, grab_focus=True)
         item = self._visible_message_item(next_index)
         if isinstance(item, MessageListItem):
@@ -777,9 +921,42 @@ class MessageListMixin:
         self._show_unread_only = active
         if active:
             self._unread_filter_had_results = False
+        # Keep the segmented filter in sync when toggled via the legacy API.
+        desired_mode = 'unread' if active else 'unified'
+        if getattr(self, '_filter_mode', 'unified') != desired_mode:
+            self._filter_mode = desired_mode
+            self._sync_filter_segmented_buttons()
         self._sync_unread_toggle_button()
         self._message_filter.changed(Gtk.FilterChange.DIFFERENT)
         self._update_message_empty_state()
+        self._refresh_message_meta()
+
+    def set_filter_mode(self, mode):
+        """Select the Unified / Unread / Flagged filter segment."""
+        mode = mode if mode in ('unified', 'unread', 'flagged') else 'unified'
+        if getattr(self, '_filter_mode', 'unified') == mode:
+            return
+        self._filter_mode = mode
+        self._show_unread_only = (mode == 'unread')
+        if mode == 'unread':
+            self._unread_filter_had_results = False
+        self._sync_filter_segmented_buttons()
+        self._sync_unread_toggle_button()
+        self._message_filter.changed(Gtk.FilterChange.DIFFERENT)
+        self._update_message_empty_state()
+        self._refresh_message_meta()
+
+    def _sync_filter_segmented_buttons(self):
+        buttons = getattr(self, '_filter_segmented_buttons', None) or {}
+        mode = getattr(self, '_filter_mode', 'unified')
+        for key, btn in buttons.items():
+            is_active = (key == mode)
+            if btn.get_active() != is_active:
+                btn.set_active(is_active)
+            if is_active:
+                btn.add_css_class('selected')
+            else:
+                btn.remove_css_class('selected')
 
     def _sync_unread_toggle_button(self):
         button = getattr(self, '_unread_toggle_btn', None)
@@ -805,6 +982,39 @@ class MessageListMixin:
                 continue
             count += 1
         return count
+
+    def _message_view_counts(self):
+        total = 0
+        unread = 0
+        for index in range(self._message_store.get_n_items()):
+            item = self._message_store.get_item(index)
+            if not isinstance(item, MessageListItem):
+                continue
+            total += 1
+            if not item.msg.get('is_read', True):
+                unread += 1
+        return total, unread
+
+    def _refresh_message_meta(self):
+        eyebrow_lbl = getattr(self, '_message_col_eyebrow', None)
+        meta_lbl = getattr(self, '_message_col_meta', None)
+        if eyebrow_lbl is None or meta_lbl is None:
+            return
+        title = (getattr(self, '_content_title', '') or '').strip()
+        if getattr(self, '_content_subtitle', ''):
+            eyebrow = title or 'MAILBOX'
+        else:
+            eyebrow = title or 'ALL INBOXES'
+        eyebrow_lbl.set_label(eyebrow.upper())
+        total, unread = self._message_view_counts()
+        if total == 0:
+            meta_lbl.set_label('No messages')
+        else:
+            noun = 'message' if total == 1 else 'messages'
+            if unread:
+                meta_lbl.set_label(f'{total} {noun} · {unread} unread')
+            else:
+                meta_lbl.set_label(f'{total} {noun}')
 
     def _update_message_empty_state(self):
         if not hasattr(self, '_filtered_message_model') or not hasattr(self, '_empty_page') or not hasattr(self, '_list_stack') or not hasattr(self, '_message_store'):
@@ -850,11 +1060,20 @@ class MessageListMixin:
     def _build_message_items(self, msgs, has_more=False):
         items = []
         sort_order = getattr(self, '_sort_order', 'newest')
+        current_group = None
         for msg in msgs:
             accent_class = self._account_class_for(
                 (msg.get('account') or (msg.get('backend_obj').identity if msg.get('backend_obj') else ''))
             )
-            items.append(MessageListItem(msg, accent_class=accent_class))
+            msg_item = MessageListItem(msg, accent_class=accent_class)
+            group_key = _day_group_key(msg.get('date'))
+            if group_key is not None and group_key != (current_group.date_key if current_group else None):
+                label = _day_group_label(msg.get('date')) or ''
+                current_group = DayGroupListItem(label, date_key=group_key)
+                items.append(current_group)
+            if current_group is not None:
+                current_group.followers.append(msg_item)
+            items.append(msg_item)
         if has_more and sort_order != 'oldest':
             load_more = LoadMoreListItem()
             items.append(load_more)
@@ -1012,6 +1231,7 @@ class MessageListMixin:
         if should_commit_selected and self._active_email_row is not None:
             self._commit_email_selection(self._active_email_row)
         self._update_message_empty_state()
+        self._refresh_message_meta()
         _log_perf(
             'set messages',
             f'{len(msgs)} msgs -> {len(ordered_msgs)} rows + {1 if has_more else 0} pager, {len(groups)} thread groups [{source}]',

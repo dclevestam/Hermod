@@ -79,22 +79,12 @@ window, dialog, popover, .app-window {
     100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1.00); }
 }
 
-.unread-dot {
-    background-color: @accent_color;
-    border-radius: 999px;
-    min-width: 8px;
-    min-height: 8px;
-    margin-left: 0;
-    margin-right: 8px;
-    box-shadow: 0 0 0 2px alpha(@accent_color, 0.18);
-}
-.unread-dot.hidden {
-    opacity: 0;
-    box-shadow: none;
-}
 .email-row {
     border-bottom: 1px solid alpha(@borders, 0.4);
     transition: background-color 0.2s ease;
+}
+.message-list-view .email-row.unread {
+    box-shadow: inset 3px 0 0 0 #2e6a70;
 }
 /* Suppress GTK4/Adwaita native row-level hover and selection — we style the child instead. */
 .message-list-view row,
@@ -106,7 +96,7 @@ window, dialog, popover, .app-window {
 }
 /* Hover: barely-there background shift, only on unselected rows */
 .message-list-view row:hover .email-row:not(.selected) {
-    background-color: alpha(#f2f1ed, 0.03);
+    background-color: alpha(@hermod_fg, 0.03);
 }
 /* Selected: left accent bar + subtle tinted background */
 .message-list-view .email-row.selected {
@@ -120,16 +110,16 @@ window, dialog, popover, .app-window {
     background-color: rgba(46, 106, 112, 0.16);
 }
 .thread-indicator {
-    background-color: alpha(#f2f1ed, 0.06);
+    background-color: alpha(@hermod_fg, 0.06);
     border-radius: 999px;
     padding: 0px 6px;
     min-height: 18px;
 }
 .thread-indicator image {
-    color: alpha(#a6adb3, 0.74);
+    color: alpha(@hermod_fg_muted, 0.74);
 }
 .thread-badge {
-    color: alpha(#a6adb3, 0.80);
+    color: alpha(@hermod_fg_muted, 0.80);
     font-size: 0.68em;
     font-weight: 700;
     margin-left: 2px;
@@ -146,15 +136,15 @@ window, dialog, popover, .app-window {
     margin-right: 4px;
 }
 .folder-count-dim {
-    color: alpha(#a6adb3, 0.26);
+    color: alpha(@hermod_fg_muted, 0.26);
 }
 .all-inboxes-row {
-    background-color: alpha(#f2f1ed, 0.04);
+    background-color: alpha(@hermod_fg, 0.04);
     border-radius: 8px;
     font-weight: 700;
 }
 .all-inboxes-row .folder-count {
-    color: alpha(#a6adb3, 0.74);
+    color: alpha(@hermod_fg_muted, 0.74);
     font-weight: 800;
 }
 .navigation-sidebar row:selected .folder-count {
@@ -223,19 +213,36 @@ window, dialog, popover, .app-window {
     font-weight: 600;
     padding: 3px 16px;
     border-radius: 999px;
-    color: alpha(#a6adb3, 0.78);
+    color: alpha(@hermod_fg_muted, 0.78);
     background-color: alpha(#11171b, 0.88);
-    border: 1px solid alpha(#f2f1ed, 0.10);
+    border: 1px solid alpha(@hermod_fg, 0.10);
 }
 .load-more-row button:hover {
     background-color: alpha(#141a1e, 0.96);
-    color: #f2f1ed;
-    border-color: alpha(#f2f1ed, 0.18);
+    color: @hermod_fg;
+    border-color: alpha(@hermod_fg, 0.18);
 }
 .account-accent-strip {
     border-radius: 999px;
     min-width: 4px;
     min-height: 18px;
+}
+.account-status-dot {
+    border-radius: 999px;
+    min-width: 8px;
+    min-height: 8px;
+    background-color: alpha(@accent_bg_color, 0.95);
+    box-shadow: 0 0 0 2px alpha(@accent_bg_color, 0.18);
+    margin-right: 4px;
+    margin-left: 2px;
+}
+.account-header-chevron {
+    color: alpha(@window_fg_color, 0.42);
+    -gtk-icon-size: 12px;
+    margin-left: 2px;
+}
+.account-header-row:hover .account-header-chevron {
+    color: alpha(@window_fg_color, 0.68);
 }
 .account-accent-label {
     font-size: 0.88em;
@@ -250,55 +257,116 @@ window, dialog, popover, .app-window {
 .navigation-sidebar row:hover {
     background-color: alpha(@window_fg_color, 0.04);
 }
+.message-column-header {
+    border-bottom: 1px solid alpha(@hermod_fg, 0.06);
+}
+.message-column-eyebrow {
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 0.72em;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: alpha(@window_fg_color, 0.58);
+}
+.message-column-meta {
+    font-family: "Geist", -apple-system, system-ui, sans-serif;
+    font-size: 0.86em;
+    color: alpha(@window_fg_color, 0.52);
+}
+.message-filter-segmented {
+    background-color: alpha(#11171b, 0.86);
+    border: 1px solid alpha(@hermod_fg, 0.08);
+    border-radius: 10px;
+    padding: 2px;
+}
+.message-filter-segmented .message-filter-chip {
+    min-height: 22px;
+    padding: 2px 10px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: alpha(@window_fg_color, 0.62);
+    font-family: "Geist", -apple-system, system-ui, sans-serif;
+    font-size: 0.82em;
+    font-weight: 500;
+    box-shadow: none;
+}
+.message-filter-segmented .message-filter-chip:hover {
+    color: alpha(@window_fg_color, 0.92);
+    background-color: alpha(@hermod_fg, 0.04);
+}
+.message-filter-segmented .message-filter-chip.selected,
+.message-filter-segmented .message-filter-chip:checked {
+    color: @hermod_fg;
+    background-color: alpha(@accent_color, 0.22);
+    box-shadow: inset 0 0 0 1px alpha(@accent_color, 0.34);
+}
+.day-group-row {
+    background: transparent;
+}
+.day-group-row:hover,
+.day-group-row:selected,
+.day-group-row:active {
+    background: transparent;
+    box-shadow: none;
+}
+.day-group-label {
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 0.72em;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: alpha(@window_fg_color, 0.48);
+}
 .search-bar-box {
-    border-bottom: 1px solid alpha(#f2f1ed, 0.08);
+    border-bottom: 1px solid alpha(@hermod_fg, 0.08);
     padding: 6px 8px 6px;
 }
 .search-entry-shell {
     background-color: alpha(#11171b, 0.94);
-    border: 1px solid alpha(#f2f1ed, 0.10);
+    border: 1px solid alpha(@hermod_fg, 0.10);
     border-radius: 13px;
     min-height: 34px;
 }
 .sorting-toolbar {
     padding: 4px 8px 8px;
-    border-bottom: 1px solid alpha(#f2f1ed, 0.08);
+    border-bottom: 1px solid alpha(@hermod_fg, 0.08);
 }
 .sorting-toggle {
     min-width: 26px;
     min-height: 26px;
     padding: 3px;
     border-radius: 8px;
-    color: alpha(#a6adb3, 0.80);
+    color: alpha(@hermod_fg_muted, 0.80);
     background-color: alpha(#11171b, 0.90);
-    border: 1px solid alpha(#f2f1ed, 0.06);
+    border: 1px solid alpha(@hermod_fg, 0.06);
 }
 .sorting-toggle image {
     color: inherit;
 }
 .sorting-toggle:hover {
     background-color: alpha(#141a1e, 0.96);
-    color: #f2f1ed;
+    color: @hermod_fg;
 }
 .sorting-toggle.active {
     background-color: alpha(#141a1e, 0.98);
-    color: #f2f1ed;
+    color: @hermod_fg;
     border-color: alpha(#2e6a70, 0.26);
 }
 .load-older-toolbar {
     min-height: 26px;
     padding: 0px 10px;
     border-radius: 999px;
-    color: alpha(#a6adb3, 0.82);
+    color: alpha(@hermod_fg_muted, 0.82);
     background-color: alpha(#11171b, 0.88);
-    border: 1px solid alpha(#f2f1ed, 0.10);
+    border: 1px solid alpha(@hermod_fg, 0.10);
     font-size: 0.82em;
     font-weight: 700;
 }
 .load-older-toolbar:hover {
     background-color: alpha(#141a1e, 0.96);
-    color: #f2f1ed;
-    border-color: alpha(#f2f1ed, 0.18);
+    color: @hermod_fg;
+    border-color: alpha(@hermod_fg, 0.18);
 }
 .load-older-toolbar:disabled {
     opacity: 0.88;
@@ -308,13 +376,13 @@ window, dialog, popover, .app-window {
 }
 .startup-status-card {
     border-radius: 28px;
-    border: 1px solid alpha(#f2f1ed, 0.08);
+    border: 1px solid alpha(@hermod_fg, 0.08);
     background-color: alpha(#11171b, 0.95);
     box-shadow: 0 18px 34px alpha(@window_fg_color, 0.12);
 }
 .startup-status-hero {
     padding: 22px 22px 16px;
-    border-bottom: 1px solid alpha(#f2f1ed, 0.08);
+    border-bottom: 1px solid alpha(@hermod_fg, 0.08);
 }
 .startup-status-orb {
     min-width: 78px;
@@ -332,12 +400,12 @@ window, dialog, popover, .app-window {
     letter-spacing: -0.03em;
 }
 .startup-status-subtitle {
-    color: alpha(#a6adb3, 0.80);
+    color: alpha(@hermod_fg_muted, 0.80);
     font-size: 0.90em;
     line-height: 1.35;
 }
 .startup-status-mood {
-    color: alpha(#a6adb3, 0.70);
+    color: alpha(@hermod_fg_muted, 0.70);
     font-size: 0.83em;
     font-weight: 700;
     letter-spacing: 0.02em;
@@ -348,20 +416,20 @@ window, dialog, popover, .app-window {
 }
 .startup-status-progress trough {
     border-radius: 999px;
-    background-color: alpha(#f2f1ed, 0.08);
+    background-color: alpha(@hermod_fg, 0.08);
 }
 .startup-status-progress progress {
     border-radius: 999px;
     background-image: linear-gradient(90deg, alpha(#2e6a70, 0.95), alpha(#24362e, 0.82));
 }
 .startup-status-summary {
-    color: #f2f1ed;
+    color: @hermod_fg;
     font-size: 0.82em;
     font-weight: 800;
     padding: 5px 11px;
     border-radius: 999px;
     background-color: alpha(#11171b, 0.92);
-    border: 1px solid alpha(#f2f1ed, 0.08);
+    border: 1px solid alpha(@hermod_fg, 0.08);
 }
 .startup-status-list {
     background: transparent;
@@ -371,7 +439,7 @@ window, dialog, popover, .app-window {
     padding: 4px 8px 2px;
 }
 .startup-status-issues-title {
-    color: alpha(#a6adb3, 0.68);
+    color: alpha(@hermod_fg_muted, 0.68);
     font-size: 0.72em;
     font-weight: 800;
     letter-spacing: 0.08em;
@@ -381,7 +449,7 @@ window, dialog, popover, .app-window {
     padding: 8px 10px;
     border-radius: 14px;
     background-color: alpha(#11171b, 0.88);
-    border: 1px solid alpha(#f2f1ed, 0.08);
+    border: 1px solid alpha(@hermod_fg, 0.08);
 }
 .startup-status-issue-icon {
     margin-top: 2px;
@@ -391,7 +459,7 @@ window, dialog, popover, .app-window {
     font-weight: 800;
 }
 .startup-status-issue-detail {
-    color: alpha(#a6adb3, 0.78);
+    color: alpha(@hermod_fg_muted, 0.78);
     font-size: 0.78em;
     line-height: 1.25;
 }
@@ -422,7 +490,7 @@ window, dialog, popover, .app-window {
     font-weight: 700;
 }
 .startup-status-row.state-pending .startup-status-strip {
-    background-color: alpha(#a6adb3, 0.18);
+    background-color: alpha(@hermod_fg_muted, 0.18);
 }
 .startup-status-row.state-checking .startup-status-strip {
     background-color: alpha(#2e6a70, 0.86);
@@ -454,18 +522,78 @@ window, dialog, popover, .app-window {
 }
 .welcome-photo {
     background-color: #0c1613;
-    border-right: 1px solid alpha(#a6adb3, 0.08);
+    border-right: 1px solid alpha(@hermod_fg_muted, 0.08);
 }
 .welcome-header-bar {
     background: transparent;
-    border-bottom: 1px solid alpha(#a6adb3, 0.08);
+    border-bottom: 1px solid alpha(@hermod_fg_muted, 0.08);
     box-shadow: none;
     min-height: 40px;
     padding: 0 16px;
 }
+.hermod-header {
+    background: transparent;
+    border-bottom: 1px solid alpha(@hermod_fg_muted, 0.08);
+    box-shadow: none;
+    min-height: 44px;
+    padding: 0 12px;
+}
+.hermod-header-brand-row {
+    padding: 0 4px;
+    min-width: 0;
+}
+.hermod-header-mark {
+    -gtk-icon-size: 18px;
+    color: @hermod_fg;
+    opacity: 0.92;
+}
+.hermod-header-brand-label {
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: alpha(@hermod_fg, 0.78);
+}
+.hermod-header-separator {
+    background: alpha(@hermod_fg_muted, 0.18);
+    min-width: 1px;
+}
+.hermod-header-crumb-title {
+    font-family: "Geist", "Inter", sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: alpha(@hermod_fg, 0.88);
+}
+.hermod-header-crumb-subtitle {
+    font-family: "Geist", "Inter", sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    color: alpha(@hermod_fg, 0.48);
+    margin-left: 2px;
+}
+.hermod-header-sync,
+.hermod-header-settings {
+    -gtk-icon-size: 16px;
+    min-height: 30px;
+    min-width: 30px;
+    padding: 0 6px;
+    border-radius: 7px;
+    color: alpha(@hermod_fg, 0.76);
+    background: transparent;
+    border: 1px solid transparent;
+    box-shadow: none;
+}
+.hermod-header-sync:hover,
+.hermod-header-settings:hover {
+    background: alpha(@hermod_fg, 0.06);
+    border-color: alpha(@hermod_fg_muted, 0.12);
+    color: @hermod_fg;
+}
 .welcome-header-mark {
     -gtk-icon-size: 18px;
-    color: #f2f1ed;
+    color: @hermod_fg;
     opacity: 0.92;
 }
 .welcome-header-brand {
@@ -474,7 +602,7 @@ window, dialog, popover, .app-window {
     font-weight: 600;
     letter-spacing: 0.22em;
     text-transform: uppercase;
-    color: alpha(#f2f1ed, 0.78);
+    color: alpha(@hermod_fg, 0.78);
 }
 .welcome-photo-caption {
     font-family: "Geist Mono", ui-monospace, monospace;
@@ -482,7 +610,7 @@ window, dialog, popover, .app-window {
     font-weight: 500;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: alpha(#f2f1ed, 0.38);
+    color: alpha(@hermod_fg, 0.38);
 }
 .welcome-right,
 .welcome-right-scroll,
@@ -498,7 +626,7 @@ window, dialog, popover, .app-window {
     font-weight: 500;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: alpha(#a6adb3, 0.72);
+    color: alpha(@hermod_fg_muted, 0.72);
 }
 .welcome-provider-grid {
     min-width: 0;
@@ -519,14 +647,14 @@ window, dialog, popover, .app-window {
     padding: 0;
     border-radius: 10px;
     background: #11171b;
-    border: 1px solid alpha(#a6adb3, 0.08);
-    color: #f2f1ed;
+    border: 1px solid alpha(@hermod_fg_muted, 0.08);
+    color: @hermod_fg;
     box-shadow: none;
     transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 .provider-row-tile:hover {
     background: #141a1e;
-    border-color: alpha(#a6adb3, 0.14);
+    border-color: alpha(@hermod_fg_muted, 0.14);
 }
 .provider-row-tile:focus {
     outline: none;
@@ -548,7 +676,7 @@ window, dialog, popover, .app-window {
 .provider-glyph.glyph-proton,
 .provider-glyph.glyph_proton  { background: alpha(#7c4dff, 0.14); color: #7c4dff; border: 1px solid alpha(#7c4dff, 0.28); }
 .provider-glyph.glyph-imap_smtp,
-.provider-glyph.glyph_imap_smtp { background: alpha(#a6adb3, 0.14); color: #a6adb3; border: 1px solid alpha(#a6adb3, 0.28); }
+.provider-glyph.glyph_imap_smtp { background: alpha(@hermod_fg_muted, 0.14); color: @hermod_fg_muted; border: 1px solid alpha(@hermod_fg_muted, 0.28); }
 .provider-glyph.glyph_icloud    { background: alpha(#7b8794, 0.14); color: #b0bac4; border: 1px solid alpha(#7b8794, 0.28); }
 .provider-glyph.glyph_fastmail  { background: alpha(#4a90e2, 0.14); color: #4a90e2; border: 1px solid alpha(#4a90e2, 0.28); }
 .provider-glyph.glyph_yahoo     { background: alpha(#6001d2, 0.18); color: #a77bf0; border: 1px solid alpha(#6001d2, 0.32); }
@@ -557,26 +685,26 @@ window, dialog, popover, .app-window {
 .provider-name {
     font-size: 13px;
     font-weight: 600;
-    color: #f2f1ed;
+    color: @hermod_fg;
 }
 .provider-sub {
     font-size: 11px;
-    color: alpha(#a6adb3, 0.72);
+    color: alpha(@hermod_fg_muted, 0.72);
 }
 .lock-pill {
     padding: 6px 10px;
     border-radius: 999px;
     background: #11171b;
-    border: 1px solid alpha(#a6adb3, 0.10);
+    border: 1px solid alpha(@hermod_fg_muted, 0.10);
 }
 .lock-pill-icon {
     min-width: 11px;
     min-height: 11px;
-    color: alpha(#a6adb3, 0.72);
+    color: alpha(@hermod_fg_muted, 0.72);
 }
 .lock-pill-text {
     font-size: 11px;
-    color: alpha(#a6adb3, 0.72);
+    color: alpha(@hermod_fg_muted, 0.72);
 }
 .welcome-scene {
     background: transparent;
@@ -606,8 +734,8 @@ window, dialog, popover, .app-window {
     min-width: 4px;
     min-height: 4px;
     border-radius: 999px;
-    background-color: alpha(#f2f1ed, 0.92);
-    box-shadow: 0 0 10px alpha(#f2f1ed, 0.20), 0 0 20px alpha(#2e6a70, 0.12);
+    background-color: alpha(@hermod_fg, 0.92);
+    box-shadow: 0 0 10px alpha(@hermod_fg, 0.20), 0 0 20px alpha(#2e6a70, 0.12);
     animation: hermod-firefly-twinkle 6.5s ease-in-out infinite;
 }
 .welcome-firefly.firefly-a { opacity: 0.90; }
@@ -634,7 +762,7 @@ window, dialog, popover, .app-window {
     min-width: 64px;
     min-height: 64px;
     border-radius: 16px;
-    border: 1px solid alpha(#a6adb3, 0.14);
+    border: 1px solid alpha(@hermod_fg_muted, 0.14);
     background: #11171b;
     padding: 12px;
     opacity: 1.0;
@@ -644,7 +772,7 @@ window, dialog, popover, .app-window {
     font-size: 11px;
     font-weight: 500;
     letter-spacing: 0.22em;
-    color: alpha(#a6adb3, 0.74);
+    color: alpha(@hermod_fg_muted, 0.74);
 }
 .welcome-title {
     font-family: "Geist", -apple-system, system-ui, sans-serif;
@@ -652,27 +780,27 @@ window, dialog, popover, .app-window {
     font-weight: 400;
     letter-spacing: 0.01em;
     line-height: 1.10;
-    color: #f2f1ed;
+    color: @hermod_fg;
 }
 .welcome-summary {
     font-family: "Geist", -apple-system, system-ui, sans-serif;
     font-size: 15px;
     font-weight: 400;
     line-height: 1.50;
-    color: alpha(#a6adb3, 0.88);
+    color: alpha(@hermod_fg_muted, 0.88);
 }
 .welcome-pledge {
     margin-top: 18px;
 }
 .welcome-pledge-item {
-    color: alpha(#a6adb3, 0.72);
+    color: alpha(@hermod_fg_muted, 0.72);
     font-size: 11.5px;
     font-weight: 500;
 }
 .welcome-pledge-text {
     font-family: "Geist", -apple-system, system-ui, sans-serif;
     letter-spacing: -0.005em;
-    color: alpha(#a6adb3, 0.72);
+    color: alpha(@hermod_fg_muted, 0.72);
 }
 .welcome-pledge-check {
     color: alpha(#6f9b73, 0.96);
@@ -700,7 +828,7 @@ window, dialog, popover, .app-window {
 }
 .provider-tile:hover {
     background-color: alpha(#ffffff, 0.06);
-    border-color: alpha(#f2f1ed, 0.12);
+    border-color: alpha(@hermod_fg, 0.12);
     transform: scale(1.04);
 }
 .provider-tile-gmail:hover { background-color: alpha(#ea4335, 0.10); border-color: alpha(#ea4335, 0.20); }
@@ -743,20 +871,20 @@ window, dialog, popover, .app-window {
     font-weight: 800;
     letter-spacing: 0.11em;
     text-transform: uppercase;
-    color: alpha(#a6adb3, 0.72);
+    color: alpha(@hermod_fg_muted, 0.72);
 }
 .onboarding-accounts-list {
     padding: 2px 0 0;
 }
 .onboarding-accounts-empty {
-    color: alpha(#a6adb3, 0.68);
+    color: alpha(@hermod_fg_muted, 0.68);
     font-size: 0.92em;
 }
 .onboarding-account-row {
-    padding: 4px 0;
-    border-radius: 0;
-    background: transparent;
-    border: none;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: alpha(#f5f0e6, 0.04);
+    border: 1px solid alpha(#f5f0e6, 0.08);
 }
 .onboarding-account-bullet {
     min-width: 14px;
@@ -764,17 +892,26 @@ window, dialog, popover, .app-window {
     color: #ffffff;
 }
 .onboarding-account-accent {
-    min-width: 4px;
+    min-width: 3px;
     min-height: 30px;
     border-radius: 999px;
+    margin-right: 4px;
 }
 .onboarding-account-title {
-    font-size: 0.90em;
-    font-weight: 700;
+    font-size: 0.92em;
+    font-weight: 600;
 }
 .onboarding-account-subtitle {
-    font-size: 0.74em;
-    color: alpha(#a6adb3, 0.72);
+    font-size: 0.80em;
+    color: alpha(@hermod_fg_muted, 0.72);
+    margin-top: 2px;
+}
+.onboarding-account-health {
+    min-width: 8px;
+    min-height: 8px;
+    border-radius: 999px;
+    background: #6f9b73;
+    box-shadow: 0 0 6px alpha(#6f9b73, 0.55);
 }
 .onboarding-open-btn {
     margin-top: 22px;
@@ -793,18 +930,18 @@ window, dialog, popover, .app-window {
     font-size: 1.28em;
     font-weight: 800;
     letter-spacing: -0.03em;
-    color: #f2f1ed;
+    color: @hermod_fg;
 }
 .onboarding-modal-subtitle {
     font-size: 0.92em;
-    color: alpha(#a6adb3, 0.76);
+    color: alpha(@hermod_fg_muted, 0.76);
 }
 .onboarding-modal-window {
     background: transparent;
 }
 .onboarding-modal-frame {
     border-radius: 18px;
-    border: 1px solid alpha(#a6adb3, 0.14);
+    border: 1px solid alpha(@hermod_fg_muted, 0.14);
     background: #0f1417;
     box-shadow: 0 18px 46px alpha(black, 0.35);
 }
@@ -812,7 +949,7 @@ window, dialog, popover, .app-window {
     min-height: 56px;
 }
 .onboarding-modal-divider {
-    background: alpha(#a6adb3, 0.08);
+    background: alpha(@hermod_fg_muted, 0.08);
     min-height: 1px;
 }
 .onboarding-modal-close {
@@ -822,15 +959,15 @@ window, dialog, popover, .app-window {
     border-radius: 999px;
     background: transparent;
     border: none;
-    color: alpha(#f2f1ed, 0.72);
+    color: alpha(@hermod_fg, 0.72);
 }
 .onboarding-modal-close:hover {
-    background: alpha(#f2f1ed, 0.06);
-    color: #f2f1ed;
+    background: alpha(@hermod_fg, 0.06);
+    color: @hermod_fg;
 }
 .onboarding-modal-foot {
     padding-top: 12px;
-    border-top: 1px solid alpha(#a6adb3, 0.08);
+    border-top: 1px solid alpha(@hermod_fg_muted, 0.08);
     background: #090c0f;
 }
 .onboarding-modal-scroller,
@@ -851,12 +988,12 @@ window, dialog, popover, .app-window {
     font-size: 1.74em;
     font-weight: 600;
     letter-spacing: -0.025em;
-    color: #f2f1ed;
+    color: @hermod_fg;
 }
 .welcome-settings-subtitle {
     font-size: 0.94em;
     line-height: 1.38;
-    color: alpha(#a6adb3, 0.78);
+    color: alpha(@hermod_fg_muted, 0.78);
 }
 .search-entry-shell:focus-within {
     border-color: alpha(#2e6a70, 0.22);
@@ -877,11 +1014,11 @@ window, dialog, popover, .app-window {
     outline: none;
 }
 .search-entry-icon {
-    color: alpha(#a6adb3, 0.58);
+    color: alpha(@hermod_fg_muted, 0.58);
 }
 .sidebar-actions {
     padding: 4px 10px 8px;
-    border-bottom: 1px solid alpha(#f2f1ed, 0.10);
+    border-bottom: 1px solid alpha(@hermod_fg, 0.10);
 }
 .sidebar-action-btn {
     padding-top: 0px;
@@ -899,18 +1036,45 @@ window, dialog, popover, .app-window {
     font-weight: 600;
     letter-spacing: -0.005em;
 }
-.account-header {
+.sidebar-compose-chip {
     font-family: "Geist Mono", ui-monospace, monospace;
-    font-size: 0.82em;
+    font-size: 0.72em;
     font-weight: 500;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.08em;
+    color: alpha(@window_fg_color, 0.72);
+    background-color: alpha(#000000, 0.22);
+    border: 1px solid alpha(@hermod_fg, 0.14);
+    border-radius: 6px;
+    padding: 2px 7px;
+    margin-left: 6px;
+}
+.sidebar-section {
+    background: transparent;
+}
+.sidebar-section:hover,
+.sidebar-section:selected,
+.sidebar-section:active {
+    background: transparent;
+    box-shadow: none;
+}
+.sidebar-section-label {
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 0.72em;
+    font-weight: 500;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
-    color: alpha(@window_fg_color, 0.68);
+    color: alpha(@window_fg_color, 0.52);
+}
+.account-header {
+    font-size: 0.92em;
+    font-weight: 500;
+    letter-spacing: 0.00em;
+    color: alpha(@window_fg_color, 0.82);
 }
 .sync-control {
     padding: 0px;
     border-radius: 10px;
-    border: 1px solid alpha(#f2f1ed, 0.10);
+    border: 1px solid alpha(@hermod_fg, 0.10);
     background-color: alpha(#11171b, 0.88);
 }
 .sync-control box,
@@ -938,14 +1102,14 @@ window, dialog, popover, .app-window {
 .sync-divider {
     min-width: 1px;
     min-height: 30px;
-    background-color: alpha(#f2f1ed, 0.28);
+    background-color: alpha(@hermod_fg, 0.28);
     border-radius: 999px;
 }
 .sync-auto-label {
     font-size: 0.60em;
     font-weight: 700;
     letter-spacing: 0.07em;
-    color: alpha(#a6adb3, 0.62);
+    color: alpha(@hermod_fg_muted, 0.62);
 }
 .sync-auto-value {
     font-size: 0.76em;
@@ -992,19 +1156,19 @@ window, dialog, popover, .app-window {
     margin: 2px;
 }
 .attachment-bar {
-    border-top: 1px solid alpha(#f2f1ed, 0.08);
+    border-top: 1px solid alpha(@hermod_fg, 0.08);
     background-color: alpha(#11171b, 0.95);
     padding: 6px 10px 8px;
 }
 .thread-reply-bar {
-    border-top: 1px solid alpha(#f2f1ed, 0.08);
+    border-top: 1px solid alpha(@hermod_fg, 0.08);
     background-color: alpha(#0f1417, 0.96);
     padding: 8px 10px 10px;
 }
 .thread-reply-editor {
     min-height: 62px;
     background-color: alpha(#11171b, 0.92);
-    border: 1px solid alpha(#f2f1ed, 0.10);
+    border: 1px solid alpha(@hermod_fg, 0.10);
     border-radius: 12px;
     padding: 8px 10px;
 }
@@ -1014,19 +1178,57 @@ window, dialog, popover, .app-window {
     font-weight: 700;
 }
 .message-info-bar {
-    border-bottom: 1px solid alpha(#f2f1ed, 0.08);
+    border-bottom: 1px solid alpha(@hermod_fg, 0.06);
     background-color: alpha(#0f1417, 0.96);
-    padding: 8px 12px 7px;
-    min-height: 58px;
+    padding: 18px 22px 16px;
+    min-height: 72px;
 }
 .message-info-top {
-    min-height: 20px;
+    min-height: 32px;
 }
 .message-info-top-row {
     min-height: 20px;
 }
 .message-info-actions {
     min-width: 118px;
+}
+.reader-header {
+    /* Composition handled on .message-info-bar; kept as a marker selector
+       so theme overrides can target the redesigned reader chrome. */
+}
+.reader-subject {
+    font-family: "Geist", -apple-system, system-ui, sans-serif;
+    font-size: 1.9em;
+    font-weight: 600;
+    color: @hermod_fg;
+    letter-spacing: -0.02em;
+    line-height: 1.16;
+}
+.reader-meta {
+    font-family: "Geist", -apple-system, system-ui, sans-serif;
+    font-size: 0.88em;
+    color: alpha(@window_fg_color, 0.58);
+    margin-top: 6px;
+}
+.reader-actions {
+    margin-left: 8px;
+}
+.reader-action-btn {
+    min-height: 30px;
+    min-width: 30px;
+    padding: 4px;
+    border-radius: 999px;
+    color: alpha(@window_fg_color, 0.72);
+    background: transparent;
+}
+.reader-action-btn:hover {
+    background-color: alpha(@window_fg_color, 0.06);
+    color: @hermod_fg;
+}
+.reader-action-btn:disabled,
+.reader-action-btn:insensitive {
+    color: alpha(@window_fg_color, 0.28);
+    background: transparent;
 }
 .thread-info-button {
     min-height: 26px;
@@ -1035,20 +1237,20 @@ window, dialog, popover, .app-window {
     font-weight: 700;
     border-radius: 999px;
     background-color: alpha(#11171b, 0.90);
-    border: 1px solid alpha(#f2f1ed, 0.10);
-    color: alpha(#f2f1ed, 0.82);
+    border: 1px solid alpha(@hermod_fg, 0.10);
+    color: alpha(@hermod_fg, 0.82);
 }
 .thread-tab {
     border-radius: 999px;
     padding: 0px 14px;
     min-height: 28px;
     background-color: alpha(#11171b, 0.90);
-    border: 1px solid alpha(#f2f1ed, 0.10);
+    border: 1px solid alpha(@hermod_fg, 0.10);
     transition: all 120ms ease;
 }
 .thread-tab:hover {
     background-color: alpha(#141a1e, 0.96);
-    border-color: alpha(#f2f1ed, 0.18);
+    border-color: alpha(@hermod_fg, 0.18);
 }
 .thread-msg-count {
     font-size: 0.76em;
@@ -1058,7 +1260,7 @@ window, dialog, popover, .app-window {
 }
 .thread-info-button.active {
     background-color: rgba(46, 106, 112, 0.18);
-    color: #f2f1ed;
+    color: @hermod_fg;
     border-color: rgba(46, 106, 112, 0.28);
     box-shadow: none;
 }
@@ -1066,21 +1268,20 @@ window, dialog, popover, .app-window {
     margin-top: 5px;
 }
 .message-info-sender-line {
-    color: alpha(#a6adb3, 0.82);
+    color: alpha(@hermod_fg_muted, 0.82);
 }
 .message-info-subject {
     font-family: "Geist", -apple-system, system-ui, sans-serif;
-    font-size: 1.36em;
-    font-weight: 500;
-    color: #f2f1ed;
-    letter-spacing: -0.025em;
-    min-height: 22px;
-    line-height: 1.25;
+    font-size: 1.9em;
+    font-weight: 600;
+    color: @hermod_fg;
+    letter-spacing: -0.02em;
+    line-height: 1.16;
 }
 .message-info-sender {
     font-size: 0.80em;
     font-weight: 400;
-    color: alpha(#a6adb3, 0.84);
+    color: alpha(@hermod_fg_muted, 0.84);
     line-height: 1.10;
 }
 .message-info-accent {
@@ -1091,18 +1292,18 @@ window, dialog, popover, .app-window {
 .message-info-date {
     font-size: 0.80em;
     font-weight: 400;
-    color: alpha(#a6adb3, 0.80);
+    color: alpha(@hermod_fg_muted, 0.80);
     line-height: 1.10;
 }
 .message-info-title {
     font-size: 0.88em;
     font-weight: 700;
-    color: #f2f1ed;
+    color: @hermod_fg;
     letter-spacing: 0.01em;
 }
 .message-info-meta {
     font-size: 0.78em;
-    color: alpha(#a6adb3, 0.72);
+    color: alpha(@hermod_fg_muted, 0.72);
 }
 .reading-pane-shell {
     background-color: alpha(#0b0f12, 0.96);
@@ -1113,7 +1314,7 @@ window, dialog, popover, .app-window {
     background-color: alpha(#0b0f12, 0.10);
 }
 .thread-sidebar {
-    border-left: 1px solid alpha(#f2f1ed, 0.08);
+    border-left: 1px solid alpha(@hermod_fg, 0.08);
     background-color: alpha(#0b0f12, 0.98);
     min-width: 330px;
 }
@@ -1129,7 +1330,7 @@ window, dialog, popover, .app-window {
     background-color: rgba(46, 106, 112, 0.14);
 }
 .thread-sidebar-row:hover {
-    background-color: alpha(#f2f1ed, 0.04);
+    background-color: alpha(@hermod_fg, 0.04);
 }
 .thread-sidebar-avatar {
     min-width: 28px;
@@ -1141,8 +1342,8 @@ window, dialog, popover, .app-window {
     letter-spacing: 0.02em;
 }
 .thread-sidebar-avatar.generic {
-    background-color: alpha(#f2f1ed, 0.10);
-    color: alpha(#f2f1ed, 0.84);
+    background-color: alpha(@hermod_fg, 0.10);
+    color: alpha(@hermod_fg, 0.84);
 }
 .thread-sidebar-sender {
     font-size: 0.84em;
@@ -1150,11 +1351,11 @@ window, dialog, popover, .app-window {
 }
 .thread-sidebar-snippet {
     font-size: 0.75em;
-    color: alpha(#a6adb3, 0.72);
+    color: alpha(@hermod_fg_muted, 0.72);
 }
 .thread-sidebar-time {
     font-size: 0.72em;
-    color: alpha(#a6adb3, 0.72);
+    color: alpha(@hermod_fg_muted, 0.72);
 }
 .thread-sidebar-strip {
     min-width: 4px;
@@ -1188,22 +1389,22 @@ window, dialog, popover, .app-window {
 .message-column {
     background-color: alpha(#0f1417, 0.96);
     border-radius: 16px;
-    border: 1px solid alpha(#f2f1ed, 0.08);
+    border: 1px solid alpha(@hermod_fg, 0.08);
 }
 .attachment-chip {
     border-radius: 8px;
-    border: 1px solid alpha(#f2f1ed, 0.10);
+    border: 1px solid alpha(@hermod_fg, 0.10);
 }
 .countdown-lbl {
     font-family: monospace;
     font-variant-numeric: tabular-nums;
     font-size: 0.72em;
-    color: alpha(#a6adb3, 0.48);
+    color: alpha(@hermod_fg_muted, 0.48);
     min-width: 54px;
 }
 .countdown-hint {
     font-size: 0.62em;
-    color: alpha(#a6adb3, 0.42);
+    color: alpha(@hermod_fg_muted, 0.42);
     line-height: 1.0;
 }
 """
@@ -1265,15 +1466,282 @@ def build_theme_override_css(theme="night", day_variant="paper", accent="teal", 
 
     if theme == "day":
         day = DAY_PALETTES.get(day_variant, DAY_PALETTES["paper"])
-        parts.append(f"@define-color hermod_bg {day['bg']};")
-        parts.append(f"@define-color hermod_bg_elevated {day['elevated']};")
-        parts.append(f"@define-color hermod_bg_hover {day['hover']};")
-        parts.append(f"@define-color hermod_surface_card {day['card']};")
-        parts.append(f"@define-color hermod_surface_sunken {day['sunken']};")
-        parts.append(f"@define-color hermod_fg {day['fg']};")
-        parts.append(f"@define-color hermod_fg_muted {day['fg_muted']};")
+        bg      = day["bg"]
+        elev    = day["elevated"]
+        hover   = day["hover"]
+        card    = day["card"]
+        sunken  = day["sunken"]
+        fg      = day["fg"]
+        muted   = day["fg_muted"]
+
+        parts.append(f"@define-color hermod_bg {bg};")
+        parts.append(f"@define-color hermod_bg_elevated {elev};")
+        parts.append(f"@define-color hermod_bg_hover {hover};")
+        parts.append(f"@define-color hermod_surface_card {card};")
+        parts.append(f"@define-color hermod_surface_sunken {sunken};")
+        parts.append(f"@define-color hermod_fg {fg};")
+        parts.append(f"@define-color hermod_fg_muted {muted};")
         parts.append(f"@define-color hermod_accent_fg #FFFFFF;")
         parts.append(f"@define-color accent_fg_color #FFFFFF;")
+
+        # Explicit class overrides — the base CSS uses hardcoded night hex values,
+        # so we override every affected selector here for day mode.
+        parts.append(f"""
+/* ── Day-mode class overrides ── */
+.message-list-view row:hover .email-row:not(.selected) {{
+    background-color: alpha({fg}, 0.04);
+}}
+.thread-indicator {{
+    background-color: alpha({fg}, 0.06);
+}}
+.thread-indicator image {{
+    color: alpha({muted}, 0.74);
+}}
+.thread-badge {{
+    color: alpha({muted}, 0.80);
+}}
+.all-inboxes-row {{
+    background-color: alpha({fg}, 0.04);
+}}
+.all-inboxes-row .folder-count {{
+    color: alpha({muted}, 0.74);
+}}
+.load-more-row button {{
+    color: alpha({muted}, 0.78);
+    background-color: alpha({card}, 0.88);
+    border: 1px solid alpha({fg}, 0.10);
+}}
+.load-more-row button:hover {{
+    background-color: {hover};
+    color: {fg};
+    border-color: alpha({fg}, 0.18);
+}}
+.startup-status-card {{
+    background-color: {card};
+    border: 1px solid alpha({fg}, 0.08);
+    box-shadow: 0 18px 34px alpha({fg}, 0.06);
+}}
+.startup-status-hero {{
+    border-bottom: 1px solid alpha({fg}, 0.08);
+}}
+.startup-status-progress trough {{
+    background-color: alpha({fg}, 0.08);
+}}
+.startup-status-summary {{
+    color: {fg};
+    background-color: alpha({card}, 0.92);
+    border: 1px solid alpha({fg}, 0.08);
+}}
+.startup-status-issue-row {{
+    background-color: {card};
+    border: 1px solid alpha({fg}, 0.08);
+}}
+.startup-status-issues-title {{
+    color: alpha({muted}, 0.68);
+}}
+.search-bar-box {{
+    border-bottom: 1px solid alpha({fg}, 0.08);
+}}
+.search-entry-shell {{
+    background-color: {card};
+    border: 1px solid alpha({fg}, 0.10);
+}}
+.search-entry-shell:focus-within {{
+    border-color: alpha({base}, 0.30);
+}}
+.search-entry-icon {{
+    color: alpha({muted}, 0.58);
+}}
+.sorting-toolbar {{
+    border-bottom: 1px solid alpha({fg}, 0.08);
+}}
+.sorting-toggle {{
+    color: alpha({muted}, 0.80);
+    background-color: alpha({card}, 0.90);
+    border: 1px solid alpha({fg}, 0.06);
+}}
+.sorting-toggle:hover {{
+    background-color: {hover};
+    color: {fg};
+}}
+.sorting-toggle.active {{
+    background-color: {hover};
+    color: {fg};
+    border-color: alpha({base}, 0.26);
+}}
+.load-older-toolbar {{
+    color: alpha({muted}, 0.82);
+    background-color: alpha({card}, 0.88);
+    border: 1px solid alpha({fg}, 0.10);
+}}
+.load-older-toolbar:hover {{
+    background-color: {hover};
+    color: {fg};
+    border-color: alpha({fg}, 0.18);
+}}
+.sidebar-actions {{
+    border-bottom: 1px solid alpha({fg}, 0.10);
+}}
+.sync-control {{
+    border: 1px solid alpha({fg}, 0.10);
+    background-color: alpha({card}, 0.88);
+}}
+.sync-divider {{
+    background-color: alpha({fg}, 0.28);
+}}
+.sync-control.sync-online .sync-divider,
+.sync-control.sync-offline .sync-divider {{
+    background-color: alpha({fg}, 0.18);
+}}
+.attachment-bar {{
+    border-top: 1px solid alpha({fg}, 0.08);
+    background-color: alpha({card}, 0.95);
+}}
+.thread-reply-bar {{
+    border-top: 1px solid alpha({fg}, 0.08);
+    background-color: alpha({elev}, 0.96);
+}}
+.thread-reply-editor {{
+    background-color: {card};
+    border: 1px solid alpha({fg}, 0.10);
+}}
+.message-info-bar {{
+    border-bottom: 1px solid alpha({fg}, 0.08);
+    background-color: alpha({elev}, 0.96);
+}}
+.message-info-subject {{
+    color: {fg};
+}}
+.message-info-sender-line {{
+    color: alpha({muted}, 0.82);
+}}
+.message-info-sender {{
+    color: alpha({muted}, 0.84);
+}}
+.message-info-date {{
+    color: alpha({muted}, 0.80);
+}}
+.message-info-meta {{
+    color: alpha({muted}, 0.72);
+}}
+.message-info-title {{
+    color: {fg};
+}}
+.reading-pane-shell {{
+    background-color: {bg};
+}}
+.thread-sidebar-dim {{
+    background-color: alpha({fg}, 0.04);
+}}
+.thread-sidebar {{
+    border-left: 1px solid alpha({fg}, 0.08);
+    background-color: {bg};
+}}
+.thread-sidebar-row:hover {{
+    background-color: alpha({fg}, 0.04);
+}}
+.thread-sidebar-avatar.generic {{
+    background-color: alpha({fg}, 0.10);
+    color: alpha({fg}, 0.84);
+}}
+.thread-sidebar-snippet {{
+    color: alpha({muted}, 0.72);
+}}
+.thread-sidebar-time {{
+    color: alpha({muted}, 0.72);
+}}
+.content-split separator {{
+    background-image: linear-gradient(
+        to right,
+        transparent 0,
+        transparent 3px,
+        alpha({fg}, 0.10) 3px,
+        alpha({fg}, 0.10) 4px,
+        transparent 4px,
+        transparent 100%
+    );
+}}
+.message-column {{
+    background-color: {card};
+    border: 1px solid alpha({fg}, 0.08);
+}}
+.attachment-chip {{
+    border: 1px solid alpha({fg}, 0.10);
+}}
+.thread-info-button {{
+    background-color: alpha({card}, 0.90);
+    border: 1px solid alpha({fg}, 0.10);
+    color: alpha({fg}, 0.82);
+}}
+.thread-tab {{
+    background-color: alpha({card}, 0.90);
+    border: 1px solid alpha({fg}, 0.10);
+}}
+.thread-tab:hover {{
+    background-color: {hover};
+    border-color: alpha({fg}, 0.18);
+}}
+.countdown-lbl {{
+    color: alpha({muted}, 0.48);
+}}
+.countdown-hint {{
+    color: alpha({muted}, 0.42);
+}}
+.thread-info-button.active {{
+    background-color: alpha({base}, 0.12);
+    border-color: alpha({base}, 0.22);
+}}
+/* Settings panel */
+.settings-section-title {{
+    color: alpha({muted}, 0.82);
+}}
+.account-tile {{
+    border: 1px solid alpha({fg}, 0.08);
+    background: linear-gradient(180deg, alpha({fg}, 0.02), alpha({fg}, 0.01)),
+                alpha({card}, 0.92);
+}}
+.account-tile:hover {{
+    background: linear-gradient(180deg, alpha({fg}, 0.04), alpha({fg}, 0.02)),
+                {hover};
+}}
+.account-tile-icon {{
+    color: alpha({fg}, 0.88);
+}}
+.account-row-subtitle {{
+    color: alpha({muted}, 0.70);
+}}
+.account-color-chip {{
+    background: alpha({card}, 0.90);
+    border: 1px solid alpha({fg}, 0.08);
+}}
+.account-color-preview {{
+    border: 1px solid alpha({fg}, 0.10);
+}}
+.account-editor-header {{
+    color: {fg};
+}}
+.appearance-segment {{
+    background: alpha({card}, 0.85);
+    border: 1px solid alpha({fg}, 0.08);
+}}
+.appearance-segment > button {{
+    color: alpha({fg}, 0.66);
+}}
+.appearance-segment > button.selected {{
+    background: {base};
+    color: #ffffff;
+}}
+.appearance-segment > button:hover:not(.selected) {{
+    background: alpha({fg}, 0.06);
+    color: {fg};
+}}
+.appearance-swatch {{
+    border: 1px solid alpha({fg}, 0.08);
+}}
+.appearance-swatch.selected {{
+    border: 2px solid {fg};
+}}
+""")
 
     row_height = DENSITY_ROW_HEIGHT.get(density, DENSITY_ROW_HEIGHT["balanced"])
     parts.append(f".email-row {{ min-height: {row_height}px; }}")
@@ -1442,7 +1910,6 @@ def build_window_account_css(backends=None):
     for i, color in enumerate(ACCOUNT_PALETTE):
         cls = account_class_for_index(i)
         glow = _hex_to_rgba(color, 0.14)
-        label = contrasting_foreground(color)
         connector = _hex_to_rgba(color, 0.22)
         acct_bg = _hex_to_rgba(color, 0.09)
         parts.append(
@@ -1451,24 +1918,24 @@ def build_window_account_css(backends=None):
     background-image: linear-gradient(to left, {glow}, rgba(0,0,0,0));
 }}
 .navigation-sidebar row.{cls} .account-accent-label {{
-    color: {label};
+    color: @hermod_fg;
 }}
 .navigation-sidebar row.{cls}.account-section-header {{
     background-color: {acct_bg};
     border-radius: 7px;
 }}
 .navigation-sidebar row.{cls}.account-section-header .account-accent-label {{
-    color: {label};
+    color: @hermod_fg;
 }}
 .navigation-sidebar row.{cls}.account-section-header .folder-count {{
-    color: {label};
+    color: @hermod_fg;
 }}
 .navigation-sidebar row.{cls}.account-section-header .account-health-icon {{
-    color: alpha({label}, 0.92);
+    color: alpha(@hermod_fg, 0.92);
 }}
 .navigation-sidebar row.{cls}.account-section-header .folder-count-dim {{
-    color: {label};
-    opacity: 0.72;
+    color: @hermod_fg_muted;
+    opacity: 0.82;
 }}
 .navigation-sidebar row.{cls} .folder-connector {{
     background-image: linear-gradient({connector}, {connector}), linear-gradient({connector}, {connector});

@@ -349,6 +349,7 @@ class ReaderMixin:
             nav = decision.get_navigation_action()
             request = nav.get_request() if nav is not None else None
             uri = request.get_uri() if request is not None else ""
+            nav_type = nav.get_navigation_type() if nav is not None else None
         except Exception:
             return False
         if uri.startswith("hermod://original"):
@@ -367,7 +368,9 @@ class ReaderMixin:
                     self._show_original_message_dialog()
             decision.ignore()
             return True
-        if uri:
+        if nav_type != WebKit.NavigationType.LINK_CLICKED:
+            return False
+        if uri and uri != "about:blank":
             try:
                 Gio.AppInfo.launch_default_for_uri(uri, None)
             except Exception:
@@ -405,22 +408,29 @@ class ReaderMixin:
             sender = f"{sender_name} <{sender_email}>"
         else:
             sender = sender_name or sender_email or "Unknown sender"
-        size = self._format_message_size(msg, attachments)
-        parts = []
-        if size:
-            parts.append(f"Size {size}")
-        if attachments:
-            parts.append(
-                f"{len(attachments)} attachment{'s' if len(attachments) != 1 else ''}"
-            )
+        # Keep legacy labels in sync (they are hidden but may be read by tests).
         self._message_info_sender.set_use_markup(False)
         self._message_info_sender.set_label(sender)
         self._message_info_date.set_label(
             f"Received: {_format_received_date(msg.get('date'))}"
         )
+        size = self._format_message_size(msg, attachments)
+        legacy_parts = []
+        if size:
+            legacy_parts.append(f"Size {size}")
+        if attachments:
+            legacy_parts.append(
+                f"{len(attachments)} attachment{'s' if len(attachments) != 1 else ''}"
+            )
+        self._message_info_meta.set_label(" • ".join(legacy_parts))
         self._message_info_subject.set_label(subject)
-        self._message_info_meta.set_label(" • ".join(parts))
-        self._message_info_meta.set_visible(bool(parts))
+        # New reader-meta subtitle: `sender · received-date` for a single message.
+        received = _format_received_date(msg.get("date"))
+        reader_parts = [p for p in (sender, received) if p]
+        reader_meta = getattr(self, "_reader_meta_lbl", None)
+        if reader_meta is not None:
+            reader_meta.set_label(" · ".join(reader_parts))
+            reader_meta.set_visible(bool(reader_parts))
         self._message_info_bar.set_visible(True)
 
     def _set_original_message_source(self, subject, html, text, uid=None):
@@ -575,7 +585,18 @@ class ReaderMixin:
         else:
             self._message_info_date.set_label("")
         self._message_info_meta.set_label(" • ".join(parts))
-        self._message_info_meta.set_visible(bool(parts))
+        # New reader-meta subtitle: `N messages · participants` for threads.
+        reader_meta = getattr(self, "_reader_meta_lbl", None)
+        if reader_meta is not None:
+            thread_count = len(thread_msgs)
+            noun = "message" if thread_count == 1 else "messages"
+            meta_parts = [f"{thread_count} {noun}"] if thread_count else []
+            if participants and participants != "Unknown sender":
+                meta_parts.append(participants)
+            elif thread_count == 1:
+                meta_parts.append(participants or "Unknown sender")
+            reader_meta.set_label(" · ".join(meta_parts))
+            reader_meta.set_visible(bool(meta_parts))
         self._message_info_bar.set_visible(True)
         selected_record = next(
             (
@@ -595,7 +616,7 @@ class ReaderMixin:
         )
         self._show_attachments(attachments, selected_msg)
         self._thread_reply_target = self._thread_reply_msg_for_records(render_records)
-        self._thread_reply_bar.set_visible(len(thread_msgs) > 1)
+        self._thread_reply_bar.set_visible(False)
         if len(thread_msgs) > 1:
             if getattr(self, "_thread_messages_count_lbl", None) is not None:
                 self._thread_messages_count_lbl.set_label(str(len(thread_msgs)))
@@ -611,23 +632,22 @@ class ReaderMixin:
         ) == selected_msg.get("uid"):
             self._active_email_row.set_thread_count(len(thread_msgs))
         self._update_webview_bg()
-        self.webview.load_html(
-            self._build_thread_html(
-                selected_msg,
-                subject,
-                first_date,
-                last_date,
-                render_records,
-                attachments,
-            ),
-            "about:blank",
+        thread_html = self._build_thread_html(
+            selected_msg,
+            subject,
+            first_date,
+            last_date,
+            render_records,
+            attachments,
         )
+        self.webview.load_html(thread_html, "about:blank")
         GLib.idle_add(self._scroll_thread_to_bottom)
         return False
 
     def _build_thread_html(
         self, selected_msg, subject, first_date, last_date, records, attachments
     ):
+        theme = (get_settings().get("theme_mode") or "night").lower()
         return build_thread_html(
             selected_msg,
             subject,
@@ -636,6 +656,7 @@ class ReaderMixin:
             records,
             attachments,
             is_self_fn=self._message_is_self,
+            theme=theme,
         )
 
     def _thread_reply_msg_for_records(self, records):
@@ -813,8 +834,12 @@ class ReaderMixin:
             self._webview_bg_color = f"rgba({bg_rgb[0]}, {bg_rgb[1]}, {bg_rgb[2]}, 1.0)"
             self._email_text_color = f"#{fg_rgb[0]:02x}{fg_rgb[1]:02x}{fg_rgb[2]:02x}"
         else:
-            self._webview_bg_color = None
-            self._email_text_color = "#f2efe8"
+            # Emails are authored for a light background (Gmail / Outlook-style),
+            # so the reader body always uses a light surface with dark text,
+            # regardless of the app's Night/Day theme — same as the design
+            # prototype's Night-inbox screenshot.
+            self._webview_bg_color = "rgba(255, 255, 255, 1.0)"
+            self._email_text_color = "#1b2024"
         if cache:
             with self._cache_lock:
                 self._body_cache[cache_key] = (html, text, attachments)

@@ -9,6 +9,7 @@ from gi.repository import Gtk, Pango, GObject
 try:
     from .styles import apply_accent_css_class
     from .utils import (
+        _day_group_label,
         _format_date,
         _format_received_date,
         _pick_icon_name,
@@ -21,6 +22,7 @@ try:
 except ImportError:
     from styles import apply_accent_css_class
     from utils import (
+        _day_group_label,
         _format_date,
         _format_received_date,
         _pick_icon_name,
@@ -85,6 +87,42 @@ class LoadMoreListItem(MailListItem):
         self.label = label
 
 
+class DayGroupListItem(MailListItem):
+    """Non-activatable marker row rendered as a mono day eyebrow."""
+
+    def __init__(self, label, date_key=None):
+        super().__init__("day_group")
+        self.label = label
+        self.date_key = date_key
+        # Back-references to MessageListItems that belong under this header,
+        # used by the filter to hide orphaned headers when a search/filter
+        # excludes every message in the group.
+        self.followers = []
+
+
+class DayGroupRow(Gtk.Box):
+    """Mono-eyebrow row used to group messages by day (TODAY / YESTERDAY / …)."""
+
+    def __init__(self, label):
+        super().__init__(orientation=Gtk.Orientation.HORIZONTAL)
+        self.add_css_class("day-group-row")
+        self.set_margin_top(12)
+        self.set_margin_bottom(2)
+        self.set_margin_start(16)
+        self.set_margin_end(16)
+        self._label = Gtk.Label(label=label, halign=Gtk.Align.START, xalign=0.0)
+        self._label.add_css_class("day-group-label")
+        self.append(self._label)
+
+    def set_label(self, text):
+        self._label.set_label(text or '')
+
+    # Selection is disabled at the ListItem level, but keep a no-op for
+    # the MailListItem.set_selected() indirection.
+    def set_selected(self, _selected):
+        return
+
+
 class EmailRow(Gtk.Box):
     def __init__(self, msg, on_reply, on_reply_all, on_delete, accent_class=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
@@ -94,6 +132,8 @@ class EmailRow(Gtk.Box):
         self.add_css_class("email-row")
         if accent_class:
             self.add_css_class(accent_class)
+        if not msg.get("is_read"):
+            self.add_css_class("unread")
 
         overlay = Gtk.Overlay()
 
@@ -101,18 +141,10 @@ class EmailRow(Gtk.Box):
             orientation=Gtk.Orientation.HORIZONTAL,
             margin_top=8,
             margin_bottom=8,
-            margin_start=10,
+            margin_start=13,
             margin_end=10,
             spacing=8,
         )
-
-        dot = Gtk.Box(valign=Gtk.Align.CENTER)
-        dot.set_size_request(8, 8)
-        dot.add_css_class("unread-dot")
-        self._dot = dot
-        if msg.get("is_read"):
-            dot.add_css_class("hidden")
-        outer.append(dot)
 
         col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1, hexpand=True)
 
@@ -252,12 +284,12 @@ class EmailRow(Gtk.Box):
 
     def mark_read(self):
         self.msg["is_read"] = True
-        self._dot.add_css_class("hidden")
+        self.remove_css_class("unread")
         self._apply_unread_style()
 
     def mark_unread(self):
         self.msg["is_read"] = False
-        self._dot.remove_css_class("hidden")
+        self.add_css_class("unread")
         self._apply_unread_style()
 
     def _apply_unread_style(self):
@@ -529,6 +561,29 @@ class FolderRow(Gtk.ListBoxRow):
             self.count_label.set_visible(False)
 
 
+class SidebarSectionRow(Gtk.ListBoxRow):
+    """Non-selectable eyebrow row that groups sidebar entries.
+
+    Used for the `MAILBOXES` / `ACCOUNTS` section headers in the new
+    sidebar layout; the row itself is not interactive.
+    """
+
+    def __init__(self, label):
+        super().__init__(activatable=False, selectable=False, can_focus=False)
+        self.add_css_class("sidebar-section")
+        box = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL,
+            margin_top=16,
+            margin_bottom=4,
+            margin_start=14,
+            margin_end=14,
+        )
+        lbl = Gtk.Label(label=label, halign=Gtk.Align.START, hexpand=True, xalign=0.0)
+        lbl.add_css_class("sidebar-section-label")
+        box.append(lbl)
+        self.set_child(box)
+
+
 class AccountHeaderRow(Gtk.ListBoxRow):
     def __init__(self, identity, accent_class=None):
         super().__init__(activatable=True, selectable=False)
@@ -548,8 +603,10 @@ class AccountHeaderRow(Gtk.ListBoxRow):
             spacing=5,
         )
         box.set_valign(Gtk.Align.FILL)
-        self.chevron = Gtk.Image(icon_name="pan-end-symbolic")
-        box.append(self.chevron)
+        status_dot = Gtk.Box(valign=Gtk.Align.CENTER)
+        status_dot.set_size_request(8, 8)
+        status_dot.add_css_class("account-status-dot")
+        box.append(status_dot)
 
         lbl = Gtk.Label(
             label=identity,
@@ -576,6 +633,10 @@ class AccountHeaderRow(Gtk.ListBoxRow):
         self.count_label.set_visible(False)
         count_slot.append(self.count_label)
         box.append(count_slot)
+
+        self.chevron = Gtk.Image(icon_name="pan-down-symbolic")
+        self.chevron.add_css_class("account-header-chevron")
+        box.append(self.chevron)
         self.set_child(box)
 
     def set_label(self, text):

@@ -12,6 +12,13 @@ hub-level index. Live project docs are in
   window to a PNG and quits — preferred visual check on Wayland.
 - `HERMOD_FORCE_WELCOME=1` forces the welcome screen even when backends
   exist (useful for onboarding work).
+- **If the user already has Hermod running**, `Adw.Application`'s
+  single-instance registration makes a second launch silently exit
+  without rendering. Prefix dev launches with
+  `DBUS_SESSION_BUS_ADDRESS=disabled:` to bypass the primary-instance
+  guard and get a clean dump-ui. Example:
+  `DBUS_SESSION_BUS_ADDRESS=disabled: python3 hermod.py --dump-ui /tmp/hermod.png`
+  — expect a harmless a11y-bus warning on stderr; the dump still writes.
 
 ## Verification ladder (cheapest first)
 

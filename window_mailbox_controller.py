@@ -11,14 +11,49 @@ from gi.repository import GLib
 try:
     from .backends import network_ready, is_transient_network_error
     from .unified_refresh import UnifiedFetchSpec, collect_unified_messages
-    from .utils import _UNIFIED, _UNIFIED_TRASH, _UNIFIED_SPAM, _log_exception
+    from .utils import (
+        _UNIFIED, _UNIFIED_TRASH, _UNIFIED_SPAM,
+        _UNIFIED_FLAGGED, _UNIFIED_DRAFTS, _UNIFIED_SENT, _UNIFIED_ARCHIVE,
+        _log_exception,
+    )
 except ImportError:
     from backends import network_ready, is_transient_network_error
     from unified_refresh import UnifiedFetchSpec, collect_unified_messages
-    from utils import _UNIFIED, _UNIFIED_TRASH, _UNIFIED_SPAM, _log_exception
+    from utils import (
+        _UNIFIED, _UNIFIED_TRASH, _UNIFIED_SPAM,
+        _UNIFIED_FLAGGED, _UNIFIED_DRAFTS, _UNIFIED_SENT, _UNIFIED_ARCHIVE,
+        _log_exception,
+    )
 
 
 class MailboxControllerMixin:
+    def _set_error(self, message, generation=None):
+        """Record a fetch error surfaced from a background worker.
+
+        Historically this method was called without being defined, so every
+        non-transient fetch failure crashed the worker thread. We keep the
+        implementation minimal and defensive: log the message, clear the
+        loading flag for the affected generation, and surface a toast if the
+        window already has a toast overlay wired up. Richer UI surfacing can
+        hang off this hook later.
+        """
+        try:
+            text = str(message or '').strip()
+        except Exception:
+            text = ''
+        if text:
+            _log_exception('mailbox fetch error', RuntimeError(text))
+        try:
+            self._set_message_loading(False, generation)
+        except Exception:
+            pass
+        if text and hasattr(self, '_show_toast'):
+            try:
+                self._show_toast(text if len(text) <= 160 else (text[:157] + '…'))
+            except Exception:
+                pass
+        return False
+
     def _consume_backend_sync_notices(self, backend):
         if backend is None:
             return []
@@ -110,6 +145,14 @@ class MailboxControllerMixin:
             return any(self._count_bucket_for_folder(folder) == 'trash' for folder in changed_folders)
         if self.current_folder == _UNIFIED_SPAM:
             return any(self._count_bucket_for_folder(folder) == 'spam' for folder in changed_folders)
+        if self.current_folder == _UNIFIED_DRAFTS:
+            return any(self._count_bucket_for_folder(folder) == 'drafts' for folder in changed_folders)
+        if self.current_folder == _UNIFIED_SENT:
+            return any(self._count_bucket_for_folder(folder) == 'sent' for folder in changed_folders)
+        if self.current_folder == _UNIFIED_ARCHIVE:
+            return any(self._count_bucket_for_folder(folder) == 'archive' for folder in changed_folders)
+        if self.current_folder == _UNIFIED_FLAGGED:
+            return True
         if not self.current_backend:
             return False
         return (
@@ -131,14 +174,14 @@ class MailboxControllerMixin:
                 current_counts = getattr(
                     self,
                     '_unread_counts',
-                    collections.defaultdict(lambda: {'inbox': 0, 'trash': 0, 'spam': 0}),
+                    collections.defaultdict(lambda: {
+                        'inbox': 0, 'trash': 0, 'spam': 0,
+                        'drafts': 0, 'sent': 0, 'archive': 0, 'flagged': 0,
+                    }),
                 )[backend_identity]
-                if 'inbox' in counts and counts.get('inbox') != current_counts.get('inbox'):
-                    count_changed = True
-                if 'trash' in counts and counts.get('trash') != current_counts.get('trash'):
-                    count_changed = True
-                if 'spam' in counts and counts.get('spam') != current_counts.get('spam'):
-                    count_changed = True
+                for _key in ('inbox', 'trash', 'spam', 'drafts', 'sent', 'archive', 'flagged'):
+                    if _key in counts and counts.get(_key) != current_counts.get(_key):
+                        count_changed = True
             if getattr(self, '_startup_status_active', False):
                 self._startup_status_apply_notices(
                     (result or {}).get('account', ''),
@@ -150,6 +193,10 @@ class MailboxControllerMixin:
                 inbox_count=counts.get('inbox'),
                 trash_count=counts.get('trash'),
                 spam_count=counts.get('spam'),
+                drafts_count=counts.get('drafts'),
+                sent_count=counts.get('sent'),
+                archive_count=counts.get('archive'),
+                flagged_count=counts.get('flagged'),
             )
             refresh_needed = refresh_needed or self._background_result_affects_current_view(result)
             if count_changed and backend_identity:
@@ -195,6 +242,14 @@ class MailboxControllerMixin:
             self._offline_refresh_pending = False
             if self.current_folder == _UNIFIED:
                 self._load_unified_inbox(preserve_selected_key=preserve_key)
+            elif self.current_folder == _UNIFIED_FLAGGED:
+                self._load_unified_inbox(preserve_selected_key=preserve_key)
+            elif self.current_folder == _UNIFIED_DRAFTS:
+                self._load_unified_folder('Drafts', preserve_selected_key=preserve_key)
+            elif self.current_folder == _UNIFIED_SENT:
+                self._load_unified_folder('Sent', preserve_selected_key=preserve_key)
+            elif self.current_folder == _UNIFIED_ARCHIVE:
+                self._load_unified_folder('Archive', preserve_selected_key=preserve_key)
             elif self.current_folder == _UNIFIED_TRASH:
                 self._load_unified_folder('Trash', preserve_selected_key=preserve_key)
             elif self.current_folder == _UNIFIED_SPAM:
@@ -458,6 +513,12 @@ class MailboxControllerMixin:
             return 'trash'
         if 'spam' in folder or 'junk' in folder:
             return 'spam'
+        if 'drafts' in folder or folder.endswith('/draft'):
+            return 'drafts'
+        if folder.endswith('/sent mail') or folder.endswith('/sent') or folder == 'sent' or 'sentitems' in folder:
+            return 'sent'
+        if 'archive' in folder or 'all mail' in folder or 'allmail' in folder:
+            return 'archive'
         return None
 
     def _seed_unread_counts_from_messages(self, msgs):
@@ -471,7 +532,10 @@ class MailboxControllerMixin:
         current_backend = getattr(self, 'current_backend', None)
         if current_backend and current_backend.identity == backend_identity:
             return True
-        return getattr(self, 'current_folder', None) in (_UNIFIED, _UNIFIED_TRASH, _UNIFIED_SPAM)
+        return getattr(self, 'current_folder', None) in (
+            _UNIFIED, _UNIFIED_TRASH, _UNIFIED_SPAM,
+            _UNIFIED_FLAGGED, _UNIFIED_DRAFTS, _UNIFIED_SENT, _UNIFIED_ARCHIVE,
+        )
 
     def _refresh_visible_mail_for_backend(self, backend_identity, *, force=False):
         if not self._current_view_uses_backend(backend_identity):
@@ -496,7 +560,11 @@ class MailboxControllerMixin:
                 return
 
             def apply():
-                kwargs = {'inbox_count': None, 'trash_count': None, 'spam_count': None}
+                kwargs = {
+                    'inbox_count': None, 'trash_count': None, 'spam_count': None,
+                    'drafts_count': None, 'sent_count': None,
+                    'archive_count': None, 'flagged_count': None,
+                }
                 kwargs[f'{bucket}_count'] = count
                 self.update_account_counts(backend_identity, **kwargs)
                 self._refresh_visible_mail_for_backend(backend_identity, force=True)
@@ -520,6 +588,18 @@ class MailboxControllerMixin:
         if spam_row:
             spam_row.set_count(counts['spam'], dim=True)
 
+        drafts_row = self._folder_rows.get((backend_identity, self._folder_id_for_name(backend_identity, 'Drafts')))
+        if drafts_row:
+            drafts_row.set_count(counts.get('drafts', 0), dim=True)
+
+        sent_row = self._folder_rows.get((backend_identity, self._folder_id_for_name(backend_identity, 'Sent')))
+        if sent_row:
+            sent_row.set_count(counts.get('sent', 0), dim=True)
+
+        archive_row = self._folder_rows.get((backend_identity, self._folder_id_for_name(backend_identity, 'Archive')))
+        if archive_row:
+            archive_row.set_count(counts.get('archive', 0), dim=True)
+
         state = self._account_state.get(backend_identity)
         if state:
             state['header'].set_count(counts['inbox'])
@@ -528,6 +608,22 @@ class MailboxControllerMixin:
         total = sum(account_counts['inbox'] for account_counts in self._unread_counts.values())
         if self._all_inboxes_row:
             self._all_inboxes_row.set_count(total)
+
+        total_flagged = sum(account_counts.get('flagged', 0) for account_counts in self._unread_counts.values())
+        if getattr(self, '_flagged_row', None):
+            self._flagged_row.set_count(total_flagged)
+
+        total_drafts = sum(account_counts.get('drafts', 0) for account_counts in self._unread_counts.values())
+        if getattr(self, '_drafts_row', None):
+            self._drafts_row.set_count(total_drafts, dim=True)
+
+        total_sent = sum(account_counts.get('sent', 0) for account_counts in self._unread_counts.values())
+        if getattr(self, '_sent_row', None):
+            self._sent_row.set_count(total_sent, dim=True)
+
+        total_archive = sum(account_counts.get('archive', 0) for account_counts in self._unread_counts.values())
+        if getattr(self, '_archive_row', None):
+            self._archive_row.set_count(total_archive, dim=True)
 
     def _refresh_all_unread_counts(self):
         for backend_identity in list(self._unread_counts.keys()):
@@ -540,7 +636,17 @@ class MailboxControllerMixin:
         backend = state['header'].backend
         return next((folder_id for folder_id, name, _icon in backend.FOLDERS if name == display_name), None)
 
-    def update_account_counts(self, backend_identity, inbox_count=None, trash_count=None, spam_count=None):
+    def update_account_counts(
+        self,
+        backend_identity,
+        inbox_count=None,
+        trash_count=None,
+        spam_count=None,
+        drafts_count=None,
+        sent_count=None,
+        archive_count=None,
+        flagged_count=None,
+    ):
         # source-of-truth: backend counts, never visible page slices.
         counts = self._unread_counts[backend_identity]
         if inbox_count is not None:
@@ -549,6 +655,14 @@ class MailboxControllerMixin:
             counts['trash'] = trash_count
         if spam_count is not None:
             counts['spam'] = spam_count
+        if drafts_count is not None:
+            counts['drafts'] = drafts_count
+        if sent_count is not None:
+            counts['sent'] = sent_count
+        if archive_count is not None:
+            counts['archive'] = archive_count
+        if flagged_count is not None:
+            counts['flagged'] = flagged_count
         self._render_account_health(backend_identity)
         if getattr(self, '_startup_status_active', False):
             return

@@ -35,9 +35,13 @@ except ImportError:
 
 # ── Folder sentinel values ────────────────────────────────────────────────────
 
-_UNIFIED       = '__unified__'
-_UNIFIED_TRASH = '__unified_trash__'
-_UNIFIED_SPAM  = '__unified_spam__'
+_UNIFIED         = '__unified__'
+_UNIFIED_TRASH   = '__unified_trash__'
+_UNIFIED_SPAM    = '__unified_spam__'
+_UNIFIED_FLAGGED = '__unified_flagged__'
+_UNIFIED_DRAFTS  = '__unified_drafts__'
+_UNIFIED_SENT    = '__unified_sent__'
+_UNIFIED_ARCHIVE = '__unified_archive__'
 
 # ── Disk-cache paths ──────────────────────────────────────────────────────────
 
@@ -71,6 +75,55 @@ def _format_date(dt):
 
 def _format_received_date(dt):
     return _format_local_timestamp(dt)
+
+
+def _day_group_label(dt):
+    """Short uppercase day grouping label used by the message list."""
+    if dt is None:
+        return ''
+    try:
+        local_dt = dt.astimezone()
+    except Exception:
+        local_dt = dt
+    try:
+        now = datetime.now().astimezone()
+    except Exception:
+        return ''
+    try:
+        today = now.date()
+        day = local_dt.date()
+    except Exception:
+        return ''
+    if day == today:
+        return 'TODAY'
+    try:
+        if day == (today - timedelta(days=1)):
+            return 'YESTERDAY'
+    except Exception:
+        pass
+    try:
+        if day.year == today.year:
+            return local_dt.strftime('%a %-d %b').upper()
+        return local_dt.strftime('%-d %b %Y').upper()
+    except Exception:
+        try:
+            return local_dt.strftime('%a %d %b').upper()
+        except Exception:
+            return ''
+
+
+def _day_group_key(dt):
+    """Stable grouping key (local date) for a message datetime."""
+    if dt is None:
+        return None
+    try:
+        local_dt = dt.astimezone()
+    except Exception:
+        local_dt = dt
+    try:
+        return local_dt.date().isoformat()
+    except Exception:
+        return None
 
 
 def _thread_day_label(dt):

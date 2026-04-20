@@ -697,11 +697,7 @@ class MessageListTests(unittest.TestCase):
         win._startup_visible_ready = True
         win._startup_status_complete_id = None
         win.set_syncing = lambda syncing: None
-        win.update_account_counts = (
-            lambda backend_identity, inbox_count=None, trash_count=None, spam_count=None: (
-                None
-            )
-        )
+        win.update_account_counts = lambda backend_identity, **kwargs: None
         win._background_result_affects_current_view = lambda result: False
         states = []
         win._set_startup_status_state = lambda identity, state, detail="": (
@@ -732,11 +728,7 @@ class MessageListTests(unittest.TestCase):
         win._startup_status_complete_id = None
         win.set_syncing = lambda syncing: None
         win._background_result_affects_current_view = lambda result: False
-        win.update_account_counts = (
-            lambda backend_identity, inbox_count=None, trash_count=None, spam_count=None: (
-                None
-            )
-        )
+        win.update_account_counts = lambda backend_identity, **kwargs: None
         refresh_calls = []
         win.refresh_visible_mail = lambda force=False, preserve_selected=True: (
             refresh_calls.append((force, preserve_selected))
@@ -761,11 +753,7 @@ class MessageListTests(unittest.TestCase):
         )
         updates = []
         refresh_calls = []
-        win.update_account_counts = (
-            lambda backend_identity, inbox_count=None, trash_count=None, spam_count=None: (
-                updates.append((backend_identity, inbox_count, trash_count, spam_count))
-            )
-        )
+        win.update_account_counts = lambda backend_identity, inbox_count=None, trash_count=None, spam_count=None, **kwargs: updates.append((backend_identity, inbox_count, trash_count, spam_count))
         win.refresh_visible_mail = lambda force=False, preserve_selected=True: (
             refresh_calls.append((force, preserve_selected))
         )
@@ -796,11 +784,7 @@ class MessageListTests(unittest.TestCase):
             "acct-b": {"inbox": 1, "trash": 0, "spam": 0},
         }
         updates = []
-        win.update_account_counts = (
-            lambda backend_identity, inbox_count=None, trash_count=None, spam_count=None: (
-                updates.append((backend_identity, inbox_count, trash_count, spam_count))
-            )
-        )
+        win.update_account_counts = lambda backend_identity, inbox_count=None, trash_count=None, spam_count=None, **kwargs: updates.append((backend_identity, inbox_count, trash_count, spam_count))
 
         msgs = [
             _message("1") | {"account": "acct-a", "folder": "INBOX", "is_read": False},
@@ -821,11 +805,7 @@ class MessageListTests(unittest.TestCase):
         win.current_folder = window_module._UNIFIED
         win._startup_status_active = True
         updates = []
-        win.update_account_counts = (
-            lambda backend_identity, inbox_count=None, trash_count=None, spam_count=None: (
-                updates.append((backend_identity, inbox_count, trash_count, spam_count))
-            )
-        )
+        win.update_account_counts = lambda backend_identity, inbox_count=None, trash_count=None, spam_count=None, **kwargs: updates.append((backend_identity, inbox_count, trash_count, spam_count))
 
         msgs = [
             _message("1") | {"account": "acct-a", "folder": "INBOX", "is_read": False},
@@ -1043,11 +1023,7 @@ class MessageListTests(unittest.TestCase):
         win._startup_counts_seen = set()
         win._startup_status_complete_id = None
         win.set_syncing = lambda syncing: None
-        win.update_account_counts = (
-            lambda backend_identity, inbox_count=None, trash_count=None, spam_count=None: (
-                None
-            )
-        )
+        win.update_account_counts = lambda backend_identity, **kwargs: None
         win._background_result_affects_current_view = lambda result: False
         scheduled = []
         with mock.patch.object(

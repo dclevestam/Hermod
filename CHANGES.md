@@ -1,5 +1,116 @@
 # Hermod — Fixed Behaviours (do not revert)
 
+## Forward auto-includes original attachments (`compose.py`)
+
+**Opening a Forward compose now auto-attaches the original message's attachments in the background; users no longer need to re-save + re-attach files manually.**
+- `ComposeView.__init__` calls `_load_forward_attachments(forward_from)` after `_prefill_forward_body`; for each `att` in `msg.get('attachments')` it spawns a daemon thread that calls `backend.fetch_attachment_data(uid, att, folder)` (falling back to `backend.fetch_body(uid, folder)` to recover bytes for providers that don't expose the direct path)
+- `_append_forward_attachment(att, data)` runs on the GLib main loop (via `GLib.idle_add`) so it safely appends to `self._attachments` and calls the existing `_add_attachment_chip(name, index)` to render the chip in the compose toolbar — chips appear progressively as each attachment finishes downloading
+- Attachment size is read from `att['size']` when present; otherwise falls back to `len(data)` so the send path's 25 MB guard still has a real number
+- The backend lookup prefers `msg['backend_obj']` (the object attached during message load) and falls back to `self.backend` so multi-account composes keep pulling bytes from the right provider
+- **Why:** sub-phase D forward wiring landed with the caveat that attachments weren't auto-included — doing this last closes the loop on the reader Forward button so the compose matches the source message without user effort
+
+## Welcome "Accounts added" row polish (`window_welcome.py`, `styles.py`)
+
+**The post-setup "Accounts added" list now renders as proper settings-style cards — card background, border, padded layout, and a trailing health dot — matching the `settings-account-row` pattern in the design prototype.**
+- `.onboarding-account-row` gained `padding: 12px 14px`, `border-radius: 12px`, and a subtle `alpha(#f5f0e6, 0.04)` fill with a 1px border; each row now reads as a distinct card rather than a sparse inline row
+- `.onboarding-account-title` bumped to 0.92em / 600 and the subtitle to 0.80em with a 2px top margin for a legible two-line stack
+- `refresh_accounts` composes the row as `[provider-logo] [accent-strip] [label-stack (hexpand)] [health-dot]`; the label column now sets `hexpand=True` so the trailing health dot is pinned to the right edge
+- New `.onboarding-account-health` CSS token (8px green dot with a soft glow) matches `settings-account-row .health-dot` in the design prototype; tooltip reads "Connected"
+- **Why:** sub-phase B polish left the welcome-screen account list rendering as a bullet + accent strip with no surface treatment; the design prototype presents each connected account as a card-style row with a health indicator, so bringing the welcome list to the same pattern keeps the two "where is my account listed" surfaces visually aligned
+
+## Count badges on flat MAILBOXES rows (`window.py`, `window_mailbox_controller.py`, `window_message_list.py`, `providers/gmail.py`, `providers/imap_smtp.py`)
+
+**The unified Flagged / Drafts / Sent / Archive rows have count-badge plumbing wired end-to-end; Drafts/Sent counts are now sourced from providers, Flagged/Archive remain 0 until their own counters land.**
+- `_unread_counts` default dict grew `drafts / sent / archive / flagged` alongside `inbox / trash / spam` (in `window.py` and the defensive fallback in `_on_sync`)
+- `_populate_sidebar` stores the new unified rows on the window (`self._flagged_row / _drafts_row / _sent_row / _archive_row`) so the controller can address them directly
+- `_count_bucket_for_folder` now maps `drafts / sent mail / sent / sentitems / archive / all mail` to the new buckets; `_background_result_affects_current_view` gained parallel branches for each unified folder so sync results refresh the visible list
+- `update_account_counts(…, drafts_count=, sent_count=, archive_count=, flagged_count=)` and `_render_unread_counts` aggregate across accounts and call `set_count` on each unified row (Drafts/Sent/Archive rendered with `dim=True` to de-emphasize non-inbox counts)
+- Provider `sync_folders` results include `drafts` and `sent` counts via `get_unread_count('[Gmail]/Drafts' / '[Gmail]/Sent Mail')` (Gmail) and `get_unread_count('Drafts' / 'Sent')` (IMAP); Archive and Flagged have no equivalent provider counter yet, so those buckets stay 0 and render cleanly without a badge
+- **Why:** sub-phase B polish left the flat rows rendering correctly but always empty; hooking up the shared `_unread_counts` machinery lets provider sync drive the badges the same way Inbox/Trash/Spam already do, with no new data paths
+
+## Flat MAILBOXES rows (`utils.py`, `window_message_list.py`, `window_mailbox_controller.py`, `window_message_cache.py`)
+
+**MAILBOXES sidebar section now lists All Inboxes, Flagged, Drafts, Sent, Archive, Trash as a flat row set matching the design prototype.**
+- New folder sentinels in `utils.py`: `_UNIFIED_FLAGGED`, `_UNIFIED_DRAFTS`, `_UNIFIED_SENT`, `_UNIFIED_ARCHIVE` (alongside the existing `_UNIFIED`, `_UNIFIED_TRASH`, `_UNIFIED_SPAM`)
+- `_populate_sidebar` unconditionally appends the four new `UnifiedRow`s (Flagged ★ / Drafts ✎ / Sent ↑ / Archive 📁) between All Inboxes and the settings-gated Trash/Spam rows; the Trash label dropped the `All` prefix to match the design
+- `_commit_folder_selection` routes each new folder ID through `_load_unified_folder(…)` and flips `set_filter_mode(…)` so clicking Flagged loads the unified inbox with the flagged filter active (same model as the segmented chip), and the others load the backend folder by name
+- `_on_sync` and `_refresh_current_message_list` in `window_mailbox_controller.py` gained parallel branches so a sync or offline refresh stays in whichever unified folder the user was viewing
+- `_current_view_uses_backend` and `_message_list_context_key` (in `window_message_cache.py`) extended to treat the new sentinels as unified scopes so per-backend refresh keys stay in sync
+- Count badges wired in a follow-up entry (see top of file) — Drafts/Sent badges light from provider sync; Flagged/Archive remain 0 pending their own counters
+- **Why:** Phase 0 sub-phase B left the sidebar with a three-row unified trio (All Inboxes / All Trash / All Spam) and parked the flat folder set as a follow-up; the design prototype ships with six always-visible mailbox rows under MAILBOXES, and routing clicks through the existing `_load_unified_folder` path keeps backend churn minimal
+
+## Reader Forward wiring (`compose.py`, `window.py`, `window_message_list.py`)
+
+**Forward is a real compose mode now; the reader Forward icon and the `f` shortcut both open a pre-filled compose.**
+- `compose.ComposeView.__init__` gains a `forward_from=` kwarg (mutex with `reply_to`); when set the title becomes `Forward`, the subject is prefixed with `Fwd:` (unless already `Fwd:` / `Fw:`), and `_prefill_forward_body` inserts a standard `---------- Forwarded message ----------` block with `From: / Date: / Subject:` header lines plus a `>`-quoted copy of the original `body_text` / `snippet`
+- `window.py` `_reader_forward_btn` is no longer `set_sensitive(False)` — it connects to `_on_current_forward`, which routes through `MessageListMixin._on_forward` (new) and opens `ComposeView(forward_from=msg, ...)`
+- Keyboard shortcut `f` in the message list dispatches to `_on_forward` for the selected row
+- Attachment auto-include landed as a follow-up (see top of file): `_load_forward_attachments` fetches each original attachment in a background thread and `_append_forward_attachment` marshals the chip append back onto the main loop
+- **Why:** Phase 0 sub-phase D left Forward rendered but disabled as a follow-up; wiring it closes the reader action cluster so every icon in the design prototype maps to a live path
+
+## ACCOUNTS row layout (`widgets.py`, `window_message_list.py`, `styles.py`)
+
+**The account row in the sidebar leads with a status dot, ends with a dropdown chevron, and drops the aggressive mono/uppercase styling that was truncating account names.**
+- `widgets.AccountHeaderRow` now composes as `[status-dot] [label] [health-icon] [count-badge] [chevron]` instead of the previous `[chevron-start] [label] [health] [count]` — the leading chevron moved to the end as a dropdown affordance (`pan-down-symbolic` collapsed / `pan-up-symbolic` expanded), and a new `.account-status-dot` takes its place on the start edge, tinted with `@accent_bg_color`
+- `window_message_list._toggle_account` flips the new chevron icons accordingly
+- `.account-header` in `styles.py` is no longer mono + 0.14em letter-spaced + `text-transform: uppercase`; it reads at `0.92em / 500 / normal case / @window_fg_color alpha 0.82` so the presentation name fits without truncating to `GMAI…`
+- New CSS tokens: `.account-status-dot`, `.account-header-chevron` (with hover state)
+- **Why:** the sub-phase B pass inherited an over-styled `.account-header` from the sidebar-section tokens, which made every account label render as heavy uppercase monospace; the design prototype renders the account row in regular sans-serif with a colored status dot and a subtle trailing chevron
+
+## Mailbox fetcher error handling (`window_mailbox_controller.py`)
+
+**The background mail fetcher no longer crashes when a provider surfaces an OAuth / sign-in error.**
+- `MailboxControllerMixin._set_error(message, generation=None)` is a real method now; it was called from the fetcher path but never defined, so every OAuth token failure raised `AttributeError('_set_error')` and left the UI wedged in `Starting mail`
+- The new implementation logs via `_log_exception`, clears the loading flag via `_set_message_loading(False, generation)`, and surfaces the error to the user through `_show_toast(text)` (truncated to 160 characters) when the toast channel is available — each step is defensively guarded so a secondary failure never masks the primary error
+- **Why:** this was blocking visual verification of the Phase 0 reader sub-phase (the viewer pane never rendered because the fetcher crashed before body load) and would have produced a broken first-run for any real user whose provider token expired
+
+## Main-window reader header alignment (`window.py`, `window_reader.py`, `styles.py`)
+
+**The reader header now leads with a display headline and compact action cluster, matching the prototype.**
+- The `_message_info_bar` row stack has been redesigned: the top row carries a large `.reader-subject` headline (wrap, up to 2 lines, ellipsized) on the start side and a `.reader-actions` cluster on the end with reply / reply-all / forward / delete icon buttons, followed by the legacy Original + thread-toggle buttons in `_message_info_actions`
+- A new `_reader_meta_lbl` label sits beneath the top row and shows `sender · received-date` for single messages or `N messages · participants` for threads — `_update_message_info_bar` and `_render_thread_view` (both in `window_reader.py`) populate it
+- The retired `Received: …` and `Size · N attachments` lines stay in the widget tree as hidden fallbacks so any external code or tests that set their labels keep working
+- Forward is rendered but marked insensitive with a `Forward (coming soon)` tooltip — wiring it requires extending `compose.ComposeView` with a forward mode, which is tracked as a follow-up
+- New CSS tokens in `styles.py`: `.reader-header`, `.reader-subject`, `.reader-meta`, `.reader-actions`, `.reader-action-btn`, and a bumped `.message-info-subject` size so the legacy class matches the redesigned headline
+- **Why:** Phase 0 sub-phase D of the main-window design alignment — the prototype leans on a large subject + `N messages · participants` summary with top-right actions, and the pre-design `Received:` / `Size · N attachments` stack no longer earned its vertical real estate
+
+## Main-window message list alignment (`window.py`, `widgets.py`, `window_message_list.py`, `utils.py`, `styles.py`)
+
+**The message column now opens with an eyebrow + meta + segmented filter strip and day-grouped rows, matching the inbox prototype.**
+- A new `_message_column_header` Box sits above the search entry with a mono `_message_col_eyebrow` label (folder crumb uppercased, defaults to `ALL INBOXES`), a `_message_col_meta` line (`N messages · N unread`), and a `Gtk.ToggleButton` radio-group segmented filter with `unified` / `unread` / `flagged` chips — the selected chip carries `.message-filter-chip.selected`
+- Filter selection routes through `MessageListMixin.set_filter_mode()` which updates a new `_filter_mode` state, keeps the legacy `_show_unread_only` toggle in sync so existing tests / key-bindings keep working, and invalidates `_message_filter` so the filtered model re-evaluates; the old visible `sorting-toolbar` row inside the search bar (Load older, sort, unread toggle) has been retired from the layout (the stub widgets remain invisible so existing callers do not break)
+- Day grouping is produced at build time: `_build_message_items` walks the sorted message list and injects `DayGroupListItem` headers whenever the local date changes, back-referencing the following `MessageListItem`s via a `followers` list; `_email_filter` returns `False` for group headers whose followers are all filtered out so the list never shows orphan eyebrows, and `_move_selection` skips past day-group rows during keyboard navigation
+- `utils._day_group_label(dt)` returns short uppercase labels — `TODAY`, `YESTERDAY`, `MON 17 APR`, `3 MAR 2025` — and `utils._day_group_key(dt)` produces the stable grouping key
+- New `widgets.DayGroupListItem` (non-selectable marker) + `widgets.DayGroupRow` (mono `.day-group-row` + `.day-group-label`) cooperate with `list_item.set_selectable(False)` / `set_activatable(False)` in the factory
+- New CSS tokens in `styles.py`: `.message-column-header`, `.message-column-eyebrow`, `.message-column-meta`, `.message-filter-segmented`, `.message-filter-chip`, `.day-group-row`, `.day-group-label`
+- **Why:** Phase 0 sub-phase C of the main-window design alignment — the prototype shows a clean column header with segmented filter and day-grouped messages instead of a sort/unread icon strip stacked under the search bar
+
+## Main-window sidebar alignment (`window.py`, `widgets.py`, `window_message_list.py`, `styles.py`)
+
+**The inbox sidebar now follows the design: full-width Compose with `Ctrl N` chip, then MAILBOXES and ACCOUNTS eyebrow sections.**
+- Compose is the only control in the top action strip; the standalone `ONLINE` sync pill has been retired (sync moved to the header under sub-phase A) and Compose carries a right-aligned `Ctrl N` label chip via a new `.sidebar-compose-chip` token
+- `widgets.SidebarSectionRow` is a non-selectable, non-activatable `Gtk.ListBoxRow` that renders a mono-eyebrow label (`.sidebar-section-label`) used to group sidebar entries
+- `window_message_list._populate_sidebar` inserts a `MAILBOXES` eyebrow before the unified `All Inboxes` / `All Trash` / `All Spam` rows and an `ACCOUNTS` eyebrow before the per-account header + folders + more-row block; the legacy trailing trash/spam block has been removed so rows are never duplicated
+- New CSS tokens in `styles.py`: `.sidebar-compose-chip`, `.sidebar-section`, `.sidebar-section-label`
+- **Why:** Phase 0 sub-phase B of the main-window design alignment — the previous sidebar mixed a small `ONLINE` pill next to Compose and listed folders flat under a single header, while the prototype groups unified and per-account mailboxes under distinct eyebrow sections
+
+## Main-window header strip (`window.py`, `styles.py`)
+
+**The main window header matches the design: brand + crumb left, controls right, no centered title.**
+- New `_HeaderTitleStrip` widget (in `window.py`) carries `H` icon + `HERMOD` wordmark + vertical separator + folder crumb; it is left-packed via `Adw.HeaderBar.pack_start` so the text hugs the start edge instead of centering
+- Existing `self.title_widget.set_title()` / `set_subtitle()` call sites in `window_message_list.py` keep working — the strip exposes the same two setters, the title becomes the crumb, and the subtitle renders as a smaller muted suffix
+- Settings gear (`emblem-system-symbolic`) and a small refresh icon are right-packed via `pack_end` so the visual order is `[sync] [settings] [CSD]`
+- New CSS tokens in `styles.py`: `.hermod-header`, `.hermod-header-brand-row`, `.hermod-header-mark`, `.hermod-header-brand-label`, `.hermod-header-separator`, `.hermod-header-crumb-title`, `.hermod-header-crumb-subtitle`, `.hermod-header-sync`, `.hermod-header-settings`
+- **Why:** Phase 0 sub-phase A of the main-window design alignment — the centered `Hermod` title in the previous `Adw.WindowTitle` did not match the prototype, which always shows the wordmark + crumb on the left and the chrome actions on the right
+
+## Welcome photo panel art (`assets/welcome-photo.png`, `tools/generate_welcome_photo.py`, `window_welcome.py`)
+
+**The welcome left column now carries forest/aurora artwork instead of a flat placeholder.**
+- `tools/generate_welcome_photo.py` renders `assets/welcome-photo.png` at 1440×1800 — a 3-stop vertical gradient (#0F1A18 → #0B1512 → #08100E) with two radial aurora glows (teal #2E6A70 @ 0.22, forest #3B6B4E @ 0.14) and a per-pixel blue-noise dither to kill banding on large GTK surfaces
+- The photo column in `window_welcome.py` is now a `Gtk.Overlay` with a `Gtk.Picture` (CONTENT_FIT_COVER) as the base and the caption riding on top as an overlay child; the window-move gesture is attached to the overlay so drag-to-move works anywhere on the panel
+- `HERMOD_FORCE_WELCOME=1` is now honoured by `window.py`, so `--dump-ui` can capture the welcome surface even when real accounts are configured
+- **Why:** the Phase 0 design pass promised real artwork instead of a flat placeholder panel, and the generator keeps the asset regeneratable without storing a large binary blob in memory or requiring external tooling
+
 ## Account settings and startup refresh (`settings.py`, `window.py`, `accounts/*`)
 
 **Hermod now has a first-class account management section in Settings and can refresh account chrome live.**

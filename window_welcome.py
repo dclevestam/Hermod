@@ -14,6 +14,7 @@ _APP_ICON_PATH = (
     _ROOT / "icons" / "hicolor" / "scalable" / "apps" / "io.github.hermod.Hermod.svg"
 )
 _WELCOME_SCENE_PATH = _ROOT / "assets" / "welcome-scene.svg"
+_WELCOME_PHOTO_PATH = _ROOT / "assets" / "welcome-photo.png"
 _PROVIDER_ASSETS = _ROOT / "assets" / "providers"
 _LUCIDE_ASSETS = _ROOT / "assets" / "icons" / "lucide"
 _GMAIL_ICON_PATH = _PROVIDER_ASSETS / "provider-gmail.png"
@@ -505,21 +506,24 @@ class WelcomeScreen(Gtk.Box):
         self.append(body)
 
         # Left panel: forest/aurora photo with caption at bottom-left.
-        photo = Gtk.Box(
-            orientation=Gtk.Orientation.VERTICAL, hexpand=True, vexpand=True
-        )
+        photo = Gtk.Overlay(hexpand=True, vexpand=True)
         photo.add_css_class("welcome-photo")
         photo.set_size_request(360, -1)
-        photo.append(Gtk.Box(vexpand=True))
+        if _WELCOME_PHOTO_PATH.exists():
+            photo.set_child(_load_picture(_WELCOME_PHOTO_PATH, "welcome-photo-image"))
+        else:
+            photo.set_child(Gtk.Box(hexpand=True, vexpand=True))
         caption = Gtk.Label(
             label="— forest / aurora photography —",
             halign=Gtk.Align.START,
+            valign=Gtk.Align.END,
             xalign=0,
         )
         caption.add_css_class("welcome-photo-caption")
         caption.set_margin_start(24)
         caption.set_margin_bottom(24)
-        photo.append(caption)
+        photo.add_overlay(caption)
+        photo.set_measure_overlay(caption, False)
         _attach_window_move_controller(photo, self)
         body.append(photo)
 
@@ -693,7 +697,7 @@ class WelcomeScreen(Gtk.Box):
             return
         self._accounts_section.set_visible(True)
         for index, backend in enumerate(backends):
-            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
             row.add_css_class("onboarding-account-row")
             color = _backend_color(backend) or "#74a48d"
             apply_accent_css_class(row, color, index)
@@ -701,9 +705,14 @@ class WelcomeScreen(Gtk.Box):
                 _backend_logo_path(backend), "onboarding-account-bullet"
             )
             bullet_icon.set_tooltip_text(_backend_display_name(backend))
+            bullet_icon.set_valign(Gtk.Align.CENTER)
             accent = Gtk.Box()
             accent.add_css_class("onboarding-account-accent")
-            labels = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+            accent.set_valign(Gtk.Align.CENTER)
+            labels = Gtk.Box(
+                orientation=Gtk.Orientation.VERTICAL, spacing=0, hexpand=True
+            )
+            labels.set_valign(Gtk.Align.CENTER)
             alias_value = _backend_display_name(backend)
             alias_label = Gtk.Label(label=alias_value, halign=Gtk.Align.START, xalign=0)
             alias_label.add_css_class("onboarding-account-title")
@@ -712,9 +721,14 @@ class WelcomeScreen(Gtk.Box):
             email_label.add_css_class("onboarding-account-subtitle")
             labels.append(alias_label)
             labels.append(email_label)
+            health_dot = Gtk.Box(valign=Gtk.Align.CENTER, halign=Gtk.Align.END)
+            health_dot.set_size_request(8, 8)
+            health_dot.add_css_class("onboarding-account-health")
+            health_dot.set_tooltip_text("Connected")
             row.append(bullet_icon)
             row.append(accent)
             row.append(labels)
+            row.append(health_dot)
             self._accounts_list.append(row)
         self._open_button.set_visible(True)
 

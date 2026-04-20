@@ -16,6 +16,7 @@ try:
     )
     from .utils import (
         _UNIFIED, _UNIFIED_TRASH, _UNIFIED_SPAM,
+        _UNIFIED_FLAGGED, _UNIFIED_DRAFTS, _UNIFIED_SENT, _UNIFIED_ARCHIVE,
         _DISK_BODY_CACHE_DIR,
         _body_cache_key,
         _snapshot_scope, _snapshot_path,
@@ -32,6 +33,7 @@ except ImportError:
     )
     from utils import (
         _UNIFIED, _UNIFIED_TRASH, _UNIFIED_SPAM,
+        _UNIFIED_FLAGGED, _UNIFIED_DRAFTS, _UNIFIED_SENT, _UNIFIED_ARCHIVE,
         _DISK_BODY_CACHE_DIR,
         _body_cache_key,
         _snapshot_scope, _snapshot_path,
@@ -100,7 +102,10 @@ class MessageListCacheMixin:
     def _message_list_context_key(self, backend=None, folder=None):
         backend = self.current_backend if backend is None else backend
         folder = self.current_folder if folder is None else folder
-        if folder in (_UNIFIED, _UNIFIED_TRASH, _UNIFIED_SPAM):
+        if folder in (
+            _UNIFIED, _UNIFIED_TRASH, _UNIFIED_SPAM,
+            _UNIFIED_FLAGGED, _UNIFIED_DRAFTS, _UNIFIED_SENT, _UNIFIED_ARCHIVE,
+        ):
             return ('unified', folder)
         if backend and folder:
             return (backend.identity, folder)

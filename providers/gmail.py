@@ -1661,6 +1661,10 @@ class GmailBackend:
             counts['trash'] = self.get_unread_count('[Gmail]/Trash', force_primary=reconcile_counts)
         if reconcile_counts or '[Gmail]/Spam' in changed_folders:
             counts['spam'] = self.get_unread_count('[Gmail]/Spam', force_primary=reconcile_counts)
+        if reconcile_counts or '[Gmail]/Drafts' in changed_folders:
+            counts['drafts'] = self.get_unread_count('[Gmail]/Drafts', force_primary=reconcile_counts)
+        if reconcile_counts or '[Gmail]/Sent Mail' in changed_folders:
+            counts['sent'] = self.get_unread_count('[Gmail]/Sent Mail', force_primary=reconcile_counts)
         notice = self.consume_sync_notices()
         return {
             'account': self.identity,
@@ -1708,6 +1712,10 @@ class GmailBackend:
             counts['trash'] = self.get_unread_count('[Gmail]/Trash', force_primary=reconcile_counts)
         if reconcile_counts or '[Gmail]/Spam' in changed_folders:
             counts['spam'] = self.get_unread_count('[Gmail]/Spam', force_primary=reconcile_counts)
+        if reconcile_counts or '[Gmail]/Drafts' in changed_folders:
+            counts['drafts'] = self.get_unread_count('[Gmail]/Drafts', force_primary=reconcile_counts)
+        if reconcile_counts or '[Gmail]/Sent Mail' in changed_folders:
+            counts['sent'] = self.get_unread_count('[Gmail]/Sent Mail', force_primary=reconcile_counts)
         notice = self.consume_sync_notices()
         return {
             'account': self.identity,

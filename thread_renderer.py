@@ -24,7 +24,7 @@ def _avatar_text_color(r, g, b):
     return '#1a1a1a' if lum > 0.22 else '#ffffff'
 
 
-def build_thread_html(selected_msg, subject, first_date, last_date, records, attachments, is_self_fn):
+def build_thread_html(selected_msg, subject, first_date, last_date, records, attachments, is_self_fn, theme='night'):
     """Return a complete HTML string for the thread bubble view.
 
     Args:
@@ -33,10 +33,15 @@ def build_thread_html(selected_msg, subject, first_date, last_date, records, att
         records: List of dicts with 'msg', 'body_text', 'sender_color', 'sender_lane', 'selected', 'attachments'.
         attachments: Collected attachments for the whole thread.
         is_self_fn: Callable(msg) -> bool — True if the message sender is the current account.
+        theme: kept for call-site compat; reader body always uses the light
+               surface since emails are authored for a white background.
     """
-    page_bg = '#0b0f0d'
-    text = '#f2efe8'
-    subtext = '#b7beb8'
+    # Email body surface is always light in both Night and Day themes — the
+    # design prototype's Night inbox screenshot shows white reader body with
+    # dark text. Only the surrounding app chrome themes dark.
+    page_bg = '#ffffff'
+    text = '#1b2024'
+    subtext = '#5a6670'
     ordered_records = list(records)
     bubbles = []
     last_day = None
