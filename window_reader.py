@@ -74,6 +74,23 @@ except ImportError:
 # mode heuristic to measure "real" content length.
 _RE_PAREN_URL = re.compile(r"\s*\(https?://[^)\s]+\)")
 
+# Heuristic match for "your email client can't display HTML — view
+# the newsletter online" plaintext stubs. When a sender ships this as
+# the plaintext MIME alternative, the real content is in the HTML
+# and we'd rather extract from there than render a useless stub.
+_PLAINTEXT_STUB_RE = re.compile(
+    r"(?:"
+    r"can(?:'|\u2019)?t\s+display\s+HTML"
+    r"|cannot\s+display\s+HTML"
+    r"|view\s+(?:this\s+email|the\s+newsletter|online|in\s+(?:your\s+)?browser)"
+    r"|having\s+trouble\s+viewing"
+    r"|html\s+version\s+of\s+this\s+email"
+    r"|your\s+email\s+(?:software|client)\s+can"
+    r"|unable\s+to\s+(?:display|view)\s+HTML"
+    r")",
+    re.IGNORECASE,
+)
+
 
 def _inject_styles(html, css):
     lower = html.lower()
@@ -166,17 +183,22 @@ class ReaderMixin:
         # from the plaintext part than from nested <table> layouts. So
         # plaintext wins by default.
         #
-        # But some senders ship lazy plaintext that strips every <a>
-        # URL, leaving "Log in >" with no way to act on it. In that
-        # case the HTML-derived text (which preserves anchors as
-        # "label (url)") is strictly more useful. Swap to it only
-        # when the plaintext is URL-free and the HTML does have
-        # anchor URLs.
+        # Two carve-outs:
+        #   • Lazy plaintext that strips every <a> URL (leaving
+        #     "Log in >" with no way to act on it). Swap to HTML-derived
+        #     when plaintext is URL-free and the HTML has anchor URLs.
+        #   • "Your email client can't display HTML" stub plaintext —
+        #     a decoy that's just a link to view the newsletter online.
+        #     The real content lives in the HTML, so ignore the stub
+        #     and extract from HTML.
         plain = (text or "").strip()
         html_derived = _html_to_text(html) if html else ""
         plain_has_urls = "http" in plain.lower() if plain else False
         html_has_urls = "http" in html_derived.lower() if html_derived else False
-        if plain:
+        plain_is_stub = bool(plain) and bool(_PLAINTEXT_STUB_RE.search(plain))
+        if plain_is_stub and html_derived:
+            body = html_derived
+        elif plain:
             body = html_derived if (not plain_has_urls and html_has_urls) else plain
         else:
             body = html_derived or plain
