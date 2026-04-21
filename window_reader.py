@@ -18,7 +18,7 @@ from gi.repository import Gtk, Adw, GLib, WebKit, Pango, Gdk, Gio
 try:
     from .styles import apply_accent_css_class
     from .settings import get_settings
-    from .thread_renderer import build_thread_html, thread_reply_msg_for_records
+    from .thread_renderer import build_clean_body_html, build_thread_html, thread_reply_msg_for_records
     from .utils import (
         _format_date,
         _format_received_date,
@@ -44,7 +44,7 @@ try:
 except ImportError:
     from styles import apply_accent_css_class
     from settings import get_settings
-    from thread_renderer import build_thread_html, thread_reply_msg_for_records
+    from thread_renderer import build_clean_body_html, build_thread_html, thread_reply_msg_for_records
     from utils import (
         _format_date,
         _format_received_date,
@@ -539,6 +539,12 @@ class ReaderMixin:
     def _render_thread_view(self, selected_msg, records, attachments, generation=None):
         if generation is not None and generation != self._body_load_generation:
             return False
+        # Thread view is always "clean" (bubble layout); the single-message
+        # toggle is meaningless here, hide it.
+        if getattr(self, "_reader_mode_btn", None) is not None:
+            self._reader_mode_btn.set_visible(False)
+        if getattr(self, "_reader_mode_menu_btn", None) is not None:
+            self._reader_mode_menu_btn.set_visible(False)
         ordered_records = sorted(
             list(records or []),
             key=lambda record: (
@@ -856,7 +862,198 @@ class ReaderMixin:
         if current is not None:
             self._render_body(*current, cache=False)
 
-    def _render_body(self, msg, html, text, attachments, cache=True, generation=None):
+    def _resolve_reader_mode_for_msg(self, msg, html="", text="", clean_body=""):
+        """Pick the initial reader mode for a single-message open.
+
+        Precedence (strongest first):
+          1. Explicit per-sender opt-out — user said "always original"
+             for this sender, always wins.
+          2. Shape heuristic — score the message: image-heavy,
+             structured tables, transactional subject, or extraction
+             ratio that suggests the HTML layout *is* the content.
+          3. Default to clean.
+        """
+        sender = (msg.get("sender_email") or "").strip().lower()
+        if sender:
+            prefs = get_settings().get("senders_prefer_original") or []
+            try:
+                if sender in {str(s).strip().lower() for s in prefs}:
+                    return "original"
+            except Exception:
+                pass
+        if self._heuristic_prefers_original(msg, html, text, clean_body):
+            return "original"
+        return "clean"
+
+    def _heuristic_prefers_original(self, msg, html, text, clean_body):
+        """Return True when the message's shape suggests the original
+        HTML will read better than the quoted-stripped text.
+
+        Signals (any one fires):
+          a) Design-heavy: many <img> and very little usable text after
+             extraction. Marketing newsletters fall here (Womier-style).
+          b) Structured receipt/invoice: <table> plus URL clutter in the
+             extracted body. Payment receipts (Anthropic/Stripe) fall
+             here — the original renders line items cleanly, the
+             extracted text interleaves "(https://…)" everywhere.
+          c) Tiny extraction ratio: < 5% of the original HTML survives
+             extraction AND the HTML is sizeable. Means the content
+             IS the markup (hero images, CTA buttons, etc.).
+          d) Transactional subject keywords + multiple images.
+          e) URL density in the extracted text exceeds ~1 URL per
+             400 chars — reads like "[Link](https://…)" soup in clean
+             mode.
+        """
+        if not html:
+            return False
+        try:
+            lower_html = html.lower()
+            img_count = lower_html.count("<img ")
+            has_table = "<table" in lower_html
+            clean_stripped = (clean_body or "").strip()
+            clean_len = len(clean_stripped)
+            html_len = len(html)
+            url_count = clean_stripped.count("(http")
+
+            # a) Design-heavy
+            if img_count >= 3 and clean_len < 240:
+                return True
+
+            # b) Structured table with URL clutter in the extraction
+            if has_table and url_count >= 3:
+                return True
+
+            # c) Content is the markup
+            if html_len > 5000 and clean_len > 0 and (clean_len / html_len) < 0.05:
+                return True
+
+            # d) Transactional subject + imagery
+            subject_lower = str(msg.get("subject") or "").lower()
+            transactional_kw = (
+                "receipt",
+                "invoice",
+                "your order",
+                "order #",
+                "order confirmation",
+                "confirmation",
+                "shipment",
+                "shipping",
+                "delivery",
+                "kvitto",
+            )
+            if img_count >= 2 and any(kw in subject_lower for kw in transactional_kw):
+                return True
+
+            # e) URL density in the extracted text
+            if clean_len > 400 and url_count * 400 > clean_len:
+                return True
+        except Exception:
+            return False
+        return False
+
+    def _on_reader_mode_toggle(self):
+        """Header button click: flip between clean and original."""
+        current = getattr(self, "_reader_view_mode", "clean")
+        self._set_reader_mode("original" if current == "clean" else "clean")
+
+    def _on_reader_mode_sender_pref_toggled(self, check_button):
+        """Popover checkbox: persist `always show original from sender`."""
+        if self._current_body is None:
+            return
+        msg = self._current_body[0]
+        prefer_original = bool(check_button.get_active())
+        if not self._toggle_sender_prefer_original(msg, prefer_original):
+            return
+        # If the user just opted this sender out of clean mode, flip
+        # the current view to original immediately so the change is
+        # visible. If they un-opted-out, don't auto-flip — let them
+        # click the main toggle.
+        if prefer_original and self._reader_view_mode != "original":
+            self._set_reader_mode("original")
+
+    def _sync_reader_mode_popover(self, msg):
+        """Keep the popover checkbox state in sync with persisted settings
+        and with whether the active message has a usable sender."""
+        check = getattr(self, "_reader_mode_sender_check", None)
+        menu_btn = getattr(self, "_reader_mode_menu_btn", None)
+        if check is None or menu_btn is None:
+            return
+        sender = (msg or {}).get("sender_email") if msg else ""
+        sender = (sender or "").strip()
+        if not sender:
+            menu_btn.set_sensitive(False)
+            check.set_label("Always show original from this sender")
+            return
+        menu_btn.set_sensitive(True)
+        check.set_label(f"Always show original from {sender}")
+        # set_active triggers the 'toggled' signal; block while syncing.
+        try:
+            check.handler_block_by_func(self._on_reader_mode_sender_pref_toggled)
+        except (TypeError, AttributeError):
+            pass
+        check.set_active(self._sender_prefers_original(msg))
+        try:
+            check.handler_unblock_by_func(self._on_reader_mode_sender_pref_toggled)
+        except (TypeError, AttributeError):
+            pass
+
+    def _set_reader_mode(self, mode):
+        """Flip the current single-message view mode and re-render."""
+        mode = "original" if mode == "original" else "clean"
+        if self._current_body is None:
+            self._reader_view_mode = mode
+            self._sync_reader_mode_toggle()
+            return
+        self._reader_view_mode = mode
+        msg, html, text, attachments = self._current_body
+        # `cache=False` so we don't re-persist identical bytes; mode is
+        # a view-only preference.
+        self._render_body(
+            msg, html, text, attachments, cache=False, mode=mode
+        )
+
+    def _sync_reader_mode_toggle(self):
+        """Mirror _reader_view_mode onto the header toggle button so its
+        icon, tooltip, and active state reflect what's on screen."""
+        btn = getattr(self, "_reader_mode_btn", None)
+        if btn is None:
+            return
+        mode = getattr(self, "_reader_view_mode", "clean")
+        can_toggle = bool(getattr(self, "_reader_mode_clean_available", False))
+        btn.set_sensitive(can_toggle)
+        if mode == "original":
+            btn.set_tooltip_text("Switch to clean view")
+            btn.remove_css_class("reader-mode-clean")
+            btn.add_css_class("reader-mode-original")
+        else:
+            btn.set_tooltip_text("Switch to original HTML view")
+            btn.remove_css_class("reader-mode-original")
+            btn.add_css_class("reader-mode-clean")
+
+    def _toggle_sender_prefer_original(self, msg, prefer_original):
+        """Add or remove the message's sender from the persistent list
+        of senders who should always open in original view."""
+        sender = (msg.get("sender_email") or "").strip().lower()
+        if not sender:
+            return False
+        settings = get_settings()
+        current = settings.get("senders_prefer_original") or []
+        as_set = {str(s).strip().lower() for s in current if str(s).strip()}
+        if prefer_original:
+            as_set.add(sender)
+        else:
+            as_set.discard(sender)
+        settings.set("senders_prefer_original", sorted(as_set))
+        return True
+
+    def _sender_prefers_original(self, msg):
+        sender = (msg.get("sender_email") or "").strip().lower()
+        if not sender:
+            return False
+        prefs = get_settings().get("senders_prefer_original") or []
+        return sender in {str(s).strip().lower() for s in prefs}
+
+    def _render_body(self, msg, html, text, attachments, cache=True, generation=None, mode=None):
         if generation is not None and generation != self._body_load_generation:
             return False
         self._thread_view_active = False
@@ -922,7 +1119,39 @@ class ReaderMixin:
                 msg.get("date"),
             )
             self._current_body = (msg, html, text, attachments)
+        # Pre-compute clean body so the mode resolver has the real
+        # extraction in hand (the shape heuristic scores it directly).
+        clean_body = self._extract_thread_body(html, text)
+        clean_available = bool(clean_body.strip())
+        self._reader_mode_clean_available = clean_available
+        # Resolve the view mode once per render: explicit `mode=` wins
+        # (the header toggle uses that path); else per-sender opt-out
+        # or shape heuristic; else default to clean.
+        if mode is None:
+            mode = self._resolve_reader_mode_for_msg(msg, html, text, clean_body)
+        if mode == "clean" and not clean_available:
+            mode = "original"
+        self._reader_view_mode = mode
+        self._sync_reader_mode_toggle()
+        self._sync_reader_mode_popover(msg)
+        # Show the mode toggle + sender-pref overflow only in single-message
+        # view; threads are always clean by design and the toggle would
+        # have no meaning there.
+        if getattr(self, "_reader_mode_btn", None) is not None:
+            self._reader_mode_btn.set_visible(True)
+        if getattr(self, "_reader_mode_menu_btn", None) is not None:
+            self._reader_mode_menu_btn.set_visible(True)
         self._update_webview_bg()
+        if mode == "clean":
+            # Clean view sits on the dark reader surface (same as thread
+            # bubbles); skip the light email frame entirely so switching
+            # back to original visibly changes the background.
+            self._webview_bg_color = "rgba(11, 15, 18, 1.0)"
+            self._update_webview_bg()
+            content = build_clean_body_html(clean_body)
+            self.webview.load_html(content, "about:blank")
+            self._show_attachments(attachments, msg)
+            return False
         css = self._get_email_css(self._email_text_color)
         if html:
             content = _inject_styles(
@@ -975,6 +1204,10 @@ class ReaderMixin:
             self._thread_summary_banner.set_visible(False)
         self._thread_messages_btn.set_visible(False)
         self._set_thread_sidebar_visible(False)
+        if getattr(self, "_reader_mode_btn", None) is not None:
+            self._reader_mode_btn.set_visible(False)
+        if getattr(self, "_reader_mode_menu_btn", None) is not None:
+            self._reader_mode_menu_btn.set_visible(False)
         self._webview_bg_color = None
         if self._message_info_bar is not None:
             self._message_info_bar.set_visible(False)

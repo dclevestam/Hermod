@@ -23,3 +23,30 @@ These features leverage Hermod's local AI integration to provide a superior, pri
 
 ### 6. Zero-Cloud Privacy Architecture
 - **Local Processing:** All "Intelligence" runs on the user's hardware, ensuring sensitive communications are never processed by third-party AI providers.
+
+---
+
+## Polish backlog (return-to items)
+
+### Reader: Clean / Original view heuristic
+- **Shipped:** default-clean reader with per-view toggle, per-sender
+  "always original" pin, and a shape heuristic that routes
+  design-heavy newsletters and structured receipts to original
+  automatically (`window_reader.py::_heuristic_prefers_original`).
+- **To polish later:**
+  - Improve the clean extractor so `(https://…)` inline URL clutter
+    gets trimmed — receipts could then stay in clean mode instead of
+    bouncing to original.
+  - Learn-from-feedback: record when the user manually flips
+    clean→original for a given domain and silently promote that
+    domain toward original next time.
+  - Settings "Reading" panel listing every sender pinned to original
+    view, with a one-click reset.
+  - Consider an "always prefer clean from <sender>" option (overrides
+    the heuristic for senders where clean reads fine but the shape
+    heuristic keeps picking original).
+  - Tune heuristic thresholds (`img_count`, extraction-ratio,
+    URL-density) against a small labelled corpus from a real inbox.
+  - Thread view already renders clean by design; if we ever want an
+    "original HTML" peek for a single bubble inside the thread, that
+    would be a per-bubble toggle on the bubble header.

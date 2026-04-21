@@ -53,6 +53,12 @@ DEFAULTS = {
     "quiet_hours_start": "22:00",
     "quiet_hours_end": "07:00",
     "quiet_hours_weekdays_only": True,
+    # Reader defaults to a clean extracted body (quoted/signature-trimmed),
+    # with a per-message toggle to see the original HTML. This list opts
+    # specific senders (lowercase email addresses) out of clean mode so
+    # their messages always open in original view (e.g. design-heavy
+    # newsletters where the HTML layout is the content).
+    "senders_prefer_original": [],
 }
 
 THEME_MODES = ("night", "day")

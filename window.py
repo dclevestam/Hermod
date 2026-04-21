@@ -281,6 +281,9 @@ class HermodWindow(
         self._thread_groups = {}
         self._current_thread_messages = None
         self._thread_view_active = False
+        self._reader_view_mode = "clean"
+        self._reader_mode_clean_available = False
+        self._reader_mode_btn = None
         self._thread_reply_target = None
         self._compose_view = None
         self._active_folder_row = None
@@ -1352,6 +1355,54 @@ class HermodWindow(
             "clicked", lambda _: self._on_current_delete()
         )
         self._info_actions.append(self._reader_delete_btn)
+
+        # Clean/original view toggle + per-sender preference overflow.
+        # Lives after the delete/reply cluster so the primary actions
+        # stay left-aligned; the toggle is reader-view-only (hidden
+        # during thread view, which is always clean by design).
+        self._reader_mode_btn = Gtk.Button(
+            icon_name=_pick_icon_name(
+                "hermod-reader-symbolic",
+                "view-reader-symbolic",
+                "accessories-text-editor-symbolic",
+            ),
+            tooltip_text="Switch to original HTML view",
+        )
+        self._reader_mode_btn.add_css_class("flat")
+        self._reader_mode_btn.add_css_class("reader-action-btn")
+        self._reader_mode_btn.add_css_class("reader-mode-clean")
+        self._reader_mode_btn.connect(
+            "clicked", lambda _: self._on_reader_mode_toggle()
+        )
+        self._info_actions.append(self._reader_mode_btn)
+
+        self._reader_mode_menu_btn = Gtk.MenuButton()
+        self._reader_mode_menu_btn.add_css_class("flat")
+        self._reader_mode_menu_btn.add_css_class("reader-action-btn")
+        self._reader_mode_menu_btn.set_tooltip_text("Per-sender view options")
+        self._reader_mode_menu_btn.set_icon_name(
+            _pick_icon_name("pan-down-symbolic", "go-down-symbolic")
+        )
+        self._reader_mode_popover = Gtk.Popover()
+        self._reader_mode_popover.set_has_arrow(True)
+        popover_box = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=6,
+            margin_top=8,
+            margin_bottom=8,
+            margin_start=10,
+            margin_end=10,
+        )
+        self._reader_mode_sender_check = Gtk.CheckButton(
+            label="Always show original from this sender"
+        )
+        self._reader_mode_sender_check.connect(
+            "toggled", lambda btn: self._on_reader_mode_sender_pref_toggled(btn)
+        )
+        popover_box.append(self._reader_mode_sender_check)
+        self._reader_mode_popover.set_child(popover_box)
+        self._reader_mode_menu_btn.set_popover(self._reader_mode_popover)
+        self._info_actions.append(self._reader_mode_menu_btn)
 
         _thread_btn_box = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL, spacing=5, valign=Gtk.Align.CENTER

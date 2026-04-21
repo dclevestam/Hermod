@@ -380,3 +380,40 @@ def thread_reply_msg_for_records(records, is_self_fn):
         if not is_self_fn(msg):
             return msg
     return (records[-1].get('msg') if records else None)
+
+
+def build_clean_body_html(body_text):
+    """Wrap extracted (quoted-trimmed) plain text in a reader-matched
+    document. The single-message reader uses this for its default
+    "clean" view — same font/colors as the thread bubble body, no
+    chrome, so the app-level message header (`.reader-header`) can own
+    the sender/date line without duplicating it here."""
+    page_bg = '#0B0F12'
+    text_color = '#F2F1ED'
+    body = html_lib.escape(body_text or '').replace('\n', '<br/>')
+    return f'''<html>
+<head>
+<meta charset="utf-8" />
+<style>
+html, body {{
+    margin: 0;
+    padding: 0;
+    background: {page_bg};
+    color: {text_color};
+    font-family: "DejaVu Sans", -apple-system, system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.55;
+}}
+body {{ padding: 24px 26px 32px; }}
+.clean-body {{
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: {text_color};
+}}
+a {{ color: #9fb7b9; }}
+</style>
+</head>
+<body>
+<div class="clean-body">{body}</div>
+</body>
+</html>'''

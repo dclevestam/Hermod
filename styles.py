@@ -1519,6 +1519,14 @@ window, dialog, popover {
     color: alpha(@window_fg_color, 0.28);
     background: transparent;
 }
+.reader-action-btn.reader-mode-original {
+    color: @hermod_accent;
+    background-color: alpha(@hermod_accent, 0.14);
+}
+.reader-action-btn.reader-mode-original:hover {
+    background-color: alpha(@hermod_accent, 0.20);
+    color: @hermod_accent;
+}
 .thread-info-button {
     min-height: 26px;
     padding: 0px 10px;
