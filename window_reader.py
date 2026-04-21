@@ -74,6 +74,85 @@ except ImportError:
 # mode heuristic to measure "real" content length.
 _RE_PAREN_URL = re.compile(r"\s*\(https?://[^)\s]+\)")
 
+# Label keywords that almost always deserve their own line when they
+# appear mid-paragraph — typical receipt / invoice / transactional
+# mail patterns. The regex matches a whitespace boundary before the
+# keyword so we only split inside long run-on lines, never inside
+# word-fragments. `\s+` is required (no leading-of-line match) so we
+# don't accidentally split a line that already begins with a label.
+_LABEL_SPLIT_RE = re.compile(
+    r"(?<=\S)\s+(?="
+    r"Subtotal\b"
+    r"|Total\s+(?:excluding|including|paid|due|amount|price)"
+    r"|Total(?=\s*[\-–—:$€£¥]|\s*\d)"  # "Total " followed by currency/digit
+    r"|Tax\s*\("                         # "Tax (19%)" — paren-rate only
+    r"|VAT\s*\("
+    r"|Shipping\s+(?:fee|cost|address)"
+    r"|Delivery\s+fee"
+    r"|Discount(?=\s+[-$€£¥\d]|:)"
+    r"|Receipt\s+(?:number|#)"
+    r"|Invoice\s+(?:number|#)"
+    r"|Order\s+(?:number|#|confirmation)"
+    r"|Tracking\s+(?:number|#)"
+    r"|Payment\s+method\b"
+    r"|Billing\s+address\b"
+    r"|Amount\s+(?:paid|due|charged|refunded)\b"
+    r"|Questions\?"
+    r"|Powered\s+by\b"
+    r"|Download\s+\w+"
+    r"|View\s+(?:your\s+)?(?:receipt|invoice|order|details|online)"
+    r"|Visit\s+(?:our|the)"
+    r"|Learn\s+more\b"
+    r"|Unsubscribe\b"
+    r")"
+    # Case-sensitive on purpose: require TitleCase so "Total excluding"
+    # splits in receipts ("Total excluding tax €82.11") but the same
+    # phrase in conversational prose ("Your order total excluding tax
+    # amounts to…") stays on one line.
+)
+
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z])")
+
+
+def _prettify_extracted_body(text):
+    """Reintroduce paragraph / line breaks into run-on text produced
+    by html2text conversion. Uses two heuristics:
+
+      1. Label-based splits for receipt- and invoice-shaped lines.
+         Inserts a break before well-known field keywords so
+         `"… -€7.89 Subtotal €82.11 Tax (19%) €15.60 Total €97.71"`
+         becomes four lines.
+      2. Sentence-based splits for long prose lines. Uses `[.!?]` +
+         capital-letter lookahead so we don't cut mid-sentence on
+         abbreviations. Only triggers on lines > 200 chars, leaving
+         short paragraphs and list items untouched.
+
+    Short lines (≤ 100 chars) pass through unchanged — conversational
+    mail and existing well-formatted paragraphs stay as the sender
+    wrote them. Collapses runs of ≥ 3 blank lines into a single
+    blank line so marketing emails don't render with giant gaps.
+    """
+    if not text:
+        return text
+    out_lines = []
+    for raw_line in text.split("\n"):
+        if len(raw_line) <= 100:
+            out_lines.append(raw_line)
+            continue
+        reformatted = _LABEL_SPLIT_RE.sub("\n", raw_line)
+        if "\n" in reformatted:
+            out_lines.extend(reformatted.split("\n"))
+            continue
+        if len(raw_line) > 200:
+            parts = _SENTENCE_SPLIT_RE.split(raw_line)
+            out_lines.extend(parts)
+            continue
+        out_lines.append(raw_line)
+    joined = "\n".join(out_lines)
+    joined = re.sub(r"\n{3,}", "\n\n", joined)
+    return joined
+
+
 # Heuristic match for "your email client can't display HTML — view
 # the newsletter online" plaintext stubs. When a sender ships this as
 # the plaintext MIME alternative, the real content is in the HTML
@@ -203,6 +282,7 @@ class ReaderMixin:
         else:
             body = html_derived or plain
         body = _strip_thread_quotes(body)
+        body = _prettify_extracted_body(body.strip())
         return body.strip()
 
     def _message_is_self(self, msg):
