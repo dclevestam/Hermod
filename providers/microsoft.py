@@ -424,6 +424,18 @@ class MicrosoftGraphBackend:
         )
         with self._sync_lock:
             self._folder_cache[folder] = messages[:_CACHE_MAX]
+            # Cap distinct folders held in-memory so accounts with
+            # dozens of folders (custom Outlook rules, archive
+            # subfolders) don't let the cache grow without bound. The
+            # on-disk sync_state is the durable store; evicting an
+            # idle folder just means the next visit refetches.
+            max_folders = 16
+            if len(self._folder_cache) > max_folders:
+                overflow = len(self._folder_cache) - max_folders
+                for stale in list(self._folder_cache.keys())[:overflow]:
+                    if stale == folder or stale == "inbox":
+                        continue
+                    self._folder_cache.pop(stale, None)
         self._persist_sync_state()
         self._sync_health.mark_ready("Ready")
         return list(messages[:limit])

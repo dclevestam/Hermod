@@ -2,6 +2,7 @@
 
 import collections
 import threading
+import time
 from datetime import datetime, timezone
 
 import gi
@@ -273,11 +274,89 @@ class MessageListMixin:
             self._countdown_lbl.set_label('SYNCING')
         else:
             self._countdown_lbl.set_label('ONLINE')
+        self._refresh_sidebar_sync_status()
+
+    def _sidebar_sync_state(self):
+        """Resolve the four-way status for the sidebar's sync pill:
+        offline > syncing > error > pending > online. Offline wins even
+        during a sync attempt because it's the actionable state."""
+        if getattr(self, '_network_offline', False):
+            return 'offline'
+        if getattr(self, '_syncing', False) or getattr(self, '_sync_in_flight', False):
+            return 'syncing'
+        if getattr(self, '_last_sync_had_errors', False):
+            return 'error'
+        if getattr(self, '_last_sync_at', None) is None:
+            return 'pending'
+        return 'online'
+
+    _SIDEBAR_STATE_LABEL = {
+        'offline': 'No connection',
+        'syncing': 'Syncing…',
+        'error': 'Sync issue',
+        'pending': 'Waiting to sync',
+        'online': 'All synced',
+    }
+    _SIDEBAR_STATE_CLASSES = (
+        'sidebar-status-dot-online',
+        'sidebar-status-dot-syncing',
+        'sidebar-status-dot-offline',
+        'sidebar-status-dot-error',
+        'sidebar-status-dot-pending',
+    )
+
+    def _format_sync_age(self, state):
+        if state == 'offline':
+            return 'offline'
+        if state == 'syncing':
+            return 'now'
+        if state == 'pending':
+            return '—'
+        last = getattr(self, '_last_sync_at', None)
+        if last is None:
+            return '—'
+        elapsed = time.monotonic() - last
+        if elapsed < 45:
+            return 'just now'
+        if elapsed < 90:
+            return '1 min ago'
+        if elapsed < 3600:
+            return f'{int(elapsed // 60)} min ago'
+        if elapsed < 7200:
+            return '1 hr ago'
+        if elapsed < 86400:
+            return f'{int(elapsed // 3600)} hr ago'
+        return f'{int(elapsed // 86400)} d ago'
+
+    def _refresh_sidebar_sync_status(self):
+        dot = getattr(self, '_sidebar_synced_dot', None)
+        label = getattr(self, '_sidebar_synced_lbl', None)
+        age = getattr(self, '_sidebar_synced_age_lbl', None)
+        if dot is None or label is None or age is None:
+            return
+        state = self._sidebar_sync_state()
+        label.set_label(self._SIDEBAR_STATE_LABEL.get(state, 'All synced'))
+        age.set_label(self._format_sync_age(state))
+        for cls in self._SIDEBAR_STATE_CLASSES:
+            dot.remove_css_class(cls)
+        dot.add_css_class(f'sidebar-status-dot-{state}')
+
+    def _ensure_sync_status_timer(self):
+        if getattr(self, '_sync_status_timer_id', None) is not None:
+            return
+        self._sync_status_timer_id = GLib.timeout_add_seconds(
+            30, self._on_sync_status_tick
+        )
+
+    def _on_sync_status_tick(self):
+        self._refresh_sidebar_sync_status()
+        return True  # keep repeating
 
     def set_network_offline(self, offline):
         offline = bool(offline)
         self._network_offline = offline
         view_name = self._viewer_stack.get_visible_child_name() if hasattr(self, '_viewer_stack') else None
+        header_btn = getattr(self, '_header_sync_btn', None)
         if offline:
             self._syncing = False
             self._sync_btn.remove_css_class('sync-online')
@@ -287,6 +366,10 @@ class MessageListMixin:
             self._sync_btn.set_tooltip_text('No network connection')
             if view_name == 'viewer':
                 self.title_widget.set_subtitle('No Network Connection')
+            if header_btn is not None:
+                header_btn.remove_css_class('syncing')
+                header_btn.add_css_class('offline')
+                header_btn.set_tooltip_text('No network connection')
         else:
             self._sync_btn.remove_css_class('sync-offline')
             self._sync_btn.add_css_class('sync-online')
@@ -295,6 +378,9 @@ class MessageListMixin:
             self._sync_btn.set_tooltip_text('Sync now (F5)')
             if view_name == 'viewer':
                 self.title_widget.set_subtitle(self._content_subtitle)
+            if header_btn is not None:
+                header_btn.remove_css_class('offline')
+                header_btn.set_tooltip_text('Sync now (F5)')
         self._update_sync_status_labels()
 
     def set_syncing(self, syncing):
@@ -303,11 +389,14 @@ class MessageListMixin:
             self._update_sync_status_labels()
             return
         self._syncing = bool(syncing)
+        header_btn = getattr(self, '_header_sync_btn', None)
         if self._syncing:
             if hasattr(self, '_spin_finishing_id') and self._spin_finishing_id:
                 GLib.source_remove(self._spin_finishing_id)
                 self._spin_finishing_id = None
             self._sync_btn.add_css_class('sync-syncing')
+            if header_btn is not None:
+                header_btn.add_css_class('syncing')
         else:
             # Let the current rotation cycle finish rather than snapping back to 0°.
             # Wait one full animation cycle (1 s) then remove the spinning class.
@@ -315,6 +404,8 @@ class MessageListMixin:
                 GLib.source_remove(self._spin_finishing_id)
             def _clear_syncing():
                 self._sync_btn.remove_css_class('sync-syncing')
+                if header_btn is not None:
+                    header_btn.remove_css_class('syncing')
                 self._spin_finishing_id = None
                 return False
             self._spin_finishing_id = GLib.timeout_add(1000, _clear_syncing)
@@ -323,6 +414,10 @@ class MessageListMixin:
     def _finish_sync(self, total_new=0):
         self.set_syncing(False)
         self._sync_in_flight = False
+        if not getattr(self, '_last_sync_had_errors', False):
+            self._last_sync_at = time.monotonic()
+        self._refresh_sidebar_sync_status()
+        self._ensure_sync_status_timer()
         if getattr(self, '_startup_status_active', False):
             self._startup_visible_ready = True
             self._schedule_startup_status_completion(total_new=total_new)
@@ -1298,7 +1393,12 @@ class MessageListMixin:
                 f'{len(ordered_msgs)} rows in-place update (no splice) [{source}]',
                 started=started,
             )
-            return True
+            # Must return False: `_set_messages` is scheduled via
+            # `GLib.idle_add(..., self._set_messages, ...)` from the poll
+            # completion path, and returning True there would tell GLib
+            # "keep calling me" — re-firing the callback every main-loop
+            # iteration and pegging a core at 100% CPU.
+            return False
 
         items = self._build_message_items(ordered_msgs, has_more=has_more)
         self._message_store.splice(0, self._message_store.get_n_items(), items)

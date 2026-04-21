@@ -364,9 +364,16 @@ class IMAPSMTPBackend:
         context = self._ssl_context()
         port = 993 if self._imap_use_ssl else 143
         if self._imap_use_ssl:
-            imap = imaplib.IMAP4_SSL(self._imap_host, port, ssl_context=context)
+            imap = imaplib.IMAP4_SSL(
+                self._imap_host,
+                port,
+                ssl_context=context,
+                timeout=_IMAP_SMTP_TIMEOUT_SECS,
+            )
         else:
-            imap = imaplib.IMAP4(self._imap_host, port)
+            imap = imaplib.IMAP4(
+                self._imap_host, port, timeout=_IMAP_SMTP_TIMEOUT_SECS
+            )
             should_starttls = self._imap_use_tls or self._imap_supports_starttls(imap)
             if should_starttls:
                 imap.starttls(ssl_context=context)

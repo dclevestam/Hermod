@@ -163,7 +163,28 @@ class Settings:
         with _settings_lock:
             if key == "disk_cache_budget_mb":
                 return clamp_disk_cache_budget_mb(self._data.get(key, DEFAULTS[key]))
-            return self._data.get(key, DEFAULTS.get(key))
+            raw = self._data.get(key, DEFAULTS.get(key))
+            default = DEFAULTS.get(key)
+            # Coerce to the default's type so a corrupted on-disk value
+            # (e.g. "5" stored where 5 was expected) doesn't break math
+            # downstream. `"5" * 60 == "5555..."` is a notorious silent
+            # bug we'd rather catch here than in the poll loop.
+            if default is not None and type(raw) is not type(default):
+                try:
+                    if isinstance(default, bool):
+                        if isinstance(raw, str):
+                            raw = raw.strip().lower() in ("1", "true", "yes", "on")
+                        else:
+                            raw = bool(raw)
+                    elif isinstance(default, int):
+                        raw = int(raw)
+                    elif isinstance(default, float):
+                        raw = float(raw)
+                    elif isinstance(default, str):
+                        raw = str(raw)
+                except (TypeError, ValueError):
+                    raw = default
+            return raw
 
     def set(self, key, value):
         self.update({key: value})

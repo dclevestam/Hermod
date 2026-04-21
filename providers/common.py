@@ -66,14 +66,37 @@ def _aware_utc_datetime(value=None):
     return value.astimezone(timezone.utc)
 
 
+_NETWORK_MONITOR_ERROR_LOGGED = False
+
+
 def network_ready():
+    global _NETWORK_MONITOR_ERROR_LOGGED
     try:
         monitor = Gio.NetworkMonitor.get_default()
         if not monitor.get_network_available():
             return False
         connectivity = monitor.get_connectivity()
         return connectivity != Gio.NetworkConnectivity.LOCAL
-    except Exception:
+    except Exception as exc:
+        # Assume reachable so the real network error surfaces from the
+        # next socket call rather than freezing the poll loop. Log once
+        # per process so a broken NetworkMonitor is visible to
+        # diagnostics without flooding every sync cycle.
+        if not _NETWORK_MONITOR_ERROR_LOGGED:
+            _NETWORK_MONITOR_ERROR_LOGGED = True
+            try:
+                from ..diagnostics.logger import log_event
+            except (ImportError, ValueError):
+                try:
+                    from diagnostics.logger import log_event
+                except ImportError:
+                    log_event = None
+            if log_event is not None:
+                log_event(
+                    'network-monitor-broken',
+                    level='warning',
+                    message=f'Gio.NetworkMonitor raised: {exc}',
+                )
         return True
 
 

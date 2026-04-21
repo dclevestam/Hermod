@@ -1240,7 +1240,11 @@ class ComposeView(Gtk.Box):
         gen = self._contact_fetch_gen
         backend = self._get_selected_backend()
         def fetch():
-            contacts = backend.fetch_contacts(query)
+            try:
+                contacts = backend.fetch_contacts(query) if backend is not None else []
+            except Exception as exc:
+                _log_exception('fetch_contacts failed', exc)
+                contacts = []
             GLib.idle_add(self._show_contacts, contacts, gen)
         threading.Thread(target=fetch, daemon=True).start()
         return GLib.SOURCE_REMOVE

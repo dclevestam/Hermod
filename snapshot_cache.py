@@ -45,8 +45,18 @@ def load_snapshot_payload(scope):
     path = _snapshot_path(scope)
     if not path.exists():
         return None
-    with gzip.open(path, 'rt', encoding='utf-8') as f:
-        payload = json.load(f)
+    try:
+        with gzip.open(path, 'rt', encoding='utf-8') as f:
+            payload = json.load(f)
+    except (OSError, EOFError, json.JSONDecodeError, gzip.BadGzipFile) as exc:
+        # Corrupt or truncated snapshot (e.g. power loss mid-write).
+        # Remove the bad file so we don't poison every subsequent
+        # startup with the same error.
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return None
     if isinstance(payload, dict):
         return payload
     return None

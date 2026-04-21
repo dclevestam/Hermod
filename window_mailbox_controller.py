@@ -2,6 +2,7 @@
 
 import collections
 import threading
+import time
 from datetime import datetime, timezone
 
 import gi
@@ -163,10 +164,22 @@ class MailboxControllerMixin:
     def on_background_update(self, results, total_new=0):
         self.set_syncing(False)
         refresh_needed = False
+        had_error = False
         for result in results or []:
+            if not isinstance(result, dict):
+                # Belt-and-braces: the poll loop already normalises
+                # malformed results, but an upstream change could send
+                # us something else. Skip silently rather than crash
+                # the entire handler (which runs on the main thread).
+                continue
             notices = (result or {}).get('notice') or []
             if isinstance(notices, dict):
                 notices = [notices]
+            for notice in notices:
+                if not isinstance(notice, dict):
+                    continue
+                if str(notice.get('kind', '')).strip().lower() == 'error':
+                    had_error = True
             count_changed = False
             counts = dict((result or {}).get('counts') or {})
             backend_identity = str((result or {}).get('account', '') or '').strip()
@@ -214,6 +227,12 @@ class MailboxControllerMixin:
             self._schedule_startup_status_completion(total_new=total_new)
         if total_new > 0:
             self.show_sync_badge(total_new)
+        self._last_sync_had_errors = had_error
+        if not had_error:
+            self._last_sync_at = time.monotonic()
+        if hasattr(self, '_refresh_sidebar_sync_status'):
+            self._refresh_sidebar_sync_status()
+            self._ensure_sync_status_timer()
         if refresh_needed:
             self.refresh_visible_mail(force=True)
 

@@ -73,14 +73,24 @@ window, dialog, popover {
 }
 
 .email-row {
-    border-bottom: 1px solid alpha(@borders, 0.4);
-    transition: background-color 0.2s ease;
+    background-color: transparent;
+    border-bottom: none;
+    transition: background-color 0.15s ease;
 }
 .email-row-body {
-    padding: 10px 14px 10px 10px;
+    padding: 12px 16px 12px 10px;
 }
 .message-list-view .email-row.unread {
     box-shadow: none;
+}
+/* Clear Adwaita's default listview/row background so the dark window
+   colour shows through. Without this, GTK4 paints a subtle grey behind
+   every row and the list ends up lighter than the surrounding shell. */
+.message-list-view,
+.message-list-view listview,
+.message-column scrolledwindow,
+.message-column scrolledwindow > viewport {
+    background-color: transparent;
 }
 /* Suppress GTK4/Adwaita native row-level hover and selection — we style the child instead. */
 .message-list-view row,
@@ -94,16 +104,15 @@ window, dialog, popover {
 .message-list-view row:hover .email-row:not(.selected) {
     background-color: alpha(@hermod_fg, 0.03);
 }
-/* Selected: 3px accent left bar, accent-weak background tint */
+/* Selected: 3px accent left bar + subtle bg tint. */
 .message-list-view .email-row.selected {
     background-image: none;
-    background-color: rgba(46, 106, 112, 0.14);
-    box-shadow: inset 3px 0 0 0 #2e6a70;
-    border-bottom-color: rgba(46, 106, 112, 0.20);
+    background-color: alpha(@hermod_accent, 0.10);
+    box-shadow: inset 3px 0 0 0 @hermod_accent;
 }
 .message-list-view row:hover .email-row.selected {
     background-image: none;
-    background-color: rgba(46, 106, 112, 0.18);
+    background-color: alpha(@hermod_accent, 0.14);
 }
 .thread-indicator {
     background-color: alpha(@hermod_fg, 0.06);
@@ -219,11 +228,11 @@ window, dialog, popover {
     padding: 3px 16px;
     border-radius: 999px;
     color: alpha(@hermod_fg_muted, 0.78);
-    background-color: alpha(#11171b, 0.88);
+    background-color: alpha(@hermod_surface_card, 0.88);
     border: 1px solid alpha(@hermod_fg, 0.10);
 }
 .load-more-row button:hover {
-    background-color: alpha(#141a1e, 0.96);
+    background-color: alpha(@hermod_bg_hover, 0.96);
     color: @hermod_fg;
     border-color: alpha(@hermod_fg, 0.18);
 }
@@ -231,7 +240,7 @@ window, dialog, popover {
 .load-more-row.loading button:hover,
 .load-more-row button:disabled {
     opacity: 1;
-    background-color: alpha(#11171b, 0.88);
+    background-color: alpha(@hermod_surface_card, 0.88);
     color: alpha(@hermod_fg_muted, 0.78);
     border-color: alpha(@hermod_fg, 0.10);
 }
@@ -419,7 +428,7 @@ window, dialog, popover {
 .startup-status-card {
     border-radius: 14px;
     border: 1px solid alpha(@hermod_fg, 0.08);
-    background-color: alpha(#11171b, 0.95);
+    background-color: alpha(@hermod_surface_card, 0.95);
     box-shadow: 0 18px 34px alpha(@window_fg_color, 0.12);
 }
 .startup-status-hero {
@@ -470,7 +479,7 @@ window, dialog, popover {
     font-weight: 800;
     padding: 5px 11px;
     border-radius: 999px;
-    background-color: alpha(#11171b, 0.92);
+    background-color: alpha(@hermod_surface_card, 0.92);
     border: 1px solid alpha(@hermod_fg, 0.08);
 }
 .startup-status-list {
@@ -490,7 +499,7 @@ window, dialog, popover {
 .startup-status-issue-row {
     padding: 8px 10px;
     border-radius: 14px;
-    background-color: alpha(#11171b, 0.88);
+    background-color: alpha(@hermod_surface_card, 0.88);
     border: 1px solid alpha(@hermod_fg, 0.08);
 }
 .startup-status-issue-icon {
@@ -560,10 +569,10 @@ window, dialog, popover {
 }
 .welcome-screen,
 .welcome-settings-shell {
-    background-color: #0b0f12;
+    background-color: @hermod_bg;
 }
 .welcome-photo {
-    background-color: #0c1613;
+    background-color: @hermod_surface_reader;
     border-right: 1px solid alpha(@hermod_fg_muted, 0.08);
 }
 .welcome-header-bar {
@@ -574,7 +583,7 @@ window, dialog, popover {
     padding: 0 16px;
 }
 .hermod-header {
-    background: linear-gradient(180deg, #131A1E 0%, #0E1418 100%);
+    background: linear-gradient(180deg, @hermod_bg_hover 0%, @hermod_bg 100%);
     border-bottom: 1px solid @hermod_border;
     box-shadow: none;
     min-height: 46px;
@@ -642,6 +651,19 @@ window, dialog, popover {
     border-color: @hermod_border;
     color: @hermod_fg;
 }
+.hermod-header-sync.syncing {
+    color: @hermod_accent;
+}
+.hermod-header-sync.syncing image {
+    opacity: 1.0;
+    animation: hermod-spin 1.1s linear infinite;
+}
+.hermod-header-sync.offline {
+    color: @hermod_danger;
+}
+.hermod-header-sync.offline image {
+    opacity: 1.0;
+}
 .welcome-header-mark {
     -gtk-icon-size: 18px;
     color: @hermod_fg;
@@ -697,14 +719,14 @@ window, dialog, popover {
 .provider-row-tile {
     padding: 0;
     border-radius: 10px;
-    background: #11171b;
+    background: @hermod_surface_card;
     border: 1px solid alpha(@hermod_fg_muted, 0.08);
     color: @hermod_fg;
     box-shadow: none;
     transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 .provider-row-tile:hover {
-    background: #141a1e;
+    background: @hermod_bg_hover;
     border-color: alpha(@hermod_fg_muted, 0.14);
 }
 .provider-row-tile:focus {
@@ -745,7 +767,7 @@ window, dialog, popover {
 .lock-pill {
     padding: 6px 10px;
     border-radius: 999px;
-    background: #11171b;
+    background: @hermod_surface_card;
     border: 1px solid alpha(@hermod_fg_muted, 0.10);
 }
 .lock-pill-icon {
@@ -786,7 +808,7 @@ window, dialog, popover {
     min-height: 64px;
     border-radius: 14px;
     border: 1px solid alpha(@hermod_fg_muted, 0.14);
-    background: #11171b;
+    background: @hermod_surface_card;
     padding: 12px;
     opacity: 1.0;
 }
@@ -934,7 +956,7 @@ window, dialog, popover {
 .onboarding-modal-frame {
     border-radius: 14px;
     border: 1px solid alpha(@hermod_fg_muted, 0.14);
-    background: #0f1417;
+    background: @hermod_bg_elevated;
     box-shadow: 0 18px 46px alpha(black, 0.35);
 }
 .onboarding-modal-head {
@@ -960,7 +982,7 @@ window, dialog, popover {
 .onboarding-modal-foot {
     padding-top: 12px;
     border-top: 1px solid alpha(@hermod_fg_muted, 0.08);
-    background: #090c0f;
+    background: @hermod_surface_sunken;
 }
 .onboarding-modal-scroller,
 .onboarding-modal-scroller viewport {
@@ -1059,18 +1081,29 @@ window, dialog, popover {
 .sidebar-search-icon {
     color: @hermod_fg_dim;
 }
-.sidebar-search-entry {
+/* Flatten the Adwaita Entry chrome so the search row matches the
+   30px Compose button height. Adwaita's default Entry has ~36px
+   min-height with internal padding; we neutralise that here and
+   repeat it for the nested `text` node which Entry uses in GTK4. */
+.sidebar-search-entry,
+.sidebar-search-entry > text,
+.sidebar-search entry,
+.sidebar-search entry > text {
     background-color: transparent;
+    background-image: none;
     border: none;
     box-shadow: none;
     outline: none;
     color: @hermod_fg;
     font-size: 12px;
     padding: 0;
+    margin: 0;
     min-height: 22px;
 }
 .sidebar-search-entry:focus,
-.sidebar-search-entry:focus-within {
+.sidebar-search-entry:focus-within,
+.sidebar-search-entry > text:focus,
+.sidebar-search entry > text:focus {
     background-color: transparent;
     outline: none;
     box-shadow: none;
@@ -1106,6 +1139,23 @@ window, dialog, popover {
 .sidebar-status-dot-online {
     background-color: @hermod_success;
     box-shadow: 0 0 6px alpha(@hermod_success, 0.5);
+}
+.sidebar-status-dot-syncing {
+    background-color: @hermod_accent;
+    box-shadow: 0 0 8px alpha(@hermod_accent, 0.6);
+    animation: hermod-status-pulse 1.1s ease-in-out infinite;
+}
+.sidebar-status-dot-offline {
+    background-color: @hermod_danger;
+    box-shadow: 0 0 6px alpha(@hermod_danger, 0.5);
+}
+.sidebar-status-dot-error {
+    background-color: @hermod_danger;
+    box-shadow: 0 0 6px alpha(@hermod_danger, 0.45);
+}
+.sidebar-status-dot-pending {
+    background-color: @hermod_warning;
+    box-shadow: 0 0 6px alpha(@hermod_warning, 0.40);
 }
 .sidebar-status-label {
     font-size: 11px;
@@ -1226,7 +1276,7 @@ window, dialog, popover {
     min-width: 32px;
     min-height: 32px;
     border-radius: 999px;
-    background-color: alpha(#a6adb3, 0.12);
+    background-color: alpha(@hermod_fg_muted, 0.12);
     color: @hermod_fg;
     font-size: 0.78em;
     font-weight: 600;
@@ -1250,10 +1300,12 @@ window, dialog, popover {
     background-color: alpha(@hermod_accent, 0.40);
     color: @hermod_fg;
 }
+/* Read-state typography matches the design handoff: read rows fade
+   into a muted gray, unread rows are the only ones at full brightness. */
 .message-row-sender {
-    font-size: 0.96em;
-    font-weight: 600;
-    color: alpha(@hermod_fg, 0.92);
+    font-size: 0.94em;
+    font-weight: 500;
+    color: alpha(@hermod_fg, 0.60);
     letter-spacing: -0.005em;
 }
 .email-row.unread .message-row-sender {
@@ -1263,24 +1315,30 @@ window, dialog, popover {
 .message-row-subject {
     font-size: 0.86em;
     font-weight: 400;
-    color: alpha(@hermod_fg_muted, 0.80);
+    color: alpha(@hermod_fg, 0.45);
     letter-spacing: 0;
 }
 .email-row.unread .message-row-subject {
-    color: alpha(@hermod_fg, 0.88);
+    color: @hermod_fg;
     font-weight: 500;
 }
 .message-row-preview {
     font-size: 0.82em;
     font-weight: 400;
-    color: alpha(@hermod_fg_muted, 0.60);
+    color: alpha(@hermod_fg, 0.38);
     letter-spacing: 0;
-    margin-top: 1px;
+    margin-top: 2px;
+}
+.email-row.unread .message-row-preview {
+    color: alpha(@hermod_fg, 0.55);
 }
 .message-row-date {
     font-size: 0.76em;
-    color: alpha(@hermod_fg_muted, 0.70);
+    color: alpha(@hermod_fg, 0.38);
     font-variant-numeric: tabular-nums;
+}
+.email-row.unread .message-row-date {
+    color: alpha(@hermod_fg, 0.55);
 }
 .sidebar-section {
     background: transparent;
@@ -1310,7 +1368,7 @@ window, dialog, popover {
     padding: 0px;
     border-radius: 10px;
     border: 1px solid alpha(@hermod_fg, 0.10);
-    background-color: alpha(#11171b, 0.88);
+    background-color: alpha(@hermod_surface_card, 0.88);
 }
 .sync-control box,
 .sync-control label,
@@ -1386,17 +1444,17 @@ window, dialog, popover {
 }
 .attachment-bar {
     border-top: 1px solid alpha(@hermod_fg, 0.08);
-    background-color: alpha(#11171b, 0.95);
+    background-color: alpha(@hermod_surface_card, 0.95);
     padding: 6px 10px 8px;
 }
 .thread-reply-bar {
     border-top: 1px solid alpha(@hermod_fg, 0.08);
-    background-color: alpha(#0f1417, 0.96);
+    background-color: alpha(@hermod_bg_elevated, 0.96);
     padding: 8px 10px 10px;
 }
 .thread-reply-editor {
     min-height: 62px;
-    background-color: alpha(#11171b, 0.92);
+    background-color: alpha(@hermod_surface_card, 0.92);
     border: 1px solid alpha(@hermod_fg, 0.10);
     border-radius: 10px;
     padding: 8px 10px;
@@ -1457,8 +1515,7 @@ window, dialog, popover {
     background-color: alpha(@window_fg_color, 0.06);
     color: @hermod_fg;
 }
-.reader-action-btn:disabled,
-.reader-action-btn:insensitive {
+.reader-action-btn:disabled {
     color: alpha(@window_fg_color, 0.28);
     background: transparent;
 }
@@ -1468,7 +1525,7 @@ window, dialog, popover {
     font-size: 0.82em;
     font-weight: 700;
     border-radius: 999px;
-    background-color: alpha(#11171b, 0.90);
+    background-color: alpha(@hermod_surface_card, 0.90);
     border: 1px solid alpha(@hermod_fg, 0.10);
     color: alpha(@hermod_fg, 0.82);
 }
@@ -1517,13 +1574,13 @@ window, dialog, popover {
     border-radius: 0;
 }
 .hermod-sidebar-column {
-    background-image: linear-gradient(180deg, #0D1215 0%, #0A0E11 100%);
+    background-image: linear-gradient(180deg, @hermod_bg_elevated 0%, @hermod_surface_sunken 100%);
     border-right: 1px solid @hermod_border;
     padding: 10px 0 12px;
 }
 .thread-sidebar {
     border-left: 1px solid alpha(@hermod_fg, 0.08);
-    background-color: alpha(#0b0f12, 0.98);
+    background-color: alpha(@hermod_bg, 0.98);
     min-width: 330px;
 }
 .thread-sidebar-list {
@@ -1759,6 +1816,14 @@ def build_theme_override_css(theme="night", day_variant="paper", accent="teal", 
         parts.append(f"@define-color hermod_surface_reader {reader};")
         parts.append(f"@define-color hermod_fg {fg};")
         parts.append(f"@define-color hermod_fg_muted {muted};")
+        # Night-mode fg_dim / fg_faint are alpha(#A6ADB3, 0.56/0.34) —
+        # readable only against a dark bg. Redefine against the day fg so
+        # dim text (preview, date, read-row sender) stays legible on light.
+        parts.append(f"@define-color hermod_fg_dim alpha({fg}, 0.60);")
+        parts.append(f"@define-color hermod_fg_faint alpha({fg}, 0.40);")
+        parts.append(f"@define-color hermod_border alpha({fg}, 0.10);")
+        parts.append(f"@define-color hermod_border_strong alpha({fg}, 0.16);")
+        parts.append(f"@define-color hermod_border_faint alpha({fg}, 0.06);")
         parts.append(f"@define-color hermod_accent_fg #FFFFFF;")
         parts.append(f"@define-color accent_fg_color #FFFFFF;")
 
@@ -2104,13 +2169,9 @@ def build_window_account_css(backends=None):
     parts = []
     for i, color in enumerate(ACCOUNT_PALETTE):
         cls = account_class_for_index(i)
-        glow = _hex_to_rgba(color, 0.14)
         connector = "rgba(166, 173, 179, 0.14)"
         parts.append(
             f"""
-.email-row.{cls} {{
-    background-image: linear-gradient(to left, {glow}, rgba(0,0,0,0));
-}}
 .navigation-sidebar row.{cls}.folder-row .account-accent-label {{
     color: @hermod_fg_dim;
 }}
@@ -2156,14 +2217,14 @@ def build_window_account_css(backends=None):
 .navigation-sidebar row .folder-count.folder-count-dim {
     color: alpha(@window_fg_color, 0.42);
 }
-/* Selected state overrides per-account gradient — must come last */
+/* Themed selected row — rows are flat, accent bar + subtle tint. */
 .message-list-view .email-row.selected {
     background-image: none;
-    background-color: alpha(@accent_color, 0.14);
+    background-color: alpha(@accent_color, 0.10);
     box-shadow: inset 3px 0 0 0 @accent_color;
 }
 .message-list-view row:hover .email-row.selected {
-    background-color: alpha(@accent_color, 0.18);
+    background-color: alpha(@accent_color, 0.14);
 }
 """
     )

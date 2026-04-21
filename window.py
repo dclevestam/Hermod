@@ -270,6 +270,9 @@ class HermodWindow(
         self._archive_row = None
         self._syncing = False
         self._sync_in_flight = False
+        self._last_sync_at = None
+        self._last_sync_had_errors = False
+        self._sync_status_timer_id = None
         self._body_cache = collections.OrderedDict()
         self._cache_lock = threading.Lock()
         self._diag_lock = threading.Lock()
@@ -655,6 +658,7 @@ class HermodWindow(
             if self._diag_watchdog_id is not None:
                 GLib.source_remove(self._diag_watchdog_id)
                 self._diag_watchdog_id = None
+            self._arm_close_hard_exit()
             return False
         if self._compose_active():
             self._compose_view.request_close(
@@ -669,7 +673,42 @@ class HermodWindow(
         if self._diag_watchdog_id is not None:
             GLib.source_remove(self._diag_watchdog_id)
             self._diag_watchdog_id = None
+        # Belt-and-braces: Adw.ApplicationWindow normally triggers
+        # app shutdown when the last window closes, but if a GLib
+        # source or stuck background thread keeps the main loop
+        # from draining, the process will sit at 100% CPU forever.
+        # Arm a short os._exit() fallback in a daemon thread.
+        app = self.get_application()
+        if app is not None:
+            try:
+                app.quit()
+            except Exception:
+                pass
+        self._arm_close_hard_exit()
         return False
+
+    def _on_list_stack_visible_child(self, stack, _pspec):
+        spinner = getattr(self, "_list_loading_spinner", None)
+        if spinner is None:
+            return
+        visible = stack.get_visible_child_name()
+        if visible == "loading":
+            spinner.start()
+        else:
+            spinner.stop()
+
+    def _arm_close_hard_exit(self, grace_s=5.0):
+        if getattr(self, "_hard_exit_armed", False):
+            return
+        self._hard_exit_armed = True
+
+        def _force():
+            import os as _os
+            import time as _time
+            _time.sleep(max(0.5, float(grace_s)))
+            _os._exit(0)
+
+        threading.Thread(target=_force, daemon=True).start()
 
     def _finish_window_close_request(self, proceed):
         if proceed:
@@ -1032,7 +1071,8 @@ class HermodWindow(
         sidebar_synced_dot = Gtk.Box(valign=Gtk.Align.CENTER)
         sidebar_synced_dot.set_size_request(8, 8)
         sidebar_synced_dot.add_css_class("sidebar-status-dot")
-        sidebar_synced_dot.add_css_class("sidebar-status-dot-online")
+        sidebar_synced_dot.add_css_class("sidebar-status-dot-pending")
+        self._sidebar_synced_dot = sidebar_synced_dot
         sidebar_synced_row.append(sidebar_synced_dot)
         self._sidebar_synced_lbl = Gtk.Label(
             label="All synced", halign=Gtk.Align.START, hexpand=True, xalign=0.0
@@ -1194,9 +1234,14 @@ class HermodWindow(
         loading_box = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER, vexpand=True
         )
-        spinner = Gtk.Spinner(spinning=True, halign=Gtk.Align.CENTER, margin_top=60)
+        # Gtk.Spinner runs a 60fps internal tick as long as spinning=True.
+        # Keep it off by default and only enable it while the "loading"
+        # stack child is the visible one — otherwise a wedged sync leaves
+        # the spinner churning the main loop at full frame rate (100% CPU).
+        spinner = Gtk.Spinner(spinning=False, halign=Gtk.Align.CENTER, margin_top=60)
         spinner.set_size_request(32, 32)
         loading_box.append(spinner)
+        self._list_loading_spinner = spinner
 
         self._empty_page = Adw.StatusPage(
             icon_name="mail-inbox-symbolic", title="No messages"
@@ -1206,6 +1251,12 @@ class HermodWindow(
         self._list_stack.add_named(loading_box, "loading")
         self._list_stack.add_named(self._empty_page, "empty")
         self._list_stack.set_visible_child_name("loading")
+        self._list_stack.connect(
+            "notify::visible-child-name", self._on_list_stack_visible_child
+        )
+        # Start the spinner synchronised with the initial "loading" child
+        # so the first paint already has it animating.
+        spinner.start()
 
         list_col.append(self._list_stack)
         right.set_start_child(list_col)
