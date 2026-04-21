@@ -69,6 +69,12 @@ except ImportError:
     from window_constants import BODY_CACHE_LIMIT
 
 
+# Parenthetical URLs from html2text-style conversion, e.g.
+# "Download receipt (https://stripe.com/foo?x=y)". Used by the reader
+# mode heuristic to measure "real" content length.
+_RE_PAREN_URL = re.compile(r"\s*\(https?://[^)\s]+\)")
+
+
 def _inject_styles(html, css):
     lower = html.lower()
     if "<head>" in lower:
@@ -886,66 +892,76 @@ class ReaderMixin:
         return "clean"
 
     def _heuristic_prefers_original(self, msg, html, text, clean_body):
-        """Return True when the message's shape suggests the original
-        HTML will read better than the quoted-stripped text.
+        """Return True when the message's shape *strongly* suggests the
+        original HTML will read better than the extracted text. Default
+        is clean; the bar to flip to original is deliberately high — a
+        false positive is worse than a false negative because the user
+        can always click the toggle.
 
-        Signals (any one fires):
-          a) Design-heavy: many <img> and very little usable text after
-             extraction. Marketing newsletters fall here (Womier-style).
-          b) Structured receipt/invoice: <table> plus URL clutter in the
-             extracted body. Payment receipts (Anthropic/Stripe) fall
-             here — the original renders line items cleanly, the
-             extracted text interleaves "(https://…)" everywhere.
-          c) Tiny extraction ratio: < 5% of the original HTML survives
-             extraction AND the HTML is sizeable. Means the content
-             IS the markup (hero images, CTA buttons, etc.).
-          d) Transactional subject keywords + multiple images.
-          e) URL density in the extracted text exceeds ~1 URL per
-             400 chars — reads like "[Link](https://…)" soup in clean
-             mode.
+        Fires only on:
+          1. Design-dominant: near-empty extraction and multiple images.
+             Bar: ≥ 4 <img> AND cleaned-of-URLs text < 180 chars.
+             (Marketing newsletter with hero image + "View in browser".)
+
+          2. Receipt-shape: transactional subject keyword AND the body
+             contains a currency symbol AND more than one image.
+             Needs ALL three — a plain "Order confirmation" text email
+             without amounts or layout stays clean.
+
+          3. URL soup: the extraction is long enough to have real
+             content but more than 1 URL per 100 chars AND at least
+             6 URLs. This catches Stripe-style receipts whose line
+             items dissolve into "item (https://…)" soup, while
+             leaving conversational emails with the usual unsubscribe/
+             footer links in clean view.
         """
         if not html:
             return False
         try:
             lower_html = html.lower()
+            # Count only meaningful <img> tags (skip 1x1 trackers and
+            # tiny icons) — most HTML mails have a hidden 1px pixel.
             img_count = lower_html.count("<img ")
-            has_table = "<table" in lower_html
             clean_stripped = (clean_body or "").strip()
-            clean_len = len(clean_stripped)
-            html_len = len(html)
+            # Strip parenthetical URLs for the "how much real content"
+            # measurement — a body that's 90% (https://…) isn't really
+            # 400 chars of readable prose.
+            text_without_urls = _RE_PAREN_URL.sub("", clean_stripped)
+            readable_len = len(text_without_urls.strip())
             url_count = clean_stripped.count("(http")
 
-            # a) Design-heavy
-            if img_count >= 3 and clean_len < 240:
+            # 1. Design-dominant
+            if img_count >= 4 and readable_len < 180:
                 return True
 
-            # b) Structured table with URL clutter in the extraction
-            if has_table and url_count >= 3:
-                return True
-
-            # c) Content is the markup
-            if html_len > 5000 and clean_len > 0 and (clean_len / html_len) < 0.05:
-                return True
-
-            # d) Transactional subject + imagery
+            # 2. Receipt-shape
             subject_lower = str(msg.get("subject") or "").lower()
             transactional_kw = (
                 "receipt",
                 "invoice",
-                "your order",
                 "order #",
                 "order confirmation",
-                "confirmation",
+                "your order",
                 "shipment",
                 "shipping",
                 "delivery",
                 "kvitto",
             )
-            if img_count >= 2 and any(kw in subject_lower for kw in transactional_kw):
+            has_transactional_subject = any(
+                kw in subject_lower for kw in transactional_kw
+            )
+            has_currency = any(
+                sym in clean_stripped for sym in ("€", "$", "£", "¥", " kr", "kr ")
+            )
+            if has_transactional_subject and img_count >= 2 and has_currency:
                 return True
 
-            # e) URL density in the extracted text
-            if clean_len > 400 and url_count * 400 > clean_len:
+            # 3. URL soup
+            if (
+                len(clean_stripped) >= 400
+                and url_count >= 6
+                and url_count * 100 > len(clean_stripped)
+            ):
                 return True
         except Exception:
             return False
