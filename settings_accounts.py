@@ -35,6 +35,10 @@ try:
         GOOGLE_GMAIL_NATIVE_SCOPES,
         run_google_native_oauth_authorization,
     )
+    from .accounts.auth.microsoft_native import (
+        MICROSOFT_GRAPH_NATIVE_SCOPES,
+        run_ms_native_oauth_authorization,
+    )
     from .accounts.auth.oauth_common import OAuthTokenAcquisitionError
 except ImportError:
     from styles import ACCOUNT_PALETTE, apply_accent_css_class
@@ -53,6 +57,10 @@ except ImportError:
     from accounts.auth.google_native import (
         GOOGLE_GMAIL_NATIVE_SCOPES,
         run_google_native_oauth_authorization,
+    )
+    from accounts.auth.microsoft_native import (
+        MICROSOFT_GRAPH_NATIVE_SCOPES,
+        run_ms_native_oauth_authorization,
     )
     from accounts.auth.oauth_common import OAuthTokenAcquisitionError
 
@@ -151,6 +159,41 @@ def _backend_color(backend):
     return _normalize_hex_color(metadata.get("accent_color") or "", fallback="")
 
 
+_PROVIDER_DISPLAY_LABELS = {
+    "gmail": "Gmail",
+    "microsoft-graph": "Microsoft",
+    "imap-smtp": "IMAP / SMTP",
+}
+
+_SERVICE_PROVIDER_LABELS = {
+    "gmail": "Gmail",
+    "microsoft": "Outlook (IMAP)",
+    "outlook": "Outlook (IMAP)",
+    "fastmail": "Fastmail",
+    "proton": "Proton",
+    "yahoo": "Yahoo",
+    "icloud": "iCloud",
+    "zoho": "Zoho",
+    "exchange": "Exchange",
+}
+
+
+def _account_provider_label(backend):
+    descriptor = getattr(backend, "account_descriptor", None)
+    provider_kind = (
+        str(getattr(descriptor, "provider_kind", "") or "").strip().lower()
+    )
+    metadata = getattr(descriptor, "metadata", None) or {}
+    service = str(metadata.get("service_provider") or "").strip().lower()
+    if provider_kind == "imap-smtp" and service in _SERVICE_PROVIDER_LABELS:
+        return _SERVICE_PROVIDER_LABELS[service]
+    if provider_kind in _PROVIDER_DISPLAY_LABELS:
+        return _PROVIDER_DISPLAY_LABELS[provider_kind]
+    if provider_kind:
+        return provider_kind.replace("-", " ").title()
+    return "Account"
+
+
 def _displayed_backend_color(backend, index=0):
     color = _backend_color(backend)
     if color:
@@ -207,17 +250,9 @@ def _provider_profile(provider_key):
         },
         "microsoft": {
             "title": "Connect Microsoft",
-            "subtitle": "Use your Outlook or Microsoft 365 IMAP/SMTP settings.",
-            "provider_kind": "imap-smtp",
+            "subtitle": "Hermod opens Microsoft sign-in in your browser and stores the account securely.",
+            "provider_kind": "microsoft-graph",
             "service_provider": "microsoft",
-            "imap_host": "outlook.office365.com",
-            "imap_port": "993",
-            "imap_use_ssl": True,
-            "imap_use_tls": False,
-            "smtp_host": "smtp.office365.com",
-            "smtp_port": "587",
-            "smtp_use_ssl": False,
-            "smtp_use_tls": True,
         },
         "icloud": {
             "title": "Connect iCloud Mail",
@@ -359,43 +394,6 @@ def _auto_account_color(backends, ignore_identity=""):
     return base
 
 
-def _make_icon_button(icon_names, tooltip, callback):
-    btn = Gtk.Button()
-    btn.add_css_class("flat")
-    btn.set_focus_on_click(False)
-    btn.set_tooltip_text(tooltip)
-    btn.connect("clicked", callback)
-    btn.set_child(Gtk.Image(icon_name=_pick_icon_name(*icon_names), pixel_size=16))
-    return btn
-
-
-def _tile_button(icon_names, title, subtitle, callback):
-    btn = Gtk.Button()
-    btn.add_css_class("flat")
-    btn.add_css_class("account-tile")
-    btn.set_focus_on_click(False)
-    btn.connect("clicked", callback)
-    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-    box.set_margin_top(12)
-    box.set_margin_bottom(12)
-    box.set_margin_start(14)
-    box.set_margin_end(14)
-    icon = Gtk.Image(icon_name=_pick_icon_name(*icon_names), pixel_size=26)
-    icon.add_css_class("account-tile-icon")
-    title_lbl = Gtk.Label(label=title, halign=Gtk.Align.START, xalign=0)
-    title_lbl.add_css_class("heading")
-    subtitle_lbl = Gtk.Label(label=subtitle, halign=Gtk.Align.START, xalign=0)
-    subtitle_lbl.add_css_class("dim-label")
-    subtitle_lbl.set_wrap(True)
-    subtitle_lbl.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-    subtitle_lbl.set_max_width_chars(28)
-    box.append(icon)
-    box.append(title_lbl)
-    box.append(subtitle_lbl)
-    btn.set_child(box)
-    return btn
-
-
 class AccountSettingsController:
     def __init__(self, parent, stack, main_page, editor_page, settings, on_back=None):
         self.parent = parent
@@ -456,65 +454,33 @@ class AccountSettingsController:
             child = next_child
 
     def build_sections(self):
-        add_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        add_heading = Gtk.Label(label="Add Account", halign=Gtk.Align.START)
-        add_heading.add_css_class("settings-section-title")
-        add_heading.add_css_class("heading")
-        add_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        add_box.append(self._render_add_tiles())
-        add_hint = Gtk.Label(
-            label="Fast accounts render first. Slower IMAP mail can load in the background.",
-            halign=Gtk.Align.START,
-            xalign=0,
+        heading = Gtk.Label(
+            label="CONNECTED ACCOUNTS", halign=Gtk.Align.START, xalign=0
         )
-        add_hint.add_css_class("dim-label")
-        add_hint.set_wrap(True)
-        add_box.append(add_hint)
-        add_section.append(add_heading)
-        add_section.append(add_box)
-        self.main_page.append(add_section)
+        heading.add_css_class("preferences-section-header")
+        self.main_page.append(heading)
 
-        configured_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        configured_heading = Gtk.Label(
-            label="Configured Accounts", halign=Gtk.Align.START
+        self.accounts_group = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL, spacing=8
         )
-        configured_heading.add_css_class("settings-section-title")
-        configured_heading.add_css_class("heading")
-        self.accounts_group = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        configured_section.append(configured_heading)
-        configured_section.append(self.accounts_group)
-        self.main_page.append(configured_section)
+        self.main_page.append(self.accounts_group)
+
+        add_btn = Gtk.Button()
+        add_btn.add_css_class("settings-add-account")
+        add_btn.set_halign(Gtk.Align.START)
+        add_btn.set_focus_on_click(False)
+        add_content = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=6
+        )
+        plus_icon = Gtk.Image.new_from_icon_name("list-add-symbolic")
+        plus_icon.set_pixel_size(12)
+        add_content.append(plus_icon)
+        add_content.append(Gtk.Label(label="Add account"))
+        add_btn.set_child(add_content)
+        add_btn.connect("clicked", lambda *_: self._open_provider_picker())
+        self.main_page.append(add_btn)
+
         self._render_accounts()
-
-    def _render_add_tiles(self):
-        tile_box = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL, spacing=10, hexpand=True
-        )
-        tile_box.append(
-            _tile_button(
-                (
-                    "mail-google-symbolic",
-                    "google-gmail-symbolic",
-                    "internet-mail-symbolic",
-                ),
-                "Gmail",
-                "Connect Gmail directly with Google sign-in in your browser.",
-                lambda *_: self._open_account_editor(None, "gmail"),
-            )
-        )
-        tile_box.append(
-            _tile_button(
-                (
-                    "mail-send-receive-symbolic",
-                    "internet-mail-symbolic",
-                    "mail-message-new-symbolic",
-                ),
-                "IMAP / SMTP",
-                "Add a mail account directly using server details.",
-                lambda *_: self._open_account_editor(None, "imap-smtp"),
-            )
-        )
-        return tile_box
 
     def _render_accounts(self):
         if self.accounts_group is None:
@@ -522,54 +488,83 @@ class AccountSettingsController:
         self._clear_container(self.accounts_group)
         backends = list(getattr(self.parent, "backends", []) or [])
         if not backends:
-            empty = Adw.ActionRow(
-                title="No accounts yet",
-                subtitle="Add Gmail directly or create an IMAP/SMTP account.",
+            empty = Gtk.Label(
+                label="No accounts yet. Click Add account to connect your first mailbox.",
+                halign=Gtk.Align.START,
+                xalign=0,
             )
-            empty.set_sensitive(False)
+            empty.add_css_class("preferences-stub")
+            empty.set_wrap(True)
             self.accounts_group.append(empty)
             return
         for index, backend in enumerate(backends):
-            display_name = _backend_display_name(backend)
-            subtitle = _backend_subtitle(backend)
-            row = Adw.ActionRow(title=display_name, subtitle=subtitle)
-            row.add_css_class("account-row")
-            row.set_activatable(True)
-            row.backend = backend
-            icon_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-            icon = Gtk.Image(icon_name=_icon_for_account(backend), pixel_size=18)
-            icon_box.append(icon)
-            preview_color = _backend_color(backend)
-            if preview_color:
-                preview = Gtk.Box()
-                preview.add_css_class("account-color-preview")
-                preview.set_size_request(18, 18)
-                apply_accent_css_class(preview, preview_color, index)
-                icon_box.append(preview)
-            row.add_prefix(icon_box)
-            row.add_suffix(
-                _make_icon_button(
-                    (
-                        "preferences-system-symbolic",
-                        "emblem-system-symbolic",
-                        "document-edit-symbolic",
-                    ),
-                    "Edit account settings",
-                    lambda _btn, current=backend: self._open_account_editor(current),
-                )
-            )
-            row.add_suffix(
-                _make_icon_button(
-                    ("user-trash-symbolic",),
-                    "Remove account",
-                    lambda _btn, current=backend: self._remove_account(current),
-                )
-            )
-            row.connect(
-                "activated",
-                lambda *_args, current=backend: self._open_account_editor(current),
-            )
-            self.accounts_group.append(row)
+            self.accounts_group.append(self._build_account_row(backend, index))
+
+    def _build_account_row(self, backend, index):
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        row.add_css_class("settings-account-card")
+        row.set_hexpand(True)
+
+        accent = Gtk.Box()
+        accent.add_css_class("settings-account-accent")
+        accent.set_valign(Gtk.Align.CENTER)
+        accent.set_size_request(10, 10)
+        color = _displayed_backend_color(backend, index)
+        apply_accent_css_class(accent, color, index)
+        row.append(accent)
+
+        meta_box = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=True
+        )
+        meta_box.set_valign(Gtk.Align.CENTER)
+        identity = getattr(backend, "identity", "") or _backend_display_name(backend)
+        title_lbl = Gtk.Label(
+            label=identity or "Account", halign=Gtk.Align.START, xalign=0
+        )
+        title_lbl.add_css_class("settings-account-title")
+        title_lbl.set_ellipsize(3)  # Pango.EllipsizeMode.END
+        meta_box.append(title_lbl)
+        sub_lbl = Gtk.Label(
+            label=_account_provider_label(backend),
+            halign=Gtk.Align.START,
+            xalign=0,
+        )
+        sub_lbl.add_css_class("settings-account-subtitle")
+        sub_lbl.set_ellipsize(3)
+        meta_box.append(sub_lbl)
+        row.append(meta_box)
+
+        health = Gtk.Box()
+        health.add_css_class("settings-health-dot")
+        health.set_valign(Gtk.Align.CENTER)
+        health.set_size_request(8, 8)
+        health.set_tooltip_text("Healthy")
+        row.append(health)
+
+        edit_btn = Gtk.Button(label="Edit")
+        edit_btn.add_css_class("settings-edit-btn")
+        edit_btn.set_valign(Gtk.Align.CENTER)
+        edit_btn.set_focus_on_click(False)
+        edit_btn.connect(
+            "clicked", lambda *_a, current=backend: self._open_account_editor(current)
+        )
+        row.append(edit_btn)
+
+        return row
+
+    def _open_provider_picker(self):
+        try:
+            from .window_welcome import build_more_providers_dialog
+        except ImportError:
+            from window_welcome import build_more_providers_dialog
+
+        def on_pick(provider_key):
+            profile = _provider_profile(provider_key)
+            provider_kind = profile.get("provider_kind", provider_key)
+            self._open_account_editor(None, provider_kind, profile=profile)
+
+        dialog = build_more_providers_dialog(self.parent, on_pick=on_pick)
+        dialog.present()
 
     def _identity_in_use(
         self, identity, source="", provider_kind="", current_native_id=""
@@ -894,6 +889,228 @@ class AccountSettingsController:
 
         threading.Thread(target=run_native_google_auth, daemon=True).start()
 
+    def _update_microsoft_status(self, form, message):
+        label = form.get("microsoft_status_label")
+        if label is not None:
+            text = str(message or "").strip()
+            label.set_text(text)
+            label.set_visible(bool(text))
+
+    def _queue_microsoft_status_update(self, form, message):
+        def apply():
+            self._update_microsoft_status(form, message)
+            return False
+
+        GLib.idle_add(apply)
+
+    def _microsoft_progress_callback(self, form):
+        return lambda message: self._queue_microsoft_status_update(form, message)
+
+    def _save_native_microsoft_record(
+        self,
+        account_id,
+        identity_value,
+        alias,
+        color,
+        enabled,
+        client_id,
+    ):
+        record_config = {
+            "service_provider": "microsoft",
+            "oauth_provider": "microsoft",
+            "oauth_client_id": client_id,
+            "oauth_scopes": list(MICROSOFT_GRAPH_NATIVE_SCOPES),
+            "api_only": True,
+            "send_via_api": True,
+            "provider_kind": "microsoft-graph",
+        }
+        new_record = NativeAccountRecord(
+            id=account_id,
+            provider_kind="microsoft-graph",
+            identity=identity_value,
+            presentation_name=alias or identity_value,
+            alias=alias,
+            accent_color=color,
+            config=record_config,
+            enabled=enabled,
+        )
+        upsert_native_account_with_prefs(new_record)
+        return new_record
+
+    def _finish_native_microsoft_auth_success(
+        self,
+        *,
+        account_id,
+        bundle,
+        identity_value,
+        alias,
+        color,
+        enabled,
+        client_id,
+        form,
+    ):
+        try:
+            store_native_oauth_token_bundle(account_id, bundle)
+            self._save_native_microsoft_record(
+                account_id,
+                identity_value,
+                alias,
+                color,
+                enabled,
+                client_id,
+            )
+            self._refresh_runtime()
+            self._render_accounts()
+            self._finish_editor()
+            self._toast(f"Added Microsoft account for {identity_value}")
+        except Exception as exc:
+            detail = getattr(exc, "detail", str(exc)) or "Unknown error"
+            message = (
+                f"Microsoft sign-in completed, but Hermod could not save the account: {detail}"
+            )
+            self._update_microsoft_status(form, message)
+            form["save_btn"].set_sensitive(True)
+            form["cancel_btn"].set_sensitive(True)
+            self._toast(message)
+        return False
+
+    def _finish_native_microsoft_auth_error(self, *, form, message):
+        self._update_microsoft_status(form, message)
+        form["save_btn"].set_sensitive(True)
+        form["cancel_btn"].set_sensitive(True)
+        self._toast(message)
+        return False
+
+    def _save_microsoft_account(self, context, form):
+        alias = form["alias_entry"].get_text().strip()
+        enabled = bool(context.get("enabled", True))
+        account_id = context["native_account_id"] or uuid.uuid4().hex
+        backend_list = list(getattr(self.parent, "backends", []) or [])
+        color_picker = form.get("color_picker")
+        color = (
+            _hex_from_rgba(color_picker.get_rgba()) if color_picker is not None else ""
+        )
+        if not color:
+            color = _auto_account_color(
+                backend_list,
+                ignore_identity=context["identity"]
+                or (
+                    context["record"].identity if context["record"] is not None else ""
+                ),
+            )
+
+        if context["backend"] is not None and context["record"] is not None:
+            identity_value = context["record"].identity
+            if not alias:
+                alias = _unique_alias(
+                    _default_alias_from_identity(identity_value),
+                    backend_list,
+                    ignore_identity=identity_value,
+                )
+            elif self._alias_in_use(alias, identity_value):
+                self._toast(f'Alias "{alias}" is already in use')
+                return
+            client_id = str(
+                context["record"].config.get("oauth_client_id") or ""
+            ).strip()
+            self._save_native_microsoft_record(
+                account_id,
+                identity_value,
+                alias,
+                color,
+                enabled,
+                client_id,
+            )
+            self._refresh_runtime()
+            self._render_accounts()
+            self._finish_editor()
+            return
+
+        client_id = str(
+            (
+                context["record"].config.get("oauth_client_id")
+                if context["record"] is not None
+                else ""
+            )
+            or self.settings.get("microsoft_oauth_client_id")
+            or _default_microsoft_oauth_client_id()
+        ).strip()
+        if not client_id:
+            self._toast("Microsoft sign-in is not configured yet")
+            return
+        form["save_btn"].set_sensitive(False)
+        form["cancel_btn"].set_sensitive(False)
+        self._update_microsoft_status(
+            form, "Opening Microsoft sign-in in your browser."
+        )
+
+        def run_native_microsoft_auth():
+            try:
+                bundle = run_ms_native_oauth_authorization(
+                    client_id,
+                    progress_callback=self._microsoft_progress_callback(form),
+                )
+                identity_value = str(bundle.get("identity") or "").strip()
+                if not identity_value:
+                    raise OAuthTokenAcquisitionError(
+                        "Microsoft sign-in did not return a mail address",
+                        stage="profile",
+                        retryable=False,
+                        source="microsoft",
+                    )
+                final_alias = alias
+                if not final_alias:
+                    final_alias = _unique_alias(
+                        _default_alias_from_identity(identity_value),
+                        backend_list,
+                        ignore_identity=identity_value,
+                    )
+                elif self._alias_in_use(final_alias, identity_value):
+                    raise OAuthTokenAcquisitionError(
+                        f'Alias "{final_alias}" is already in use',
+                        stage="account save",
+                        retryable=False,
+                        source="microsoft",
+                    )
+                if self._identity_in_use(
+                    identity_value, "native", "microsoft-graph", account_id
+                ):
+                    raise OAuthTokenAcquisitionError(
+                        f"{identity_value} already exists in Hermod",
+                        stage="account save",
+                        retryable=False,
+                        source="microsoft",
+                    )
+
+                def finish_success():
+                    return self._finish_native_microsoft_auth_success(
+                        account_id=account_id,
+                        bundle=bundle,
+                        identity_value=identity_value,
+                        alias=final_alias,
+                        color=color,
+                        enabled=enabled,
+                        client_id=client_id,
+                        form=form,
+                    )
+
+                GLib.idle_add(finish_success)
+                return
+            except Exception as exc:
+                message = (
+                    getattr(exc, "detail", str(exc)) or "Microsoft sign-in failed"
+                )
+
+                def finish_error():
+                    return self._finish_native_microsoft_auth_error(
+                        form=form,
+                        message=message,
+                    )
+
+                GLib.idle_add(finish_error)
+
+        threading.Thread(target=run_native_microsoft_auth, daemon=True).start()
+
     def _save_imap_account(self, context, form):
         alias = form["alias_entry"].get_text().strip()
         enabled = bool(context.get("enabled", True))
@@ -1144,6 +1361,8 @@ class AccountSettingsController:
         if not profile:
             profile = _provider_profile(provider if backend is None else provider)
         is_native_gmail = provider == "gmail"
+        is_native_microsoft = provider == "microsoft-graph"
+        is_native_oauth = is_native_gmail or is_native_microsoft
         self._clear_container(self.editor_page)
 
         if show_header:
@@ -1157,12 +1376,16 @@ class AccountSettingsController:
                 title_text = "Edit Account"
                 subtitle_text = _backend_subtitle(backend)
             else:
-                title_text = profile.get("title") or (
-                    "Connect Gmail" if is_native_gmail else "Add IMAP/SMTP Account"
-                )
+                if is_native_gmail:
+                    default_title = "Connect Gmail"
+                elif is_native_microsoft:
+                    default_title = "Connect Microsoft"
+                else:
+                    default_title = "Add IMAP/SMTP Account"
+                title_text = profile.get("title") or default_title
                 subtitle_text = profile.get("subtitle") or (
                     "Sign in in your browser and let Hermod keep the connection secure."
-                    if is_native_gmail
+                    if is_native_oauth
                     else "Create a new mail account with IMAP and SMTP."
                 )
             title_lbl = Gtk.Label(label=title_text, halign=Gtk.Align.START, xalign=0)
@@ -1279,9 +1502,15 @@ class AccountSettingsController:
             "enabled": enabled_value,
         }
 
-        if is_native_gmail:
+        if is_native_oauth:
+            if is_native_gmail:
+                info_text = "Hermod opens Google sign-in in your browser and stores the account securely."
+                status_key = "google_status_label"
+            else:
+                info_text = "Hermod opens Microsoft sign-in in your browser and stores the account securely."
+                status_key = "microsoft_status_label"
             info_label = Gtk.Label(
-                label="Hermod opens Google sign-in in your browser and stores the account securely.",
+                label=info_text,
                 halign=Gtk.Align.START,
                 xalign=0,
             )
@@ -1289,18 +1518,18 @@ class AccountSettingsController:
             info_label.set_wrap(True)
             info_label.set_margin_top(6)
             editor_group.add(info_label)
-            google_status_label = Gtk.Label(
+            oauth_status_label = Gtk.Label(
                 label="",
                 halign=Gtk.Align.START,
                 xalign=0,
             )
-            google_status_label.add_css_class("caption")
-            google_status_label.add_css_class("dim-label")
-            google_status_label.set_wrap(True)
-            google_status_label.set_margin_top(4)
-            google_status_label.set_visible(False)
-            editor_group.add(google_status_label)
-            form["google_status_label"] = google_status_label
+            oauth_status_label.add_css_class("caption")
+            oauth_status_label.add_css_class("dim-label")
+            oauth_status_label.set_wrap(True)
+            oauth_status_label.set_margin_top(4)
+            oauth_status_label.set_visible(False)
+            editor_group.add(oauth_status_label)
+            form[status_key] = oauth_status_label
         else:
             field_row("IMAP / SMTP", "Connection settings for manual accounts")
             form["email_entry"] = add_entry(
@@ -1448,13 +1677,24 @@ class AccountSettingsController:
             test_btn.connect("clicked", _test_connection)
 
         button_row = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL, spacing=8, halign=Gtk.Align.END
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=8, hexpand=True
         )
+        if backend is not None:
+            remove_btn = Gtk.Button(label="Remove account")
+            remove_btn.add_css_class("destructive-action")
+            remove_btn.set_halign(Gtk.Align.START)
+            remove_btn.connect(
+                "clicked",
+                lambda *_a, current=backend: self._remove_account(current),
+            )
+            button_row.append(remove_btn)
+        spacer = Gtk.Box(hexpand=True)
+        button_row.append(spacer)
         cancel_btn = Gtk.Button(label="Cancel")
         cancel_btn.add_css_class("flat")
         save_btn = Gtk.Button(
             label="Connect"
-            if backend is None and is_native_gmail
+            if backend is None and is_native_oauth
             else ("Add Account" if backend is None else "Save")
         )
         save_btn.add_css_class("suggested-action")
@@ -1477,6 +1717,8 @@ class AccountSettingsController:
         def save_account(_btn=None):
             if is_native_gmail:
                 self._save_gmail_account(context, form)
+            elif is_native_microsoft:
+                self._save_microsoft_account(context, form)
             else:
                 self._save_imap_account(context, form)
 

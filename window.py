@@ -317,6 +317,8 @@ class HermodWindow(
         self._message_loading = False
         self._message_loading_generation = None
         self._pending_list_scroll_value = None
+        self._pending_list_scroll_attempts = 0
+        self._pending_list_scroll_watcher = None
         self._sort_order = "newest"
         self._show_unread_only = False
         self._filter_mode = "unified"
@@ -1084,10 +1086,6 @@ class HermodWindow(
         # Column header: eyebrow + meta + segmented Unified/Unread/Flagged filter.
         column_header = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True, spacing=4)
         column_header.add_css_class("message-column-header")
-        column_header.set_margin_top(14)
-        column_header.set_margin_bottom(8)
-        column_header.set_margin_start(16)
-        column_header.set_margin_end(14)
 
         header_top = Gtk.CenterBox(hexpand=True)
         eyebrow_lbl = Gtk.Label(label="ALL INBOXES", halign=Gtk.Align.START, xalign=0.0)
@@ -1739,6 +1737,7 @@ class HermodWindow(
         self._viewer_stack.set_visible_child_name("startup-status")
 
     def _clear_startup_status_view(self):
+        was_active = bool(getattr(self, "_startup_status_active", False))
         self._startup_status_active = False
         self._startup_visible_ready = False
         self._startup_counts_ready = False
@@ -1752,6 +1751,14 @@ class HermodWindow(
             and self._viewer_stack.get_visible_child_name() == "startup-status"
         ):
             self._viewer_stack.set_visible_child_name("viewer")
+        # Startup was gating the poll loop (see __main__.py::_poll_loop,
+        # which skips polls while _startup_status_active is True). Kick off
+        # an immediate reconcile so sidebar badges get their first counts
+        # without waiting the 15s poll-grace window.
+        if was_active:
+            app = self.get_application() if hasattr(self, "get_application") else None
+            if app is not None and hasattr(app, "wake_background_updates"):
+                app.wake_background_updates(reconcile=True)
 
     def _dismiss_startup_status_view(self):
         self._clear_startup_status_view()

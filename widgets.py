@@ -12,6 +12,7 @@ try:
         _day_group_label,
         _format_date,
         _format_received_date,
+        _format_row_timestamp,
         _pick_icon_name,
         _make_count_slot,
         _sender_initials,
@@ -25,6 +26,7 @@ except ImportError:
         _day_group_label,
         _format_date,
         _format_received_date,
+        _format_row_timestamp,
         _pick_icon_name,
         _make_count_slot,
         _sender_initials,
@@ -117,10 +119,6 @@ class DayGroupRow(Gtk.Box):
     def __init__(self, label):
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL)
         self.add_css_class("day-group-row")
-        self.set_margin_top(12)
-        self.set_margin_bottom(2)
-        self.set_margin_start(16)
-        self.set_margin_end(16)
         self._label = Gtk.Label(label=label, halign=Gtk.Align.START, xalign=0.0)
         self._label.add_css_class("day-group-label")
         self.append(self._label)
@@ -150,33 +148,34 @@ class EmailRow(Gtk.Box):
 
         outer = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL,
-            margin_top=8,
-            margin_bottom=8,
-            margin_start=13,
-            margin_end=10,
             spacing=10,
         )
+        outer.add_css_class("email-row-body")
+
+        unread_dot = Gtk.Box()
+        unread_dot.add_css_class("message-row-unread-dot")
+        unread_dot.set_valign(Gtk.Align.START)
+        outer.append(unread_dot)
 
         avatar = Gtk.Label(
             label=_sender_initials(msg.get("sender_name"), msg.get("sender_email")),
-            valign=Gtk.Align.CENTER,
+            valign=Gtk.Align.START,
             halign=Gtk.Align.CENTER,
         )
         avatar.add_css_class("message-row-avatar")
         if accent_class:
             avatar.add_css_class(accent_class)
-        avatar.set_size_request(28, 28)
         outer.append(avatar)
 
-        col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1, hexpand=True)
+        col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=True)
 
-        row1 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        row1 = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         sender = Gtk.Label(
             label=msg.get("sender_name", ""),
             halign=Gtk.Align.START,
             hexpand=True,
             ellipsize=Pango.EllipsizeMode.END,
-            max_width_chars=28,
+            max_width_chars=24,
         )
         sender.add_css_class("message-row-sender")
         self._sender_label = sender
@@ -223,9 +222,9 @@ class EmailRow(Gtk.Box):
             row1.append(clip)
 
         date_lbl = Gtk.Label(
-            label=_format_date(msg.get("date")),
+            label=_format_row_timestamp(msg.get("date")),
             halign=Gtk.Align.END,
-            valign=Gtk.Align.START,
+            valign=Gtk.Align.CENTER,
         )
         date_lbl.add_css_class("caption")
         date_lbl.add_css_class("dim-label")
@@ -238,13 +237,29 @@ class EmailRow(Gtk.Box):
             label=msg.get("subject", ""),
             halign=Gtk.Align.START,
             ellipsize=Pango.EllipsizeMode.END,
-            max_width_chars=50,
+            max_width_chars=42,
         )
         subj.add_css_class("caption")
         subj.add_css_class("message-row-subject")
         self._subject_label = subj
         self._apply_unread_style()
         col.append(subj)
+
+        preview_text = " ".join((msg.get("preview") or "").split()).strip()
+        if preview_text:
+            preview_lbl = Gtk.Label(
+                label=preview_text,
+                halign=Gtk.Align.START,
+                ellipsize=Pango.EllipsizeMode.END,
+                max_width_chars=42,
+            )
+            preview_lbl.set_single_line_mode(True)
+            preview_lbl.add_css_class("caption")
+            preview_lbl.add_css_class("message-row-preview")
+            self._preview_label = preview_lbl
+            col.append(preview_lbl)
+        else:
+            self._preview_label = None
 
         outer.append(col)
         overlay.set_child(outer)
@@ -333,10 +348,6 @@ class LoadMoreRow(Gtk.Box):
         self._default_label = label
         self._loading = False
         self.add_css_class("load-more-row")
-        self.set_margin_top(6)
-        self.set_margin_bottom(10)
-        self.set_margin_start(10)
-        self.set_margin_end(10)
 
         button = Gtk.Button()
         button.add_css_class("flat")

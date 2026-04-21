@@ -76,6 +76,9 @@ window, dialog, popover {
     border-bottom: 1px solid alpha(@borders, 0.4);
     transition: background-color 0.2s ease;
 }
+.email-row-body {
+    padding: 10px 14px 10px 10px;
+}
 .message-list-view .email-row.unread {
     box-shadow: none;
 }
@@ -91,16 +94,16 @@ window, dialog, popover {
 .message-list-view row:hover .email-row:not(.selected) {
     background-color: alpha(@hermod_fg, 0.03);
 }
-/* Selected: 2px accent left bar, subtle bg tint */
+/* Selected: 3px accent left bar, accent-weak background tint */
 .message-list-view .email-row.selected {
     background-image: none;
-    background-color: rgba(46, 106, 112, 0.10);
-    box-shadow: inset 2px 0 0 0 #2e6a70;
-    border-bottom-color: rgba(46, 106, 112, 0.18);
+    background-color: rgba(46, 106, 112, 0.14);
+    box-shadow: inset 3px 0 0 0 #2e6a70;
+    border-bottom-color: rgba(46, 106, 112, 0.20);
 }
 .message-list-view row:hover .email-row.selected {
     background-image: none;
-    background-color: rgba(46, 106, 112, 0.14);
+    background-color: rgba(46, 106, 112, 0.18);
 }
 .thread-indicator {
     background-color: alpha(@hermod_fg, 0.06);
@@ -204,7 +207,7 @@ window, dialog, popover {
 }
 .load-more-row {
     background-color: transparent;
-    padding: 6px 0px 8px;
+    padding: 6px 10px 10px;
 }
 .load-more-row.selected {
     background-color: transparent;
@@ -236,11 +239,6 @@ window, dialog, popover {
     min-width: 12px;
     min-height: 12px;
     color: alpha(@hermod_fg_muted, 0.78);
-}
-.account-accent-strip {
-    border-radius: 999px;
-    min-width: 4px;
-    min-height: 18px;
 }
 .account-status-dot {
     border-radius: 999px;
@@ -399,6 +397,7 @@ window, dialog, popover {
 }
 .day-group-row {
     background: transparent;
+    padding: 12px 16px 2px;
 }
 .day-group-row:hover,
 .day-group-row:selected,
@@ -413,45 +412,6 @@ window, dialog, popover {
     letter-spacing: 0.18em;
     text-transform: uppercase;
     color: alpha(@window_fg_color, 0.48);
-}
-.sorting-toggle {
-    min-width: 26px;
-    min-height: 26px;
-    padding: 3px;
-    border-radius: 8px;
-    color: alpha(@hermod_fg_muted, 0.80);
-    background-color: alpha(#11171b, 0.90);
-    border: 1px solid alpha(@hermod_fg, 0.06);
-}
-.sorting-toggle image {
-    color: inherit;
-}
-.sorting-toggle:hover {
-    background-color: alpha(#141a1e, 0.96);
-    color: @hermod_fg;
-}
-.sorting-toggle.active {
-    background-color: alpha(#141a1e, 0.98);
-    color: @hermod_fg;
-    border-color: alpha(#2e6a70, 0.26);
-}
-.load-older-toolbar {
-    min-height: 26px;
-    padding: 0px 10px;
-    border-radius: 999px;
-    color: alpha(@hermod_fg_muted, 0.82);
-    background-color: alpha(#11171b, 0.88);
-    border: 1px solid alpha(@hermod_fg, 0.10);
-    font-size: 0.82em;
-    font-weight: 700;
-}
-.load-older-toolbar:hover {
-    background-color: alpha(#141a1e, 0.96);
-    color: @hermod_fg;
-    border-color: alpha(@hermod_fg, 0.18);
-}
-.load-older-toolbar:disabled {
-    opacity: 0.88;
 }
 .startup-status-panel {
     background-color: transparent;
@@ -1263,15 +1223,28 @@ window, dialog, popover {
     color: alpha(@hermod_fg, 0.75);
 }
 .message-row-avatar {
-    min-width: 28px;
-    min-height: 28px;
+    min-width: 32px;
+    min-height: 32px;
     border-radius: 999px;
-    background-color: #2A323A;
-    color: #F2F1ED;
-    font-size: 0.72em;
+    background-color: alpha(#a6adb3, 0.12);
+    color: @hermod_fg;
+    font-size: 0.78em;
     font-weight: 600;
     letter-spacing: 0.01em;
     box-shadow: none;
+}
+.message-row-unread-dot {
+    min-width: 6px;
+    min-height: 6px;
+    margin-top: 14px;
+    margin-left: 2px;
+    margin-right: 2px;
+    border-radius: 999px;
+    background-color: transparent;
+}
+.email-row.unread .message-row-unread-dot {
+    background-color: @hermod_accent;
+    box-shadow: 0 0 6px alpha(@hermod_accent, 0.50);
 }
 .email-row.selected .message-row-avatar {
     background-color: alpha(@hermod_accent, 0.40);
@@ -1296,6 +1269,13 @@ window, dialog, popover {
 .email-row.unread .message-row-subject {
     color: alpha(@hermod_fg, 0.88);
     font-weight: 500;
+}
+.message-row-preview {
+    font-size: 0.82em;
+    font-weight: 400;
+    color: alpha(@hermod_fg_muted, 0.60);
+    letter-spacing: 0;
+    margin-top: 1px;
 }
 .message-row-date {
     font-size: 0.76em;
@@ -1592,19 +1572,9 @@ window, dialog, popover {
     border-radius: 999px;
 }
 .content-split separator {
-    min-width: 7px;
+    min-width: 1px;
     background-color: transparent;
-    background-image: linear-gradient(
-        to right,
-        transparent 0,
-        transparent 3px,
-        alpha(@borders, 0.18) 3px,
-        alpha(@borders, 0.18) 4px,
-        transparent 4px,
-        transparent 100%
-    );
-    background-repeat: no-repeat;
-    background-position: center;
+    background-image: none;
     border: none;
     box-shadow: none;
 }
@@ -1847,30 +1817,6 @@ def build_theme_override_css(theme="night", day_variant="paper", accent="teal", 
 .startup-status-issues-title {{
     color: alpha({muted}, 0.68);
 }}
-.sorting-toggle {{
-    color: alpha({muted}, 0.80);
-    background-color: alpha({card}, 0.90);
-    border: 1px solid alpha({fg}, 0.06);
-}}
-.sorting-toggle:hover {{
-    background-color: {hover};
-    color: {fg};
-}}
-.sorting-toggle.active {{
-    background-color: {hover};
-    color: {fg};
-    border-color: alpha({base}, 0.26);
-}}
-.load-older-toolbar {{
-    color: alpha({muted}, 0.82);
-    background-color: alpha({card}, 0.88);
-    border: 1px solid alpha({fg}, 0.10);
-}}
-.load-older-toolbar:hover {{
-    background-color: {hover};
-    color: {fg};
-    border-color: alpha({fg}, 0.18);
-}}
 .sidebar-actions {{
     border-bottom: 1px solid alpha({fg}, 0.10);
 }}
@@ -1937,15 +1883,7 @@ def build_theme_override_css(theme="night", day_variant="paper", accent="teal", 
     color: alpha({muted}, 0.72);
 }}
 .content-split separator {{
-    background-image: linear-gradient(
-        to right,
-        transparent 0,
-        transparent 3px,
-        alpha({fg}, 0.10) 3px,
-        alpha({fg}, 0.10) 4px,
-        transparent 4px,
-        transparent 100%
-    );
+    background-image: none;
 }}
 .message-column {{
     background-color: {card};
@@ -1966,21 +1904,6 @@ def build_theme_override_css(theme="night", day_variant="paper", accent="teal", 
 /* Settings panel */
 .settings-section-title {{
     color: alpha({muted}, 0.82);
-}}
-.account-tile {{
-    border: 1px solid alpha({fg}, 0.08);
-    background: linear-gradient(180deg, alpha({fg}, 0.02), alpha({fg}, 0.01)),
-                alpha({card}, 0.92);
-}}
-.account-tile:hover {{
-    background: linear-gradient(180deg, alpha({fg}, 0.04), alpha({fg}, 0.02)),
-                {hover};
-}}
-.account-tile-icon {{
-    color: alpha({fg}, 0.88);
-}}
-.account-row-subtitle {{
-    color: alpha({muted}, 0.70);
 }}
 .account-color-chip {{
     background: alpha({card}, 0.90);
@@ -2236,11 +2159,11 @@ def build_window_account_css(backends=None):
 /* Selected state overrides per-account gradient — must come last */
 .message-list-view .email-row.selected {
     background-image: none;
-    background-color: alpha(@accent_color, 0.08);
+    background-color: alpha(@accent_color, 0.14);
     box-shadow: inset 3px 0 0 0 @accent_color;
 }
 .message-list-view row:hover .email-row.selected {
-    background-color: alpha(@accent_color, 0.12);
+    background-color: alpha(@accent_color, 0.18);
 }
 """
     )

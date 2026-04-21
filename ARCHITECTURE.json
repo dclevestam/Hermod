@@ -162,6 +162,11 @@
       "package": false
     },
     {
+      "name": "command_palette",
+      "path": "command_palette.py",
+      "package": false
+    },
+    {
       "name": "compose",
       "path": "compose.py",
       "package": false
@@ -224,6 +229,11 @@
     {
       "name": "providers.imap_smtp",
       "path": "providers/imap_smtp.py",
+      "package": false
+    },
+    {
+      "name": "providers.microsoft",
+      "path": "providers/microsoft.py",
       "package": false
     },
     {
@@ -756,6 +766,11 @@
     },
     {
       "from": "backends",
+      "to": "providers.microsoft",
+      "type": "import"
+    },
+    {
+      "from": "backends",
       "to": "sync_state",
       "type": "import"
     },
@@ -845,6 +860,26 @@
       "type": "import"
     },
     {
+      "from": "providers.microsoft",
+      "to": "accounts.auth",
+      "type": "import"
+    },
+    {
+      "from": "providers.microsoft",
+      "to": "diagnostics.logger",
+      "type": "import"
+    },
+    {
+      "from": "providers.microsoft",
+      "to": "sync_state",
+      "type": "import"
+    },
+    {
+      "from": "providers.microsoft",
+      "to": "providers.common",
+      "type": "import"
+    },
+    {
       "from": "providers.sync_rows",
       "to": "providers.common",
       "type": "import"
@@ -887,6 +922,11 @@
     {
       "from": "settings_accounts",
       "to": "settings",
+      "type": "import"
+    },
+    {
+      "from": "settings_accounts",
+      "to": "window_welcome",
       "type": "import"
     },
     {
@@ -1005,6 +1045,11 @@
       "type": "import"
     },
     {
+      "from": "window",
+      "to": "command_palette",
+      "type": "import"
+    },
+    {
       "from": "window_mailbox_controller",
       "to": "backends",
       "type": "import"
@@ -1042,6 +1087,11 @@
     {
       "from": "window_message_list",
       "to": "backends",
+      "type": "import"
+    },
+    {
+      "from": "window_message_list",
+      "to": "command_palette",
       "type": "import"
     },
     {

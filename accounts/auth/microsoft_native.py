@@ -273,7 +273,10 @@ def run_ms_native_oauth_authorization(
     result = {}
     ready = threading.Event()
 
-    callback_path = "/oauth2/callback"
+    # Azure public-client apps typically register `http://localhost` as the
+    # redirect URI; Microsoft ignores the port for loopback but requires the
+    # path to match exactly, so we send a redirect_uri with no path.
+    callback_paths = ("/", "")
 
     class _OAuthHandler(BaseHTTPRequestHandler):
         def do_GET(self):
@@ -284,7 +287,7 @@ def run_ms_native_oauth_authorization(
                 self.end_headers()
                 return
 
-            is_callback = parsed.path == callback_path
+            is_callback = parsed.path in callback_paths
             code = str((query.get("code") or [""])[0] or "").strip()
             state_value = str((query.get("state") or [""])[0] or "").strip()
             error = str((query.get("error") or [""])[0] or "").strip()
@@ -315,7 +318,7 @@ def run_ms_native_oauth_authorization(
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), _OAuthHandler)
     server.daemon_threads = True
-    redirect_uri = f"http://localhost:{server.server_address[1]}{callback_path}"
+    redirect_uri = f"http://localhost:{server.server_address[1]}"
     server_thread = threading.Thread(
         target=server.serve_forever, kwargs={"poll_interval": 0.2}, daemon=True
     )

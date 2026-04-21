@@ -193,12 +193,12 @@ class MicrosoftGraphBackendTests(unittest.TestCase):
             ],
         }
         with mock.patch.object(backend, "_graph_request", return_value=payload):
-            body = backend.fetch_body("msg-1")
+            html, text, attachments = backend.fetch_body("msg-1")
 
-        self.assertEqual(body["html"], "<p>Hi</p>")
-        self.assertEqual(body["text"], "")
-        self.assertEqual(len(body["attachments"]), 1)
-        self.assertEqual(body["attachments"][0]["name"], "file.pdf")
+        self.assertEqual(html, "<p>Hi</p>")
+        self.assertEqual(text, "")
+        self.assertEqual(len(attachments), 1)
+        self.assertEqual(attachments[0]["name"], "file.pdf")
 
 
 if __name__ == "__main__":

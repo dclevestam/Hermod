@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import email.utils
 import json
 import threading
 import time
@@ -213,11 +214,17 @@ class MicrosoftGraphBackend:
         return _aware_utc_datetime(parsed)
 
     @staticmethod
-    def _address(addr):
+    def _address_parts(addr):
         if not isinstance(addr, dict):
-            return ""
-        email = str((addr.get("emailAddress") or {}).get("address") or "").strip()
-        name = str((addr.get("emailAddress") or {}).get("name") or "").strip()
+            return "", ""
+        inner = addr.get("emailAddress") or {}
+        email = str(inner.get("address") or "").strip()
+        name = str(inner.get("name") or "").strip()
+        return name, email
+
+    @classmethod
+    def _address(cls, addr):
+        name, email = cls._address_parts(addr)
         if not email:
             return ""
         return f"{name} <{email}>" if name and name != email else email
@@ -228,6 +235,7 @@ class MicrosoftGraphBackend:
         uid = str(data.get("id") or "").strip()
         if not uid:
             return None
+        sender_name, sender_email = self._address_parts(data.get("from"))
         from_header = self._address(data.get("from"))
         to_parts = [self._address(r) for r in (data.get("toRecipients") or [])]
         cc_parts = [self._address(r) for r in (data.get("ccRecipients") or [])]
@@ -235,8 +243,12 @@ class MicrosoftGraphBackend:
             "uid": uid,
             "folder": folder,
             "provider": "microsoft",
+            "account": self.identity,
+            "backend_obj": self,
             "subject": str(data.get("subject") or "").strip(),
             "from": from_header,
+            "sender_name": sender_name or sender_email or "Unknown sender",
+            "sender_email": sender_email,
             "to": ", ".join(part for part in to_parts if part),
             "cc": ", ".join(part for part in cc_parts if part),
             "date": self._parse_datetime(data.get("receivedDateTime")),
@@ -260,6 +272,8 @@ class MicrosoftGraphBackend:
                     "folder": str(msg.get("folder") or ""),
                     "subject": str(msg.get("subject") or ""),
                     "from": str(msg.get("from") or ""),
+                    "sender_name": str(msg.get("sender_name") or ""),
+                    "sender_email": str(msg.get("sender_email") or ""),
                     "to": str(msg.get("to") or ""),
                     "cc": str(msg.get("cc") or ""),
                     "date": date.isoformat() if isinstance(date, datetime) else "",
@@ -282,13 +296,24 @@ class MicrosoftGraphBackend:
             if not uid:
                 continue
             date = self._parse_datetime(msg.get("date"))
+            from_value = str(msg.get("from") or "")
+            sender_name = str(msg.get("sender_name") or "").strip()
+            sender_email = str(msg.get("sender_email") or "").strip()
+            if not sender_email and from_value:
+                parsed_name, parsed_email = email.utils.parseaddr(from_value)
+                sender_name = sender_name or parsed_name
+                sender_email = parsed_email
             out.append(
                 {
                     "uid": uid,
                     "folder": str(msg.get("folder") or ""),
                     "provider": "microsoft",
+                    "account": self.identity,
+                    "backend_obj": self,
                     "subject": str(msg.get("subject") or ""),
-                    "from": str(msg.get("from") or ""),
+                    "from": from_value,
+                    "sender_name": sender_name or sender_email or "Unknown sender",
+                    "sender_email": sender_email,
                     "to": str(msg.get("to") or ""),
                     "cc": str(msg.get("cc") or ""),
                     "date": date,
@@ -454,11 +479,9 @@ class MicrosoftGraphBackend:
                     "is_inline": bool(att.get("isInline")),
                 }
             )
-        return {
-            "html": content if content_type == "html" else "",
-            "text": content if content_type != "html" else "",
-            "attachments": attachments,
-        }
+        html = content if content_type == "html" else ""
+        text = content if content_type != "html" else ""
+        return html, text, attachments
 
     def fetch_attachment_data(self, uid, attachment, folder=None):
         uid = str(uid or "").strip()

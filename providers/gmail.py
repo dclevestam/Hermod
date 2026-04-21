@@ -1723,19 +1723,24 @@ class GmailBackend:
         ensure_network_ready()
         try:
             labels = self._gmail_labels()
-            extra = []
-            for name, label in labels.items():
-                if not name:
-                    continue
-                if name in self._STANDARD_FOLDER_IDS or name in self._GMAIL_SYSTEM_LABELS.values():
-                    continue
-                if str(label.get('type') or '').lower() == 'system':
-                    continue
-                extra.append((name, name, 'folder-symbolic'))
-            extra.sort(key=lambda item: item[1].lower())
-            return extra
-        except Exception:
+        except Exception as exc:
+            log_event(
+                'gmail-fetch-all-folders-failed',
+                level='warning',
+                message=f'Gmail label fetch failed: {exc}',
+            )
             return []
+        extra = []
+        for name, label in labels.items():
+            if not name:
+                continue
+            if name in self._STANDARD_FOLDER_IDS or name in self._GMAIL_SYSTEM_LABELS.values():
+                continue
+            if str(label.get('type') or '').lower() == 'system':
+                continue
+            extra.append((name, name, 'folder-symbolic'))
+        extra.sort(key=lambda item: item[1].lower())
+        return extra
 
     def get_cached_messages(self, folder='INBOX', limit=50):
         return self._folder_cached_messages(folder)[:limit]

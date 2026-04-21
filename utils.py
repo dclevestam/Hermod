@@ -77,6 +77,33 @@ def _format_received_date(dt):
     return _format_local_timestamp(dt)
 
 
+def _format_row_timestamp(dt):
+    """Row-optimized compact timestamp: HH:MM today, 'Yesterday', 'Mon DD' older."""
+    if dt is None:
+        return ''
+    try:
+        local_dt = dt.astimezone()
+    except Exception:
+        return ''
+    try:
+        now = datetime.now().astimezone()
+        today = now.date()
+        day = local_dt.date()
+    except Exception:
+        return ''
+    if day == today:
+        return local_dt.strftime('%H:%M')
+    yesterday = today - timedelta(days=1)
+    if day == yesterday:
+        return 'Yesterday'
+    if now - local_dt > timedelta(days=365):
+        return local_dt.strftime('%m/%d/%y')
+    try:
+        return local_dt.strftime('%b %-d')
+    except Exception:
+        return local_dt.strftime('%b %d')
+
+
 def _day_group_label(dt):
     """Short uppercase day grouping label used by the message list."""
     if dt is None:

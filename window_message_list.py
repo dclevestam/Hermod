@@ -606,12 +606,38 @@ class MessageListMixin:
         if was_unread and mark_on_open:
             self._sync_backend_cached_read_state(row.msg, True)
             if hasattr(self, '_message_filter'):
+                self._capture_email_scroll_for_filter_change()
                 self._message_filter.changed(Gtk.FilterChange.DIFFERENT)
             self._update_message_empty_state()
-            self._refresh_provider_counts_for_message(
-                row.msg,
-                row.msg.get('backend_obj') or getattr(self, 'current_backend', None),
+            # Persist the read flag upstream, then refresh the provider
+            # unread count. Chaining in the same daemon guarantees the
+            # count fetch sees the post-PATCH server state, instead of
+            # racing against it and pulling a stale number.
+            backend = row.msg.get('backend_obj') or getattr(
+                self, 'current_backend', None
             )
+            uid = row.msg.get('uid')
+            folder = row.msg.get('folder')
+            msg_ref = row.msg
+            if backend is not None and uid:
+                def _mark_then_refresh_counts(
+                    b=backend, u=uid, f=folder, m=msg_ref
+                ):
+                    try:
+                        if hasattr(b, 'mark_as_read'):
+                            b.mark_as_read(u, f)
+                    except Exception:
+                        pass
+                    GLib.idle_add(
+                        self._refresh_provider_counts_for_message, m, b
+                    )
+                threading.Thread(
+                    target=_mark_then_refresh_counts, daemon=True
+                ).start()
+            else:
+                self._refresh_provider_counts_for_message(
+                    row.msg, backend
+                )
 
     def _restore_folder_selection(self):
         self._suppress_folder_selection = True
@@ -780,7 +806,11 @@ class MessageListMixin:
                 self._refresh_provider_counts_for_message(msg, backend)
                 GLib.idle_add(self._show_toast, 'Message deleted')
                 if hasattr(self, '_message_filter'):
-                    GLib.idle_add(self._message_filter.changed, Gtk.FilterChange.DIFFERENT)
+                    def _fire_filter_change():
+                        self._capture_email_scroll_for_filter_change()
+                        self._message_filter.changed(Gtk.FilterChange.DIFFERENT)
+                        return False
+                    GLib.idle_add(_fire_filter_change)
                 GLib.idle_add(self._update_message_empty_state)
             except Exception as e:
                 GLib.idle_add(self._show_toast, f'Delete failed: {e}')
@@ -801,6 +831,7 @@ class MessageListMixin:
         msg['is_read'] = False
         self._sync_backend_cached_read_state(msg, False)
         if hasattr(self, '_message_filter'):
+            self._capture_email_scroll_for_filter_change()
             self._message_filter.changed(Gtk.FilterChange.DIFFERENT)
         self._update_message_empty_state()
 
@@ -817,6 +848,75 @@ class MessageListMixin:
         self._search_text = entry.get_text().lower()
         self._message_filter.changed(Gtk.FilterChange.DIFFERENT)
         self._update_message_empty_state()
+
+    def _maybe_update_in_place(self, ordered_msgs, has_more):
+        """If the new ordered_msgs has the same UIDs in the same order as
+        what's already rendered, update mutable fields (is_read, thread_count)
+        on existing MessageListItems and skip the full splice. Returns True
+        when the in-place update was applied."""
+        store = getattr(self, '_message_store', None)
+        if store is None:
+            return False
+        existing = []
+        for index in range(store.get_n_items()):
+            item = store.get_item(index)
+            if isinstance(item, MessageListItem):
+                existing.append(item)
+            elif isinstance(item, LoadMoreListItem):
+                existing.append(('__load_more__',))
+            elif isinstance(item, DayGroupListItem):
+                existing.append(('__day_group__', item.date_key))
+        new_signature = [
+            str(m.get('uid') or '') for m in ordered_msgs
+        ]
+        existing_signature = [
+            str(i.msg.get('uid') or '') if isinstance(i, MessageListItem) else i
+            for i in existing
+            if not (isinstance(i, tuple) and i[0] in ('__load_more__', '__day_group__'))
+        ]
+        if existing_signature != new_signature:
+            return False
+        currently_has_more = any(
+            isinstance(store.get_item(i), LoadMoreListItem)
+            for i in range(store.get_n_items())
+        )
+        if bool(has_more) != bool(currently_has_more):
+            return False
+        existing_msg_items = [
+            item for item in existing if isinstance(item, MessageListItem)
+        ]
+        for new_msg, list_item in zip(ordered_msgs, existing_msg_items):
+            changed = False
+            if list_item.msg.get('is_read') != new_msg.get('is_read'):
+                list_item.msg['is_read'] = bool(new_msg.get('is_read'))
+                changed = True
+            if list_item.msg.get('thread_count') != new_msg.get('thread_count'):
+                list_item.msg['thread_count'] = new_msg.get('thread_count', 1)
+                changed = True
+            if changed and list_item.widget is not None:
+                if list_item.msg.get('is_read'):
+                    list_item.widget.mark_read()
+                else:
+                    list_item.widget.mark_unread()
+                if hasattr(list_item.widget, 'set_thread_count'):
+                    list_item.widget.set_thread_count(
+                        list_item.msg.get('thread_count', 1)
+                    )
+        return True
+
+    def _capture_email_scroll_for_filter_change(self):
+        """Remember the list's current scroll so FilterListModel.changed()
+        doesn't leave the user stranded at the top after a silent refresh."""
+        if getattr(self, '_email_scroll', None) is None:
+            return
+        adj = self._email_scroll.get_vadjustment()
+        if adj is None:
+            return
+        value = adj.get_value()
+        if value > 0:
+            self._pending_list_scroll_value = value
+            if hasattr(self, '_restore_pending_list_scroll'):
+                GLib.idle_add(self._restore_pending_list_scroll)
 
     def _email_filter(self, item, *_args):
         if isinstance(item, DayGroupListItem):
@@ -1127,8 +1227,8 @@ class MessageListMixin:
         self._displayed_message_list_key = self._message_list_context_key()
         self._message_has_more = bool(has_more)
         self._sync_message_toolbar_controls()
-        self._message_store.splice(0, self._message_store.get_n_items(), [])
         if not msgs:
+            self._message_store.splice(0, self._message_store.get_n_items(), [])
             self._thread_groups = {}
             self._prefetch_generation += 1
             self._message_has_more = False
@@ -1164,8 +1264,44 @@ class MessageListMixin:
             reverse=(sort_order != 'oldest'),
         )
         self._prefetch_generation += 1
+
+        # Fast-path: if the new UID order matches what's already rendered,
+        # update read-state in-place and skip the splice. Splicing rebuilds
+        # the ListView widgets and resets scroll, which feels like the list
+        # is jumping on every background poll.
+        if self._maybe_update_in_place(ordered_msgs, has_more):
+            self._list_stack.set_visible_child_name('list')
+            # Live-fetch completion must still dismiss the startup overlay
+            # and kick off an unread-count warm-up, even when the list hasn't
+            # structurally changed. Otherwise sidebar badges stay at 0 until
+            # the next reconcile (~minutes).
+            if source == 'live' and getattr(self, '_startup_status_active', False):
+                panel = getattr(self, '_startup_status_panel', None)
+                blocking_attention = False
+                if panel is not None:
+                    if hasattr(panel, 'has_blocking_attention'):
+                        blocking_attention = panel.has_blocking_attention()
+                    elif hasattr(panel, 'has_attention'):
+                        blocking_attention = panel.has_attention()
+                if not blocking_attention:
+                    self._startup_visible_ready = True
+                    self._clear_startup_status_view()
+                    if hasattr(self, '_refresh_all_unread_counts'):
+                        self._refresh_all_unread_counts()
+                    if getattr(self, '_viewer_stack', None) is not None:
+                        self._viewer_stack.set_visible_child_name('viewer')
+                    self._show_mail_view()
+            self._update_message_empty_state()
+            self._refresh_message_meta()
+            _log_perf(
+                'set messages',
+                f'{len(ordered_msgs)} rows in-place update (no splice) [{source}]',
+                started=started,
+            )
+            return True
+
         items = self._build_message_items(ordered_msgs, has_more=has_more)
-        self._message_store.splice(0, 0, items)
+        self._message_store.splice(0, self._message_store.get_n_items(), items)
         self._list_stack.set_visible_child_name('list')
         if source == 'live' and getattr(self, '_startup_status_active', False):
             panel = getattr(self, '_startup_status_panel', None)
@@ -1240,15 +1376,18 @@ class MessageListMixin:
             ):
                 should_commit_selected = True
         elif self._startup_autoselect_pending and self.current_folder in (_UNIFIED, 'INBOX', 'inbox'):
+            # One-shot: auto-select the first message only on the initial load.
+            # Subsequent background refreshes must not re-select row 0 — that
+            # resets the user's scroll position every poll.
             for index in range(self._filtered_message_model.get_n_items()):
                 item = self._filtered_message_model.get_item(index)
                 if not isinstance(item, MessageListItem):
                     continue
-                self._startup_autoselect_pending = False
                 self._set_selected_visible_index(index, grab_focus=True)
                 self._active_email_row = item
                 should_commit_selected = True
                 break
+            self._startup_autoselect_pending = False
         if should_commit_selected and self._active_email_row is not None:
             self._commit_email_selection(self._active_email_row)
         self._update_message_empty_state()

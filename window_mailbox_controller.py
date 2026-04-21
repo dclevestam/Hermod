@@ -238,6 +238,10 @@ class MailboxControllerMixin:
                 active_msg.get('folder', ''),
                 active_msg.get('uid', ''),
             )
+        if preserve_selected and getattr(self, '_email_scroll', None) is not None:
+            adj = self._email_scroll.get_vadjustment()
+            if adj is not None:
+                self._pending_list_scroll_value = adj.get_value()
         if (force or self._offline_refresh_pending) and self.current_folder:
             self._offline_refresh_pending = False
             if self.current_folder == _UNIFIED:
@@ -275,6 +279,14 @@ class MailboxControllerMixin:
         return False
 
     def _load_messages(self, preserve_selected_key=None, sync_complete_callback=None):
+        if (
+            preserve_selected_key
+            and self._pending_list_scroll_value is None
+            and getattr(self, '_email_scroll', None) is not None
+        ):
+            adj = self._email_scroll.get_vadjustment()
+            if adj is not None and adj.get_value() > 0:
+                self._pending_list_scroll_value = adj.get_value()
         generation = self._begin_message_load()
         self._set_message_loading(True, generation)
         request_key = self._message_list_context_key()
@@ -411,6 +423,14 @@ class MailboxControllerMixin:
             raise
 
     def _load_unified_messages(self, folder_name=None, preserve_selected_key=None, sync_complete_callback=None):
+        if (
+            preserve_selected_key
+            and self._pending_list_scroll_value is None
+            and getattr(self, '_email_scroll', None) is not None
+        ):
+            adj = self._email_scroll.get_vadjustment()
+            if adj is not None and adj.get_value() > 0:
+                self._pending_list_scroll_value = adj.get_value()
         generation = self._begin_message_load()
         self._set_message_loading(True, generation)
         request_key = self._message_list_context_key()

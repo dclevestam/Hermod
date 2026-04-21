@@ -201,32 +201,6 @@ _SETTINGS_CSS = """
     color: alpha(#a6adb3, 0.82);
     margin-bottom: 3px;
 }
-.account-tile {
-    min-width: 192px;
-    border-radius: 14px;
-    border: 1px solid alpha(#f2f1ed, 0.08);
-    background:
-        linear-gradient(180deg, alpha(white, 0.03), alpha(white, 0.01)),
-        alpha(#11171b, 0.92);
-}
-.account-tile:hover {
-    background:
-        linear-gradient(180deg, alpha(white, 0.05), alpha(white, 0.02)),
-        alpha(#141a1e, 0.96);
-}
-.account-tile-icon {
-    color: alpha(#f2f1ed, 0.88);
-}
-.account-row {
-    min-height: 50px;
-}
-.account-row-subtitle {
-    color: alpha(#a6adb3, 0.70);
-    font-size: 0.82em;
-}
-.account-row.striped {
-    border-radius: 10px;
-}
 .account-color-preview {
     min-width: 18px;
     min-height: 18px;

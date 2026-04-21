@@ -273,23 +273,78 @@ class ReaderMixin:
             return False
 
     def _restore_pending_list_scroll(self):
-        if (
-            self._pending_list_scroll_value is None
-            or getattr(self, "_email_scroll", None) is None
-        ):
+        target_value = self._pending_list_scroll_value
+        if target_value is None or getattr(self, "_email_scroll", None) is None:
+            self._pending_list_scroll_value = None
+            self._pending_list_scroll_attempts = 0
+            self._detach_pending_list_scroll_watcher()
             return False
         adj = self._email_scroll.get_vadjustment()
         if adj is None:
+            self._pending_list_scroll_value = None
+            self._pending_list_scroll_attempts = 0
+            self._detach_pending_list_scroll_watcher()
             return False
-        lower = adj.get_lower()
         upper = adj.get_upper()
         page_size = adj.get_page_size()
+        if upper <= page_size and target_value > 0:
+            attempts = getattr(self, "_pending_list_scroll_attempts", 0) + 1
+            self._pending_list_scroll_attempts = attempts
+            # Hook onto the adjustment so we restore the moment GTK measures
+            # the list and `upper` grows past the page size.
+            if getattr(self, "_pending_list_scroll_watcher", None) is None:
+                try:
+                    handler = adj.connect(
+                        "notify::upper", self._on_pending_list_scroll_upper_changed
+                    )
+                except Exception:
+                    handler = None
+                if handler is not None:
+                    self._pending_list_scroll_watcher = (adj, handler)
+            if attempts <= 40:
+                return True
+            self._pending_list_scroll_value = None
+            self._pending_list_scroll_attempts = 0
+            self._detach_pending_list_scroll_watcher()
+            return False
+        lower = adj.get_lower()
         target = max(
-            lower, min(self._pending_list_scroll_value, max(lower, upper - page_size))
+            lower, min(target_value, max(lower, upper - page_size))
         )
         adj.set_value(target)
         self._pending_list_scroll_value = None
+        self._pending_list_scroll_attempts = 0
+        self._detach_pending_list_scroll_watcher()
         return False
+
+    def _on_pending_list_scroll_upper_changed(self, adj, _pspec):
+        if self._pending_list_scroll_value is None:
+            self._detach_pending_list_scroll_watcher()
+            return
+        upper = adj.get_upper()
+        page_size = adj.get_page_size()
+        if upper <= page_size and self._pending_list_scroll_value > 0:
+            return
+        lower = adj.get_lower()
+        target = max(
+            lower,
+            min(self._pending_list_scroll_value, max(lower, upper - page_size)),
+        )
+        adj.set_value(target)
+        self._pending_list_scroll_value = None
+        self._pending_list_scroll_attempts = 0
+        self._detach_pending_list_scroll_watcher()
+
+    def _detach_pending_list_scroll_watcher(self):
+        watcher = getattr(self, "_pending_list_scroll_watcher", None)
+        if watcher is None:
+            return
+        adj, handler = watcher
+        try:
+            adj.disconnect(handler)
+        except Exception:
+            pass
+        self._pending_list_scroll_watcher = None
 
     def _populate_thread_sidebar(self, records):
         if getattr(self, "_thread_sidebar_list", None) is None:
