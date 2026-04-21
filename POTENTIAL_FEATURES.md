@@ -34,9 +34,6 @@ These features leverage Hermod's local AI integration to provide a superior, pri
   design-heavy newsletters and structured receipts to original
   automatically (`window_reader.py::_heuristic_prefers_original`).
 - **To polish later:**
-  - Improve the clean extractor so `(https://…)` inline URL clutter
-    gets trimmed — receipts could then stay in clean mode instead of
-    bouncing to original.
   - Learn-from-feedback: record when the user manually flips
     clean→original for a given domain and silently promote that
     domain toward original next time.
@@ -45,8 +42,18 @@ These features leverage Hermod's local AI integration to provide a superior, pri
   - Consider an "always prefer clean from <sender>" option (overrides
     the heuristic for senders where clean reads fine but the shape
     heuristic keeps picking original).
-  - Tune heuristic thresholds (`img_count`, extraction-ratio,
-    URL-density) against a small labelled corpus from a real inbox.
+  - Tune heuristic thresholds against a small labelled corpus from a
+    real inbox (`img_count`, extraction-ratio, URL-density).
   - Thread view already renders clean by design; if we ever want an
     "original HTML" peek for a single bubble inside the thread, that
     would be a per-bubble toggle on the bubble header.
+  - **Phase-3 AI classification**: layer a local LLM call on top of
+    the regex routing for ambiguous cases (short extraction that
+    doesn't obviously fit any existing rule, sender not on a known
+    marketing pattern, mixed signals). The model classifies
+    `transactional | marketing | auth | notification | personal | design-heavy`
+    and the result caches to a per-sender signal, so each sender only
+    costs one inference. Regex stays the fast path (sub-millisecond
+    on every open); AI is the second-opinion layer triggered only
+    when regex confidence is low. Gated on the local-model runtime
+    (see §1 above).

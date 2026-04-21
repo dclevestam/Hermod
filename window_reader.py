@@ -148,9 +148,48 @@ def _prettify_extracted_body(text):
             out_lines.extend(parts)
             continue
         out_lines.append(raw_line)
-    joined = "\n".join(out_lines)
-    joined = re.sub(r"\n{3,}", "\n\n", joined)
-    return joined
+    # Squeeze out excessive vertical gaps: senders often use stacked
+    # `<br>`, empty `<p>`, and `&nbsp;` spacers which extract as long
+    # runs of whitespace-only lines. Render as at most one blank line
+    # between content blocks.
+    normalised = []
+    for line in out_lines:
+        stripped = line.rstrip()
+        if not stripped.strip(" \t\u00a0"):
+            normalised.append("")
+        else:
+            normalised.append(stripped)
+    collapsed = []
+    prev_blank = False
+    for line in normalised:
+        if line == "":
+            if prev_blank:
+                continue
+            prev_blank = True
+        else:
+            prev_blank = False
+        collapsed.append(line)
+    while collapsed and collapsed[0] == "":
+        collapsed.pop(0)
+    while collapsed and collapsed[-1] == "":
+        collapsed.pop()
+    return "\n".join(collapsed)
+
+
+# Sender addresses that strongly imply a mass-marketing list —
+# newsletters / campaigns / loyalty programmes. We route their
+# messages to original HTML because the layout carries meaning.
+# Deliberately conservative: `noreply@` alone isn't enough (auth /
+# password-reset / notification emails use it too); the segment
+# around it must indicate marketing intent.
+_NEWSLETTER_SENDER_RE = re.compile(
+    r"(?:^|[@.\-_+])"
+    r"(?:newsletter|nieuwsbrief|marketing|promo|promos|offers?|deals?|"
+    r"loyalty|campaign|campaigns|news\.|email\.|mail\.email|"
+    r"noreply\.news|broadcast|bulletin)"
+    r"(?:[@.\-_+]|$)",
+    re.IGNORECASE,
+)
 
 
 # Heuristic match for "your email client can't display HTML — view
@@ -1048,10 +1087,12 @@ class ReaderMixin:
             # self-closing `<img/>` and `<img\n`. Use a word boundary.
             img_count = len(re.findall(r"<img\b", html, re.IGNORECASE))
 
-            # Rule A: near-empty extraction. Catches "hero image +
-            # one-word CTA" shapes where almost nothing survives
-            # html2text.
-            if readable_len < 100:
+            # Rule A: near-empty extraction on a design-heavy payload.
+            # Catches "hero image + one-word CTA" marketing shapes. The
+            # extra "images OR very big HTML" guard prevents this from
+            # misfiring on short personal replies ("lunch?") that Gmail
+            # wraps in a multi-kB HTML shell but with zero images.
+            if readable_len < 100 and (img_count >= 2 or len(html) > 10000):
                 return True
 
             # Rule B: image-dominant. Even when the extraction grabs
@@ -1064,6 +1105,28 @@ class ReaderMixin:
             # campaigns with product tiles or card grids (≥ 4 images
             # and < 500 chars of readable text) route to original.
             if img_count >= 4 and readable_len < 500:
+                return True
+
+            # Rule C: the sender's plaintext MIME alternative was a
+            # "can't display HTML, view online" stub. That's an
+            # unambiguous signal the message is HTML-first — the
+            # sender literally told us so. Route to original.
+            plain_alt = (text or "").strip()
+            if plain_alt and _PLAINTEXT_STUB_RE.search(plain_alt):
+                return True
+
+            # Rule D: the sender address screams "mass-marketing
+            # newsletter / loyalty list". Combined with a non-trivial
+            # extraction that's below ~1kB of readable text, assume
+            # the layout is the content and route to original. Tuned
+            # so a plain-text newsletter with one paragraph of
+            # announcement (rare but exists) stays clean.
+            sender_email = str((msg or {}).get("sender_email") or "").strip()
+            if (
+                sender_email
+                and _NEWSLETTER_SENDER_RE.search(sender_email)
+                and readable_len < 1000
+            ):
                 return True
         except Exception:
             return False
