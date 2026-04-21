@@ -418,8 +418,29 @@ def _html_to_text(html):
     text = re.sub(r'(?is)<(script|style).*?>.*?</\1>', '', html)
     text = re.sub(r'(?i)<br\s*/?>', '\n', text)
     text = re.sub(r'(?i)</p>|</div>|</li>|</tr>|</h[1-6]>', '\n', text)
+    # Preserve anchor targets as "text (url)" so the reader's clean-mode
+    # linkifier can turn them into real <a> tags. Without this, <a href>
+    # URLs vanish when tags are stripped below and the user sees
+    # "Log in >" with no way to act on it.
+    text = re.sub(
+        r'(?is)<a\s[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
+        lambda m: f'{m.group(2)} ({m.group(1)})',
+        text,
+    )
+    text = re.sub(
+        r"(?is)<a\s[^>]*href='([^']+)'[^>]*>(.*?)</a>",
+        lambda m: f'{m.group(2)} ({m.group(1)})',
+        text,
+    )
+    # Drop image URLs entirely — html2text convention is [url] for <img>,
+    # but the URL itself carries no reader value (it's a CDN pointer).
+    text = re.sub(r'(?is)<img\s[^>]*>', '', text)
     text = re.sub(r'(?s)<[^>]+>', '', text)
     text = html_lib.unescape(text)
+    # Strip bracketed URL residue left by other clients that already
+    # html2text-ified (e.g. plaintext alternatives that use
+    # "[https://stripe-images.s3.amazonaws.com/…]" for images).
+    text = re.sub(r'\[https?://[^\]]+\]', '', text)
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 

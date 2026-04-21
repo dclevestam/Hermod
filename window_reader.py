@@ -160,7 +160,18 @@ class ReaderMixin:
         return " • ".join(seen[:3]) + f" • +{len(seen) - 3} more"
 
     def _extract_thread_body(self, html, text):
-        body = text or _html_to_text(html) or ""
+        # Prefer HTML-derived text when HTML is present. html2text keeps
+        # anchor URLs inline as "text (url)", which the linkifier turns
+        # into clickable <a> tags. Many plaintext alternatives are
+        # hand-stripped by senders and drop URLs entirely, leaving the
+        # reader with un-actionable bare labels like "Log in >". Fall
+        # back to the plaintext alternative only when HTML isn't
+        # available or produces nothing useful.
+        body = ""
+        if html:
+            body = _html_to_text(html) or ""
+        if not body.strip():
+            body = text or ""
         body = _strip_thread_quotes(body)
         return body.strip()
 
@@ -912,7 +923,12 @@ class ReaderMixin:
         try:
             clean_stripped = (clean_body or "").strip()
             text_without_urls = _RE_PAREN_URL.sub("", clean_stripped)
-            readable_len = len(text_without_urls.strip())
+            # Collapse whitespace before measuring "readable length".
+            # Design newsletters often leave a pile of empty <p> and
+            # <br> tags between a hero image and a CTA — raw char
+            # length would be 200+ but real content is 40 chars.
+            collapsed = re.sub(r"\s+", " ", text_without_urls).strip()
+            readable_len = len(collapsed)
             if len(html) < 2000:
                 # Small emails: the HTML wrapper itself is the content
                 # (plain-text mail rendered through boilerplate tables
