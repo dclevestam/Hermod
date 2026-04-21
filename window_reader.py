@@ -160,18 +160,26 @@ class ReaderMixin:
         return " • ".join(seen[:3]) + f" • +{len(seen) - 3} more"
 
     def _extract_thread_body(self, html, text):
-        # Prefer HTML-derived text when HTML is present. html2text keeps
-        # anchor URLs inline as "text (url)", which the linkifier turns
-        # into clickable <a> tags. Many plaintext alternatives are
-        # hand-stripped by senders and drop URLs entirely, leaving the
-        # reader with un-actionable bare labels like "Log in >". Fall
-        # back to the plaintext alternative only when HTML isn't
-        # available or produces nothing useful.
-        body = ""
-        if html:
-            body = _html_to_text(html) or ""
-        if not body.strip():
-            body = text or ""
+        # Senders usually curate the plaintext MIME alternative better
+        # than any regex can html2text the HTML — receipts, transactional
+        # templates, and newsletters typically translate more cleanly
+        # from the plaintext part than from nested <table> layouts. So
+        # plaintext wins by default.
+        #
+        # But some senders ship lazy plaintext that strips every <a>
+        # URL, leaving "Log in >" with no way to act on it. In that
+        # case the HTML-derived text (which preserves anchors as
+        # "label (url)") is strictly more useful. Swap to it only
+        # when the plaintext is URL-free and the HTML does have
+        # anchor URLs.
+        plain = (text or "").strip()
+        html_derived = _html_to_text(html) if html else ""
+        plain_has_urls = "http" in plain.lower() if plain else False
+        html_has_urls = "http" in html_derived.lower() if html_derived else False
+        if plain:
+            body = html_derived if (not plain_has_urls and html_has_urls) else plain
+        else:
+            body = html_derived or plain
         body = _strip_thread_quotes(body)
         return body.strip()
 
@@ -921,6 +929,11 @@ class ReaderMixin:
         if not html:
             return False
         try:
+            if len(html) < 2000:
+                # Small emails: the HTML wrapper itself is the content
+                # (plain-text mail rendered through boilerplate tables
+                # hits ~1–2 kB). Stay clean.
+                return False
             clean_stripped = (clean_body or "").strip()
             text_without_urls = _RE_PAREN_URL.sub("", clean_stripped)
             # Collapse whitespace before measuring "readable length".
@@ -929,12 +942,26 @@ class ReaderMixin:
             # length would be 200+ but real content is 40 chars.
             collapsed = re.sub(r"\s+", " ", text_without_urls).strip()
             readable_len = len(collapsed)
-            if len(html) < 2000:
-                # Small emails: the HTML wrapper itself is the content
-                # (plain-text mail rendered through boilerplate tables
-                # hits ~1–2 kB). Stay clean.
-                return False
+            # Count <img tags robustly: `.count("<img ")` misses
+            # self-closing `<img/>` and `<img\n`. Use a word boundary.
+            img_count = len(re.findall(r"<img\b", html, re.IGNORECASE))
+
+            # Rule A: near-empty extraction. Catches "hero image +
+            # one-word CTA" shapes where almost nothing survives
+            # html2text.
             if readable_len < 100:
+                return True
+
+            # Rule B: image-dominant. Even when the extraction grabs
+            # footer chrome (unsubscribe link, address, social icons)
+            # and pushes `readable_len` above 100, the message is still
+            # a design-first layout when there are many images and the
+            # above-the-fold content is modest. Threshold tuned so a
+            # typical transactional email with a logo + CTA button +
+            # footer icons (≈ 3 images) stays clean, while marketing
+            # campaigns with product tiles or card grids (≥ 4 images
+            # and < 500 chars of readable text) route to original.
+            if img_count >= 4 and readable_len < 500:
                 return True
         except Exception:
             return False
