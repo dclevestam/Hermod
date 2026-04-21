@@ -892,76 +892,33 @@ class ReaderMixin:
         return "clean"
 
     def _heuristic_prefers_original(self, msg, html, text, clean_body):
-        """Return True when the message's shape *strongly* suggests the
-        original HTML will read better than the extracted text. Default
-        is clean; the bar to flip to original is deliberately high — a
-        false positive is worse than a false negative because the user
-        can always click the toggle.
+        """Return True only when clean mode has essentially no content
+        to show: the HTML payload is substantial but the extracted,
+        URL-stripped body is near-empty. This is the one shape clean
+        genuinely can't rescue — design templates whose meaning lives
+        in imagery and layout (marketing newsletters, hero-image
+        product announcements).
 
-        Fires only on:
-          1. Design-dominant: near-empty extraction and multiple images.
-             Bar: ≥ 4 <img> AND cleaned-of-URLs text < 180 chars.
-             (Marketing newsletter with hero image + "View in browser".)
+        Everything else — including URL-heavy receipts — now stays
+        clean, because parenthetical URLs are linkified into anchor
+        tags by `build_clean_body_html`, so the clean view reads well
+        without the raw (https://…) clutter.
 
-          2. Receipt-shape: transactional subject keyword AND the body
-             contains a currency symbol AND more than one image.
-             Needs ALL three — a plain "Order confirmation" text email
-             without amounts or layout stays clean.
-
-          3. URL soup: the extraction is long enough to have real
-             content but more than 1 URL per 100 chars AND at least
-             6 URLs. This catches Stripe-style receipts whose line
-             items dissolve into "item (https://…)" soup, while
-             leaving conversational emails with the usual unsubscribe/
-             footer links in clean view.
+        The user can always flip to original via the reader header
+        toggle, or pin a sender to original permanently.
         """
         if not html:
             return False
         try:
-            lower_html = html.lower()
-            # Count only meaningful <img> tags (skip 1x1 trackers and
-            # tiny icons) — most HTML mails have a hidden 1px pixel.
-            img_count = lower_html.count("<img ")
             clean_stripped = (clean_body or "").strip()
-            # Strip parenthetical URLs for the "how much real content"
-            # measurement — a body that's 90% (https://…) isn't really
-            # 400 chars of readable prose.
             text_without_urls = _RE_PAREN_URL.sub("", clean_stripped)
             readable_len = len(text_without_urls.strip())
-            url_count = clean_stripped.count("(http")
-
-            # 1. Design-dominant
-            if img_count >= 4 and readable_len < 180:
-                return True
-
-            # 2. Receipt-shape
-            subject_lower = str(msg.get("subject") or "").lower()
-            transactional_kw = (
-                "receipt",
-                "invoice",
-                "order #",
-                "order confirmation",
-                "your order",
-                "shipment",
-                "shipping",
-                "delivery",
-                "kvitto",
-            )
-            has_transactional_subject = any(
-                kw in subject_lower for kw in transactional_kw
-            )
-            has_currency = any(
-                sym in clean_stripped for sym in ("€", "$", "£", "¥", " kr", "kr ")
-            )
-            if has_transactional_subject and img_count >= 2 and has_currency:
-                return True
-
-            # 3. URL soup
-            if (
-                len(clean_stripped) >= 400
-                and url_count >= 6
-                and url_count * 100 > len(clean_stripped)
-            ):
+            if len(html) < 2000:
+                # Small emails: the HTML wrapper itself is the content
+                # (plain-text mail rendered through boilerplate tables
+                # hits ~1–2 kB). Stay clean.
+                return False
+            if readable_len < 100:
                 return True
         except Exception:
             return False

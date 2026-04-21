@@ -1,7 +1,15 @@
 """HTML builder for the threaded chat-bubble reading pane."""
 
 import html as html_lib
+import re
 import urllib.parse
+
+# Parenthetical URL produced by html2text-style conversion, e.g.
+# "Download receipt (https://stripe.com/…)". We hide the raw URL from
+# display and make the preceding text the anchor.
+_PAREN_URL_RE = re.compile(r'\s*\((https?://[^\s)]+)\)')
+# Bare URL tokens in the extracted body — linkify to the domain.
+_BARE_URL_RE = re.compile(r"(?<![\w@\"'=>])(https?://[^\s<>\"'()]+)")
 
 try:
     from .utils import (
@@ -382,6 +390,128 @@ def thread_reply_msg_for_records(records, is_self_fn):
     return (records[-1].get('msg') if records else None)
 
 
+def _split_anchor_from_pre(pre):
+    """Given the text immediately before a `(URL)`, return
+    (prefix, anchor) where `anchor` is the last sentence-fragment we
+    can plausibly use as the link label. Default: the last 1–5 words
+    after the closest sentence/line boundary. Whitespace that is *not*
+    part of the anchor stays in the prefix so consecutive links don't
+    visually run together."""
+    if not pre:
+        return '', ''
+    boundary = max(
+        pre.rfind('\n'),
+        pre.rfind('. '),
+        pre.rfind('! '),
+        pre.rfind('? '),
+        pre.rfind(': '),
+        pre.rfind('; '),
+        pre.rfind(' > '),
+    )
+    if boundary >= 0:
+        split_at = boundary + 1
+        while split_at < len(pre) and pre[split_at] == ' ':
+            split_at += 1
+        prefix = pre[:split_at]
+        anchor_raw = pre[split_at:]
+    else:
+        prefix = ''
+        anchor_raw = pre
+    # Preserve leading whitespace from the anchor span in the prefix
+    # so that `"A. (url) B. (url)"` renders with the space between the
+    # two links intact.
+    leading_ws = anchor_raw[: len(anchor_raw) - len(anchor_raw.lstrip())]
+    prefix += leading_ws
+    anchor_raw = anchor_raw.lstrip()
+    words = anchor_raw.split()
+    if len(words) > 5:
+        # Anchor is too long — keep the last 5 words, push the rest
+        # back into the prefix so we don't lose any text.
+        prefix += ' '.join(words[:-5]) + ' '
+        anchor = ' '.join(words[-5:])
+    else:
+        anchor = anchor_raw.rstrip()
+    if not anchor or len(anchor) > 80:
+        return pre, ''
+    return prefix, anchor
+
+
+def _shorten_url_for_display(url):
+    """Return domain-only display for bare URLs, with a trailing / if
+    the URL has a path so the eye can tell the difference."""
+    m = re.match(r'https?://([^/]+)(/?)', url)
+    if not m:
+        return url if len(url) <= 50 else url[:49] + '…'
+    domain = m.group(1)
+    return domain + ('/…' if m.group(2) else '')
+
+
+def _linkify_clean_body(body_text):
+    """Transform plain body text into a readable HTML fragment with
+    real anchor tags. Text spans are escaped; URL patterns become
+    `<a>` tags whose visible label is the preceding anchor text (or
+    the URL's domain when no anchor is available). Raw `(https://…)`
+    URL noise — common in receipts generated from HTML-to-text — is
+    absorbed into the link so it no longer clutters the view."""
+    out = []
+    cursor = 0
+    text = body_text or ''
+    n = len(text)
+
+    def escape_and_nl(s):
+        # newlines preserved via CSS white-space: pre-wrap; escape HTML
+        return html_lib.escape(s)
+
+    while cursor < n:
+        paren = _PAREN_URL_RE.search(text, cursor)
+        bare = _BARE_URL_RE.search(text, cursor)
+
+        # Choose the earliest match; paren wins ties (because bare also
+        # matches URLs inside parentheses).
+        candidates = []
+        if paren is not None:
+            candidates.append((paren.start(), 'paren', paren))
+        if bare is not None:
+            candidates.append((bare.start(), 'bare', bare))
+        if not candidates:
+            out.append(escape_and_nl(text[cursor:]))
+            break
+        candidates.sort(key=lambda t: (t[0], 0 if t[1] == 'paren' else 1))
+        _, kind, m = candidates[0]
+
+        if kind == 'paren':
+            pre_text = text[cursor:m.start()]
+            prefix, anchor = _split_anchor_from_pre(pre_text)
+            url = m.group(1)
+            url_attr = html_lib.escape(url, quote=True)
+            if anchor:
+                out.append(escape_and_nl(prefix))
+                out.append(
+                    f'<a href="{url_attr}" title="{url_attr}">'
+                    f'{html_lib.escape(anchor)}</a>'
+                )
+            else:
+                # No plausible anchor — keep the preceding text
+                # unchanged and link the domain as its own token.
+                out.append(escape_and_nl(prefix))
+                out.append(
+                    f' <a href="{url_attr}" title="{url_attr}">'
+                    f'{html_lib.escape(_shorten_url_for_display(url))}</a>'
+                )
+            cursor = m.end()
+        else:
+            out.append(escape_and_nl(text[cursor:m.start()]))
+            url = m.group(1)
+            url_attr = html_lib.escape(url, quote=True)
+            out.append(
+                f'<a href="{url_attr}" title="{url_attr}">'
+                f'{html_lib.escape(_shorten_url_for_display(url))}</a>'
+            )
+            cursor = m.end()
+
+    return ''.join(out)
+
+
 def build_clean_body_html(body_text):
     """Wrap extracted (quoted-trimmed) plain text in a reader-matched
     document. The single-message reader uses this for its default
@@ -390,7 +520,8 @@ def build_clean_body_html(body_text):
     the sender/date line without duplicating it here."""
     page_bg = '#0B0F12'
     text_color = '#F2F1ED'
-    body = html_lib.escape(body_text or '').replace('\n', '<br/>')
+    link_color = '#9fb7b9'
+    body_html = _linkify_clean_body(body_text or '')
     return f'''<html>
 <head>
 <meta charset="utf-8" />
@@ -410,10 +541,19 @@ body {{ padding: 24px 26px 32px; }}
     word-break: break-word;
     color: {text_color};
 }}
-a {{ color: #9fb7b9; }}
+a {{
+    color: {link_color};
+    text-decoration: none;
+    border-bottom: 1px solid rgba(159, 183, 185, 0.35);
+    padding-bottom: 1px;
+}}
+a:hover {{
+    color: #c7dadc;
+    border-bottom-color: rgba(199, 218, 220, 0.70);
+}}
 </style>
 </head>
 <body>
-<div class="clean-body">{body}</div>
+<div class="clean-body">{body_html}</div>
 </body>
 </html>'''
