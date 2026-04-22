@@ -113,6 +113,23 @@ _LABEL_SPLIT_RE = re.compile(
 
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z])")
 
+# Every whitespace-ish char we want to treat as "this line is blank"
+# when extracting a body. Includes ASCII space / tab, NBSP,
+# zero-width chars (ZWSP/ZWJ/ZWNJ/BOM/Word-Joiner), narrow / medium
+# / ideographic / ogham spaces, and Unicode line/paragraph separators.
+# Senders pad marketing HTML with these to create vertical gaps.
+_BLANK_CHARS = (
+    " \t"
+    "\u00a0"
+    "\u1680"
+    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a"
+    "\u200b\u200c\u200d"
+    "\u2028\u2029"
+    "\u202f\u205f\u2060"
+    "\u3000"
+    "\ufeff"
+)
+
 
 def _prettify_extracted_body(text):
     """Reintroduce paragraph / line breaks into run-on text produced
@@ -149,13 +166,13 @@ def _prettify_extracted_body(text):
             continue
         out_lines.append(raw_line)
     # Squeeze out excessive vertical gaps: senders often use stacked
-    # `<br>`, empty `<p>`, and `&nbsp;` spacers which extract as long
-    # runs of whitespace-only lines. Render as at most one blank line
-    # between content blocks.
+    # `<br>`, empty `<p>`, `&nbsp;`, and zero-width spacers which
+    # extract as long runs of visually-blank lines. Render as at most
+    # one blank line between content blocks.
     normalised = []
     for line in out_lines:
         stripped = line.rstrip()
-        if not stripped.strip(" \t\u00a0"):
+        if not stripped.strip(_BLANK_CHARS):
             normalised.append("")
         else:
             normalised.append(stripped)
@@ -179,15 +196,26 @@ def _prettify_extracted_body(text):
 # Sender addresses that strongly imply a mass-marketing list —
 # newsletters / campaigns / loyalty programmes. We route their
 # messages to original HTML because the layout carries meaning.
-# Deliberately conservative: `noreply@` alone isn't enough (auth /
-# password-reset / notification emails use it too); the segment
-# around it must indicate marketing intent.
+# Two alternatives:
+#   A. Local-part keyword (before @): `newsletter@…`, `marketing@…`,
+#      `deals@…` etc.
+#   B. Subdomain keyword (after @): `noreply@email.claude.com`,
+#      `no-reply@loyalty.email.ikea.com.cy`, `hi@news.company.com`.
+#      Matched loosely so `[something.]<keyword>.<tld…>` triggers.
+# Deliberately conservative: plain `noreply@github.com` alone
+# doesn't match (auth/notification senders use it too), and
+# `mail.anthropic.com` stays clean (Anthropic's invoice domain is
+# just `mail.` without a marketing keyword).
 _NEWSLETTER_SENDER_RE = re.compile(
-    r"(?:^|[@.\-_+])"
-    r"(?:newsletter|nieuwsbrief|marketing|promo|promos|offers?|deals?|"
-    r"loyalty|campaign|campaigns|news\.|email\.|mail\.email|"
-    r"noreply\.news|broadcast|bulletin)"
-    r"(?:[@.\-_+]|$)",
+    r"^(?:newsletter|nieuwsbrief|marketing|promo|promos|offers?|deals?|"
+    r"campaign|campaigns|broadcast|bulletin|news|loyalty|"
+    r"mailing-list|no-?reply\.news|no-?reply\+news)"
+    r"(?:@|[.\-_+])"
+    r"|"
+    r"@(?:[^.@\s]+\.)?"
+    r"(?:email|em|news|newsletter|marketing|campaign|campaigns|"
+    r"promo|promos|loyalty|list|broadcast|bulletin)"
+    r"\.[a-z]",
     re.IGNORECASE,
 )
 
