@@ -2,6 +2,7 @@
 
 import json
 import re
+import unicodedata
 import threading
 import time
 import urllib.parse
@@ -114,10 +115,9 @@ _LABEL_SPLIT_RE = re.compile(
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z])")
 
 # Every whitespace-ish char we want to treat as "this line is blank"
-# when extracting a body. Includes ASCII space / tab, NBSP,
-# zero-width chars (ZWSP/ZWJ/ZWNJ/BOM/Word-Joiner), narrow / medium
-# / ideographic / ogham spaces, and Unicode line/paragraph separators.
-# Senders pad marketing HTML with these to create vertical gaps.
+# when extracting a body. Kept as a string for explicit-char strip()
+# usage; see `_line_is_visually_blank` below for the Unicode-category
+# fallback that catches anything we missed.
 _BLANK_CHARS = (
     " \t"
     "\u00a0"
@@ -129,6 +129,26 @@ _BLANK_CHARS = (
     "\u3000"
     "\ufeff"
 )
+
+
+def _line_is_visually_blank(line):
+    """True when a line contributes nothing visible to the reader.
+    Covers every char Python's ``str.isspace`` treats as whitespace
+    *and* Unicode format-control categories (Cf: zero-width joiners,
+    BOM, etc.) *and* explicit control codes. Catches random spacers
+    in marketing HTML that my `_BLANK_CHARS` list might have missed —
+    empty `<p>` with a tracking pixel's stray char shouldn't render
+    as a visible line."""
+    if not line:
+        return True
+    for ch in line:
+        if ch.isspace():
+            continue
+        cat = unicodedata.category(ch)
+        if cat in ("Cf", "Cc", "Zs", "Zl", "Zp"):
+            continue
+        return False
+    return True
 
 
 def _prettify_extracted_body(text):
@@ -172,7 +192,7 @@ def _prettify_extracted_body(text):
     normalised = []
     for line in out_lines:
         stripped = line.rstrip()
-        if not stripped.strip(_BLANK_CHARS):
+        if _line_is_visually_blank(stripped):
             normalised.append("")
         else:
             normalised.append(stripped)
