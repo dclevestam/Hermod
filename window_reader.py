@@ -238,28 +238,70 @@ def _sender_is_noreply(msg):
 # Sender addresses that strongly imply a mass-marketing list —
 # newsletters / campaigns / loyalty programmes. We route their
 # messages to original HTML because the layout carries meaning.
-# Two alternatives:
-#   A. Local-part keyword (before @): `newsletter@…`, `marketing@…`,
-#      `deals@…` etc.
-#   B. Subdomain keyword (after @): `noreply@email.claude.com`,
-#      `no-reply@loyalty.email.ikea.com.cy`, `hi@news.company.com`.
-#      Matched loosely so `[something.]<keyword>.<tld…>` triggers.
-# Deliberately conservative: plain `noreply@github.com` alone
-# doesn't match (auth/notification senders use it too), and
-# `mail.anthropic.com` stays clean (Anthropic's invoice domain is
-# just `mail.` without a marketing keyword).
-_NEWSLETTER_SENDER_RE = re.compile(
-    r"^(?:newsletter|nieuwsbrief|marketing|promo|promos|offers?|deals?|"
-    r"campaign|campaigns|broadcast|bulletin|news|loyalty|"
-    r"mailing-list|no-?reply\.news|no-?reply\+news)"
-    r"(?:@|[.\-_+])"
-    r"|"
-    r"@(?:[^.@\s]+\.)?"
-    r"(?:email|em|news|newsletter|marketing|campaign|campaigns|"
-    r"promo|promos|loyalty|list|broadcast|bulletin)"
-    r"\.[a-z]",
-    re.IGNORECASE,
-)
+# Matches are intentionally loose: the substring forms below cover
+# the vast majority of ESP-style senders (Mailchimp, SendGrid,
+# MailerLite, Klaviyo, brand loyalty lists, etc.).
+# Deliberately rejects plain `noreply@github.com` (auth /
+# notification), `mail.anthropic.com` (invoice), and personal
+# Gmail/ProtonMail/Fastmail senders — none of those include any
+# of the marketing substrings.
+def _sender_is_newsletter(sender_email):
+    if not sender_email:
+        return False
+    addr = sender_email.lower()
+    try:
+        local, _, domain = addr.partition("@")
+    except Exception:
+        return False
+    if not domain:
+        return False
+    # Local-part marketing keywords (e.g. `newsletter@pledgebox.com`,
+    # `campaigns@…`, `promos@…`). Match exact or word-boundary prefix.
+    local_keywords = (
+        "newsletter",
+        "newsletters",
+        "nieuwsbrief",
+        "marketing",
+        "promo",
+        "promos",
+        "campaign",
+        "campaigns",
+        "broadcast",
+        "bulletin",
+        "loyalty",
+        "mailing-list",
+    )
+    for kw in local_keywords:
+        if local == kw or local.startswith(f"{kw}.") or local.startswith(f"{kw}+") or local.startswith(f"{kw}-"):
+            return True
+    # Also honour explicit "deals"/"offers" local parts (require
+    # exact-or-delimited to avoid catching `helpdeals-something@`).
+    if local in ("deals", "offers", "deal", "offer"):
+        return True
+    # Domain-level markers: the sender's hostname contains a
+    # marketing subdomain segment such as `email.claude.com`,
+    # `news.example.com`, `loyalty.email.ikea.com.cy`, `em.sendgrid.net`.
+    domain_segments = set(domain.split("."))
+    domain_keywords = {
+        "email",
+        "em",
+        "news",
+        "newsletter",
+        "marketing",
+        "campaign",
+        "campaigns",
+        "promo",
+        "promos",
+        "loyalty",
+        "list",
+        "broadcast",
+        "bulletin",
+        "mailer",
+        "mailing",
+    }
+    if domain_keywords & domain_segments:
+        return True
+    return False
 
 
 # Heuristic match for "your email client can't display HTML — view
@@ -1196,17 +1238,14 @@ class ReaderMixin:
                 return True
 
             # Rule D: the sender address screams "mass-marketing
-            # newsletter / loyalty list". Combined with a non-trivial
-            # extraction that's below ~1kB of readable text, assume
-            # the layout is the content and route to original. Tuned
-            # so a plain-text newsletter with one paragraph of
-            # announcement (rare but exists) stays clean.
+            # newsletter / loyalty list" (see `_sender_is_newsletter`).
+            # These almost always carry their meaning in the layout —
+            # hero images, product grids, styled tables — so route
+            # unconditionally to original. Users who disagree for a
+            # specific sender can toggle Clean per-view; no
+            # per-message extraction threshold here.
             sender_email = str((msg or {}).get("sender_email") or "").strip()
-            if (
-                sender_email
-                and _NEWSLETTER_SENDER_RE.search(sender_email)
-                and readable_len < 1000
-            ):
+            if _sender_is_newsletter(sender_email):
                 return True
         except Exception:
             return False
