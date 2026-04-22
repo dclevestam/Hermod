@@ -54,11 +54,18 @@ DEFAULTS = {
     "quiet_hours_end": "07:00",
     "quiet_hours_weekdays_only": True,
     # Reader defaults to a clean extracted body (quoted/signature-trimmed),
-    # with a per-message toggle to see the original HTML. This list opts
-    # specific senders (lowercase email addresses) out of clean mode so
-    # their messages always open in original view (e.g. design-heavy
-    # newsletters where the HTML layout is the content).
+    # with a per-message toggle to see the original HTML. Per-sender
+    # preference has three states:
+    #   - Auto (default): use the shape heuristic.
+    #   - Always original (listed here): newsletter / layout-heavy
+    #     senders always open in original HTML view.
+    #   - Always clean (listed below): senders where the heuristic
+    #     keeps picking original but the user wants clean anyway.
+    # Both stores hold lowercase sender-email strings. A sender should
+    # never appear in both lists simultaneously; the popover
+    # controller removes from the other list when a new choice is set.
     "senders_prefer_original": [],
+    "senders_prefer_clean": [],
 }
 
 THEME_MODES = ("night", "day")

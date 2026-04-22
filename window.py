@@ -1385,21 +1385,52 @@ class HermodWindow(
         )
         self._reader_mode_popover = Gtk.Popover()
         self._reader_mode_popover.set_has_arrow(True)
+        self._reader_mode_popover.add_css_class("hermod-popover")
         popover_box = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL,
-            spacing=6,
-            margin_top=8,
-            margin_bottom=8,
-            margin_start=10,
-            margin_end=10,
+            spacing=4,
+            margin_top=10,
+            margin_bottom=10,
+            margin_start=12,
+            margin_end=12,
         )
-        self._reader_mode_sender_check = Gtk.CheckButton(
-            label="Always show original from this sender"
+        popover_box.add_css_class("hermod-popover-box")
+        popover_title = Gtk.Label(
+            label="FOR THIS SENDER", halign=Gtk.Align.START, xalign=0
         )
-        self._reader_mode_sender_check.connect(
-            "toggled", lambda btn: self._on_reader_mode_sender_pref_toggled(btn)
+        popover_title.add_css_class("hermod-popover-title")
+        popover_box.append(popover_title)
+        # 3-state preference: Auto / Always clean / Always original.
+        # Grouped CheckButtons render as radios. Leader created first;
+        # the other two `set_group(leader)` to share the selection.
+        self._reader_mode_sender_auto_radio = Gtk.CheckButton(
+            label="Auto (smart detection)"
         )
-        popover_box.append(self._reader_mode_sender_check)
+        self._reader_mode_sender_auto_radio.add_css_class("hermod-popover-item")
+        self._reader_mode_sender_clean_radio = Gtk.CheckButton(
+            label="Always show clean"
+        )
+        self._reader_mode_sender_clean_radio.add_css_class("hermod-popover-item")
+        self._reader_mode_sender_clean_radio.set_group(
+            self._reader_mode_sender_auto_radio
+        )
+        self._reader_mode_sender_original_radio = Gtk.CheckButton(
+            label="Always show original"
+        )
+        self._reader_mode_sender_original_radio.add_css_class("hermod-popover-item")
+        self._reader_mode_sender_original_radio.set_group(
+            self._reader_mode_sender_auto_radio
+        )
+        for radio, kind in (
+            (self._reader_mode_sender_auto_radio, "auto"),
+            (self._reader_mode_sender_clean_radio, "clean"),
+            (self._reader_mode_sender_original_radio, "original"),
+        ):
+            radio.connect(
+                "toggled",
+                lambda btn, k=kind: self._on_reader_mode_sender_radio_toggled(btn, k),
+            )
+            popover_box.append(radio)
         self._reader_mode_popover.set_child(popover_box)
         self._reader_mode_menu_btn.set_popover(self._reader_mode_popover)
         self._info_actions.append(self._reader_mode_menu_btn)

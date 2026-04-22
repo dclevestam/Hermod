@@ -1506,12 +1506,61 @@ window, dialog, popover {
     font-weight: 600;
     letter-spacing: 0.10em;
     text-transform: uppercase;
-    color: alpha(@window_fg_color, 0.70);
-    background-color: alpha(@window_fg_color, 0.08);
-    border: 1px solid alpha(@window_fg_color, 0.14);
+    /* Reddish tint so the badge pops when scanning the reader header.
+       Uses the semantic danger token so day/night variants stay
+       coherent with the rest of Hermod's warning surfaces. */
+    color: alpha(@hermod_danger, 0.92);
+    background-color: alpha(@hermod_danger, 0.14);
+    border: 1px solid alpha(@hermod_danger, 0.32);
     border-radius: 999px;
     padding: 2px 8px;
     margin-top: 6px;
+}
+
+/* ── Hermod-themed popover (`.hermod-popover`) ────────────────────
+   Applied to any Gtk.Popover we build (reader-mode sender prefs,
+   future contextual surfaces). Overrides Adwaita's default so
+   backgrounds, borders, and text match the app shell. Keep styles
+   here so new popovers pick the theme up automatically. */
+popover.hermod-popover > contents {
+    background-color: @hermod_surface_card;
+    color: @hermod_fg;
+    border: 1px solid @hermod_border;
+    border-radius: 12px;
+    padding: 0;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+popover.hermod-popover > arrow {
+    background-color: @hermod_surface_card;
+    border: 1px solid @hermod_border;
+    box-shadow: none;
+}
+.hermod-popover-box {
+    min-width: 210px;
+}
+.hermod-popover-title {
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 0.68em;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: alpha(@hermod_fg_muted, 0.70);
+    margin-bottom: 4px;
+}
+.hermod-popover-item {
+    color: @hermod_fg;
+    padding: 4px 2px;
+    min-height: 26px;
+}
+.hermod-popover-item:hover {
+    color: @hermod_fg;
+    background-color: alpha(@hermod_fg, 0.05);
+    border-radius: 6px;
+}
+.hermod-popover-item check,
+.hermod-popover-item radio {
+    color: @hermod_accent;
+    -gtk-icon-size: 14px;
 }
 .reader-actions {
     margin-left: 8px;

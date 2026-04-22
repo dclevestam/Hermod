@@ -1154,24 +1154,45 @@ class ReaderMixin:
         """Pick the initial reader mode for a single-message open.
 
         Precedence (strongest first):
-          1. Explicit per-sender opt-out — user said "always original"
-             for this sender, always wins.
-          2. Shape heuristic — score the message: image-heavy,
-             structured tables, transactional subject, or extraction
-             ratio that suggests the HTML layout *is* the content.
-          3. Default to clean.
+          1. Per-sender "always original" pin (user override).
+          2. Per-sender "always clean" pin (user override).
+          3. Shape heuristic — score the message: image-heavy,
+             structured tables, transactional subject, marketing
+             sender domain, etc.
+          4. Default to clean.
         """
-        sender = (msg.get("sender_email") or "").strip().lower()
-        if sender:
-            prefs = get_settings().get("senders_prefer_original") or []
-            try:
-                if sender in {str(s).strip().lower() for s in prefs}:
-                    return "original"
-            except Exception:
-                pass
+        pref = self._sender_reader_pref(msg)
+        if pref == "original":
+            return "original"
+        if pref == "clean":
+            return "clean"
         if self._heuristic_prefers_original(msg, html, text, clean_body):
             return "original"
         return "clean"
+
+    def _sender_reader_pref(self, msg):
+        """Return 'original', 'clean', or None (auto) based on the
+        two per-sender preference lists in settings."""
+        sender = (msg.get("sender_email") or "").strip().lower()
+        if not sender:
+            return None
+        settings = get_settings()
+        try:
+            originals = {
+                str(s).strip().lower()
+                for s in (settings.get("senders_prefer_original") or [])
+            }
+            cleans = {
+                str(s).strip().lower()
+                for s in (settings.get("senders_prefer_clean") or [])
+            }
+        except Exception:
+            return None
+        if sender in originals:
+            return "original"
+        if sender in cleans:
+            return "clean"
+        return None
 
     def _heuristic_prefers_original(self, msg, html, text, clean_body):
         """Return True only when clean mode has essentially no content
@@ -1256,46 +1277,76 @@ class ReaderMixin:
         current = getattr(self, "_reader_view_mode", "clean")
         self._set_reader_mode("original" if current == "clean" else "clean")
 
-    def _on_reader_mode_sender_pref_toggled(self, check_button):
-        """Popover checkbox: persist `always show original from sender`."""
+    def _on_reader_mode_sender_radio_toggled(self, radio, kind):
+        """Popover radio: persist 3-state preference for this sender.
+        `kind` is one of 'auto', 'clean', 'original'. We only act on
+        the radio that just became active to avoid double-handling."""
+        if not radio.get_active():
+            return
         if self._current_body is None:
             return
-        msg = self._current_body[0]
-        prefer_original = bool(check_button.get_active())
-        if not self._toggle_sender_prefer_original(msg, prefer_original):
+        if getattr(self, "_reader_mode_popover_syncing", False):
             return
-        # If the user just opted this sender out of clean mode, flip
-        # the current view to original immediately so the change is
-        # visible. If they un-opted-out, don't auto-flip — let them
-        # click the main toggle.
-        if prefer_original and self._reader_view_mode != "original":
-            self._set_reader_mode("original")
+        msg = self._current_body[0]
+        sender = (msg.get("sender_email") or "").strip().lower()
+        if not sender:
+            return
+        settings = get_settings()
+        originals = {
+            str(s).strip().lower()
+            for s in (settings.get("senders_prefer_original") or [])
+            if str(s).strip()
+        }
+        cleans = {
+            str(s).strip().lower()
+            for s in (settings.get("senders_prefer_clean") or [])
+            if str(s).strip()
+        }
+        originals.discard(sender)
+        cleans.discard(sender)
+        if kind == "original":
+            originals.add(sender)
+        elif kind == "clean":
+            cleans.add(sender)
+        settings.set("senders_prefer_original", sorted(originals))
+        settings.set("senders_prefer_clean", sorted(cleans))
+        # If the user picked an explicit mode that differs from what's
+        # on screen, flip the view to match immediately.
+        desired = kind if kind in ("clean", "original") else None
+        if desired and self._reader_view_mode != desired:
+            self._set_reader_mode(desired)
 
     def _sync_reader_mode_popover(self, msg):
-        """Keep the popover checkbox state in sync with persisted settings
+        """Keep the popover radios in sync with persisted settings
         and with whether the active message has a usable sender."""
-        check = getattr(self, "_reader_mode_sender_check", None)
+        auto_radio = getattr(self, "_reader_mode_sender_auto_radio", None)
+        clean_radio = getattr(self, "_reader_mode_sender_clean_radio", None)
+        original_radio = getattr(self, "_reader_mode_sender_original_radio", None)
         menu_btn = getattr(self, "_reader_mode_menu_btn", None)
-        if check is None or menu_btn is None:
+        if auto_radio is None or clean_radio is None or original_radio is None or menu_btn is None:
             return
         sender = (msg or {}).get("sender_email") if msg else ""
         sender = (sender or "").strip()
         if not sender:
             menu_btn.set_sensitive(False)
-            check.set_label("Always show original from this sender")
+            clean_radio.set_label("Always show clean")
+            original_radio.set_label("Always show original")
             return
         menu_btn.set_sensitive(True)
-        check.set_label(f"Always show original from {sender}")
-        # set_active triggers the 'toggled' signal; block while syncing.
+        clean_radio.set_label(f"Always clean from {sender}")
+        original_radio.set_label(f"Always original from {sender}")
+        # Select the current preference without triggering the callback.
+        self._reader_mode_popover_syncing = True
         try:
-            check.handler_block_by_func(self._on_reader_mode_sender_pref_toggled)
-        except (TypeError, AttributeError):
-            pass
-        check.set_active(self._sender_prefers_original(msg))
-        try:
-            check.handler_unblock_by_func(self._on_reader_mode_sender_pref_toggled)
-        except (TypeError, AttributeError):
-            pass
+            pref = self._sender_reader_pref(msg)
+            if pref == "original":
+                original_radio.set_active(True)
+            elif pref == "clean":
+                clean_radio.set_active(True)
+            else:
+                auto_radio.set_active(True)
+        finally:
+            self._reader_mode_popover_syncing = False
 
     def _set_reader_mode(self, mode):
         """Flip the current single-message view mode and re-render."""
@@ -1329,29 +1380,6 @@ class ReaderMixin:
             btn.set_tooltip_text("Switch to original HTML view")
             btn.remove_css_class("reader-mode-original")
             btn.add_css_class("reader-mode-clean")
-
-    def _toggle_sender_prefer_original(self, msg, prefer_original):
-        """Add or remove the message's sender from the persistent list
-        of senders who should always open in original view."""
-        sender = (msg.get("sender_email") or "").strip().lower()
-        if not sender:
-            return False
-        settings = get_settings()
-        current = settings.get("senders_prefer_original") or []
-        as_set = {str(s).strip().lower() for s in current if str(s).strip()}
-        if prefer_original:
-            as_set.add(sender)
-        else:
-            as_set.discard(sender)
-        settings.set("senders_prefer_original", sorted(as_set))
-        return True
-
-    def _sender_prefers_original(self, msg):
-        sender = (msg.get("sender_email") or "").strip().lower()
-        if not sender:
-            return False
-        prefs = get_settings().get("senders_prefer_original") or []
-        return sender in {str(s).strip().lower() for s in prefs}
 
     def _render_body(self, msg, html, text, attachments, cache=True, generation=None, mode=None):
         if generation is not None and generation != self._body_load_generation:
