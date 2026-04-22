@@ -1452,12 +1452,24 @@ class HermodWindow(
         # New reader meta line: "N messages · participants" (threads) or
         # "sender · date" (single message). Replaces the older sender + date
         # + size/attachment stack from the pre-design layout.
+        reader_meta_row = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=8
+        )
         self._reader_meta_lbl = Gtk.Label(halign=Gtk.Align.START, xalign=0)
         self._reader_meta_lbl.add_css_class("reader-meta")
         self._reader_meta_lbl.set_wrap(False)
         self._reader_meta_lbl.set_ellipsize(Pango.EllipsizeMode.END)
         self._reader_meta_lbl.set_hexpand(True)
-        self._message_info_bar.append(self._reader_meta_lbl)
+        reader_meta_row.append(self._reader_meta_lbl)
+        # Small badge shown next to the meta line when the sender is a
+        # no-reply address. Hidden by default; `_update_message_info_bar`
+        # flips it based on the message's sender_email.
+        self._reader_noreply_badge = Gtk.Label(label="NO-REPLY")
+        self._reader_noreply_badge.add_css_class("reader-noreply-badge")
+        self._reader_noreply_badge.set_valign(Gtk.Align.CENTER)
+        self._reader_noreply_badge.set_visible(False)
+        reader_meta_row.append(self._reader_noreply_badge)
+        self._message_info_bar.append(reader_meta_row)
 
         # Legacy sender / date / meta labels stay in the widget tree (so
         # existing callers that poke their labels keep working) but are

@@ -1500,6 +1500,19 @@ window, dialog, popover {
     color: alpha(@window_fg_color, 0.58);
     margin-top: 6px;
 }
+.reader-noreply-badge {
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 0.68em;
+    font-weight: 600;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+    color: alpha(@window_fg_color, 0.70);
+    background-color: alpha(@window_fg_color, 0.08);
+    border: 1px solid alpha(@window_fg_color, 0.14);
+    border-radius: 999px;
+    padding: 2px 8px;
+    margin-top: 6px;
+}
 .reader-actions {
     margin-left: 8px;
 }

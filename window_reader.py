@@ -213,6 +213,28 @@ def _prettify_extracted_body(text):
     return "\n".join(collapsed)
 
 
+# "No-reply" sender detection. Matches local-part variants:
+# noreply@, no-reply@, no_reply@, no.reply@, donotreply@,
+# do-not-reply@, do_not_reply@, noreply+suffix@, etc. Match is
+# anchored to the start of the local part so senders with
+# "reply" elsewhere in the name (e.g. Will Reply <will@…>) don't
+# trigger. Used to hide the reply/smart-reply bars and show a
+# "no-reply" indicator in the reader header.
+_NOREPLY_SENDER_RE = re.compile(
+    r"^(?:no[\-_.]?reply|donotreply|do[\-_.]?not[\-_.]?reply|"
+    r"mailer-daemon|postmaster|bounces?|auto-reply|autoreply)"
+    r"(?:[.\-_+@])",
+    re.IGNORECASE,
+)
+
+
+def _sender_is_noreply(msg):
+    sender = str((msg or {}).get("sender_email") or "").strip()
+    if not sender:
+        return False
+    return bool(_NOREPLY_SENDER_RE.search(sender))
+
+
 # Sender addresses that strongly imply a mass-marketing list —
 # newsletters / campaigns / loyalty programmes. We route their
 # messages to original HTML because the layout carries meaning.
@@ -700,6 +722,9 @@ class ReaderMixin:
         if reader_meta is not None:
             reader_meta.set_label(" · ".join(reader_parts))
             reader_meta.set_visible(bool(reader_parts))
+        noreply_badge = getattr(self, "_reader_noreply_badge", None)
+        if noreply_badge is not None:
+            noreply_badge.set_visible(_sender_is_noreply(msg))
         self._message_info_bar.set_visible(True)
 
     def _set_original_message_source(self, subject, html, text, uid=None):
@@ -891,9 +916,16 @@ class ReaderMixin:
         )
         self._show_attachments(attachments, selected_msg)
         self._thread_reply_target = self._thread_reply_msg_for_records(render_records)
-        self._thread_reply_bar.set_visible(True)
+        # Hide reply / smart-reply bars for no-reply senders — typing
+        # into them goes nowhere. We key on the message the user would
+        # actually reply to (last non-self in the thread); if that is
+        # itself a no-reply, suppress the bars and let the header
+        # badge communicate why.
+        reply_target = self._thread_reply_target or selected_msg
+        show_reply = not _sender_is_noreply(reply_target)
+        self._thread_reply_bar.set_visible(show_reply)
         if getattr(self, "_smart_reply_bar", None) is not None:
-            self._smart_reply_bar.set_visible(True)
+            self._smart_reply_bar.set_visible(show_reply)
         if getattr(self, "_thread_summary_banner", None) is not None:
             self._thread_summary_banner.set_visible(False)
         if len(thread_msgs) > 1:
@@ -1291,9 +1323,11 @@ class ReaderMixin:
         self._current_thread_messages = None
         self._thread_reply_target = None
         self._thread_original_sources = {}
-        self._thread_reply_bar.set_visible(True)
+        # Hide reply / smart-reply bars for no-reply senders.
+        show_reply = not _sender_is_noreply(msg)
+        self._thread_reply_bar.set_visible(show_reply)
         if getattr(self, "_smart_reply_bar", None) is not None:
-            self._smart_reply_bar.set_visible(True)
+            self._smart_reply_bar.set_visible(show_reply)
         if getattr(self, "_thread_summary_banner", None) is not None:
             self._thread_summary_banner.set_visible(False)
         self._thread_messages_btn.set_visible(False)
